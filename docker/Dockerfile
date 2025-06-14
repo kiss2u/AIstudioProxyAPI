@@ -1,6 +1,6 @@
 # Dockerfile
 
-ARG PROXY_ADDR="http://host.docker.internal:7890"
+#ARG PROXY_ADDR="http://host.docker.internal:7890" Linxux 下使用 host.docker.internal 可能会有问题，建议使用实际的代理地址
 FROM python:3.10-slim-bookworm AS builder
 
 ARG DEBIAN_FRONTEND=noninteractive
