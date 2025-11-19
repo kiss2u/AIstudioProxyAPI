@@ -131,7 +131,7 @@ def _parse_budget_value(reasoning_effort: Any) -> Optional[int]:
         effort_map = {
             "low": 1000,
             "medium": 8000,
-            "high": 24000,
+            "high": 32768,
         }
 
         # 先尝试预设值

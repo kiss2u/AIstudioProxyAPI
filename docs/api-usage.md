@@ -179,7 +179,7 @@ response = requests.post(
 {
   "reasoning_effort": "low"      // 1000 tokens
   // 或 "medium"   (8000 tokens)
-  // 或 "high"     (24000 tokens)
+  // 或 "high"     (32768 tokens)
 }
 ```
 

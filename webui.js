@@ -7,7 +7,9 @@ let chatbox, userInput, sendButton, clearButton, sidebarPanel, toggleSidebarButt
     temperatureValue, maxOutputTokensSlider, maxOutputTokensValue, topPSlider,
     topPValue, stopSequencesInput, saveModelSettingsButton, resetModelSettingsButton,
     settingsStatusElement, apiKeyStatus, newApiKeyInput, toggleApiKeyVisibilityButton,
-    testApiKeyButton, apiKeyList;
+    testApiKeyButton, apiKeyList,
+    enableThinkingToggle, thinkingLevelSelector, thinkingBudgetSlider, thinkingBudgetValue,
+    enableGoogleSearchToggle;
 
 function initializeDOMReferences() {
     chatbox = document.getElementById('chatbox');
@@ -44,12 +46,43 @@ function initializeDOMReferences() {
     resetModelSettingsButton = document.getElementById('resetModelSettingsButton');
     settingsStatusElement = document.getElementById('settings-status');
 
+    enableThinkingToggle = document.getElementById('enableThinkingToggle');
+    thinkingLevelSelector = document.getElementById('thinkingLevelSelector');
+    thinkingBudgetSlider = document.getElementById('thinkingBudgetSlider');
+    thinkingBudgetValue = document.getElementById('thinkingBudgetValue');
+
+    enableGoogleSearchToggle = document.getElementById('enableGoogleSearchToggle');
+    
+
     // API密钥管理元素
     apiKeyStatus = document.getElementById('apiKeyStatus');
     newApiKeyInput = document.getElementById('newApiKey');
     toggleApiKeyVisibilityButton = document.getElementById('toggleApiKeyVisibility');
     testApiKeyButton = document.getElementById('testApiKeyButton');
     apiKeyList = document.getElementById('apiKeyList');
+}
+
+function modelUsesThinkingLevel(modelId) {
+    try {
+        const id = String(modelId || '').toLowerCase();
+        return id.includes('gemini-3') && id.includes('pro');
+    } catch (e) {
+        return false;
+    }
+}
+
+function computeReasoningEffort(settings) {
+    try {
+        if (!settings.enableThinking) return 0;
+        const lvl = (settings.thinkingLevel || '').toLowerCase();
+        const budget = parseInt(settings.thinkingBudget);
+        const useLevels = modelUsesThinkingLevel(SELECTED_MODEL);
+        if (useLevels && (lvl === 'low' || lvl === 'high')) return lvl;
+        if (!isNaN(budget) && budget > 0) return budget;
+        return 'none';
+    } catch (e) {
+        return 'none';
+    }
 }
 
 
@@ -76,7 +109,11 @@ let modelSettings = {
     temperature: -1,
     maxOutputTokens: -1,
     topP: -1,
-    stopSequences: ""
+    stopSequences: "",
+    enableThinking: false,
+    thinkingBudget: 8192,
+    thinkingLevel: "",
+    enableGoogleSearch: false
 };
 
 // --- Helper Functions ---
@@ -478,11 +515,18 @@ async function sendMessage() {
             max_output_tokens: modelSettings.maxOutputTokens,
             top_p: modelSettings.topP,
         };
+        requestBody.reasoning_effort = computeReasoningEffort(modelSettings);
+        const tools = [];
+        if (enableGoogleSearchToggle && enableGoogleSearchToggle.checked) tools.push({ google_search_retrieval: {} });
+        if (tools.length > 0) {
+            requestBody.tools = tools;
+            requestBody.tool_choice = 'auto';
+        }
         if (modelSettings.stopSequences) {
             const stopArray = modelSettings.stopSequences.split(',').map(seq => seq.trim()).filter(seq => seq.length > 0);
             if (stopArray.length > 0) requestBody.stop = stopArray;
         }
-        addLogEntry(`[信息] 发送请求，模型: ${SELECTED_MODEL}, 温度: ${requestBody.temperature ?? '默认'}, 最大Token: ${requestBody.max_output_tokens ?? '默认'}, Top P: ${requestBody.top_p ?? '默认'}`);
+        addLogEntry(`[信息] 发送请求，模型: ${SELECTED_MODEL}, 温度: ${requestBody.temperature ?? '默认'}, 最大Token: ${requestBody.max_output_tokens ?? '默认'}, Top P: ${requestBody.top_p ?? '默认'}, 思考参数: ${String(requestBody.reasoning_effort)}, 工具: ${JSON.stringify(requestBody.tools || [])}`);
 
         // 获取API密钥进行认证
         const apiKey = await getValidApiKey();
@@ -888,6 +932,12 @@ function updateModelSettingsUI() {
     maxOutputTokensSlider.value = maxOutputTokensValue.value = modelSettings.maxOutputTokens;
     topPSlider.value = topPValue.value = modelSettings.topP;
     stopSequencesInput.value = modelSettings.stopSequences;
+    if (enableThinkingToggle) enableThinkingToggle.checked = !!modelSettings.enableThinking;
+    if (thinkingLevelSelector) thinkingLevelSelector.value = modelSettings.thinkingLevel || "";
+    if (thinkingBudgetSlider) thinkingBudgetSlider.value = modelSettings.thinkingBudget;
+    if (thinkingBudgetValue) thinkingBudgetValue.value = modelSettings.thinkingBudget;
+    if (enableGoogleSearchToggle) enableGoogleSearchToggle.checked = !!modelSettings.enableGoogleSearch;
+    
 }
 
 function saveModelSettings() {
@@ -896,6 +946,14 @@ function saveModelSettings() {
     modelSettings.maxOutputTokens = parseInt(maxOutputTokensValue.value);
     modelSettings.topP = parseFloat(topPValue.value);
     modelSettings.stopSequences = stopSequencesInput.value.trim();
+    if (enableThinkingToggle) modelSettings.enableThinking = !!enableThinkingToggle.checked;
+    if (thinkingLevelSelector) modelSettings.thinkingLevel = (thinkingLevelSelector.value || "").toLowerCase();
+    if (thinkingBudgetValue) {
+        const budgetVal = parseInt(thinkingBudgetValue.value);
+        modelSettings.thinkingBudget = isNaN(budgetVal) ? 8192 : budgetVal;
+    }
+    if (enableGoogleSearchToggle) modelSettings.enableGoogleSearch = !!enableGoogleSearchToggle.checked;
+    
 
     try {
         localStorage.setItem(MODEL_SETTINGS_KEY, JSON.stringify(modelSettings));
@@ -929,6 +987,11 @@ function resetModelSettings() {
         systemPromptInput.value = DEFAULT_SYSTEM_PROMPT;
 
         updateControlsForSelectedModel(); // This applies model-specific defaults to UI and modelSettings object
+
+        modelSettings.enableThinking = false;
+        modelSettings.thinkingLevel = "";
+        modelSettings.thinkingBudget = 8192;
+        updateModelSettingsUI();
 
         try {
             // Save these model-specific defaults (which are now in modelSettings) to localStorage
@@ -1033,12 +1096,23 @@ function bindEventListeners() {
     topPSlider.addEventListener('input', () => topPValue.value = topPSlider.value);
     topPValue.addEventListener('input', () => { if (!isNaN(parseFloat(topPValue.value))) topPSlider.value = parseFloat(topPValue.value); });
 
+    if (thinkingBudgetSlider && thinkingBudgetValue) {
+        thinkingBudgetSlider.addEventListener('input', () => thinkingBudgetValue.value = thinkingBudgetSlider.value);
+        thinkingBudgetValue.addEventListener('input', () => { const v = parseInt(thinkingBudgetValue.value); if (!isNaN(v)) thinkingBudgetSlider.value = v; });
+    }
+    if (enableThinkingToggle) enableThinkingToggle.addEventListener('change', () => showSettingsStatus("思考模式设置已更新", false));
+    if (thinkingLevelSelector) thinkingLevelSelector.addEventListener('change', () => showSettingsStatus("思考等级已更新", false));
+
     saveModelSettingsButton.addEventListener('click', saveModelSettings);
     resetModelSettingsButton.addEventListener('click', resetModelSettings);
 
+    // Tools controls syncing
+    if (enableGoogleSearchToggle) enableGoogleSearchToggle.addEventListener('change', () => showSettingsStatus("Google Search 工具已更新", false));
+    
+
     const debouncedSave = debounce(saveModelSettings, 1000);
-    [systemPromptInput, temperatureValue, maxOutputTokensValue, topPValue, stopSequencesInput].forEach(
-        element => element.addEventListener('input', debouncedSave) // Use 'input' for more responsive auto-save
+    [systemPromptInput, temperatureValue, maxOutputTokensValue, topPValue, stopSequencesInput, thinkingBudgetValue, thinkingLevelSelector, enableThinkingToggle, enableGoogleSearchToggle].forEach(
+        element => element && element.addEventListener('input', debouncedSave)
     );
 }
 
