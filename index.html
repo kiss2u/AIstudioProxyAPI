@@ -240,7 +240,7 @@
                             </div>
                         </div>
 
-                        <div class="settings-group">
+                        <div class="settings-group" id="thinkingModeGroup">
                             <label for="enableThinkingToggle">思考模式 (Thinking Mode):</label>
                             <input type="checkbox" id="enableThinkingToggle">
                             <div class="settings-description">
@@ -248,7 +248,7 @@
                             </div>
                         </div>
 
-                        <div class="settings-group">
+                        <div class="settings-group" id="thinkingLevelGroup">
                             <label for="thinkingLevelSelector">思考等级 (Thinking Level):</label>
                             <select id="thinkingLevelSelector" class="settings-input">
                                 <option value="">未指定</option>
@@ -260,9 +260,17 @@
                             </div>
                         </div>
 
-                        <div class="settings-group">
+                        <div class="settings-group" id="manualBudgetGroup">
+                            <label for="enableManualBudgetToggle">限制思考预算 (Manual Budget):</label>
+                            <input type="checkbox" id="enableManualBudgetToggle">
+                            <div class="settings-description">
+                                打开以手动限制思考预算；关闭则不限制预算。
+                            </div>
+                        </div>
+
+                        <div class="settings-group" id="thinkingBudgetGroup">
                             <label for="thinkingBudgetValue">思考预算 (Thinking Budget):</label>
-                            <div class="settings-slider-container">
+                            <div id="thinkingBudgetControlsContainer" class="settings-slider-container">
                                 <input type="range" id="thinkingBudgetSlider" class="settings-slider" min="128" max="32768" step="1" value="8192">
                                 <input type="number" id="thinkingBudgetValue" class="settings-number" min="128" max="32768" step="1" value="8192">
                             </div>

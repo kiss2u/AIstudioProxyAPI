@@ -8,7 +8,9 @@ let chatbox, userInput, sendButton, clearButton, sidebarPanel, toggleSidebarButt
     topPValue, stopSequencesInput, saveModelSettingsButton, resetModelSettingsButton,
     settingsStatusElement, apiKeyStatus, newApiKeyInput, toggleApiKeyVisibilityButton,
     testApiKeyButton, apiKeyList,
-    enableThinkingToggle, thinkingLevelSelector, thinkingBudgetSlider, thinkingBudgetValue,
+    enableThinkingToggle, thinkingLevelSelector, enableManualBudgetToggle, thinkingBudgetSlider, thinkingBudgetValue,
+    thinkingBudgetControlsContainer,
+    thinkingModeGroup, thinkingLevelGroup, manualBudgetGroup, thinkingBudgetGroup,
     enableGoogleSearchToggle;
 
 function initializeDOMReferences() {
@@ -48,8 +50,14 @@ function initializeDOMReferences() {
 
     enableThinkingToggle = document.getElementById('enableThinkingToggle');
     thinkingLevelSelector = document.getElementById('thinkingLevelSelector');
+    enableManualBudgetToggle = document.getElementById('enableManualBudgetToggle');
     thinkingBudgetSlider = document.getElementById('thinkingBudgetSlider');
     thinkingBudgetValue = document.getElementById('thinkingBudgetValue');
+    thinkingBudgetControlsContainer = document.getElementById('thinkingBudgetControlsContainer');
+    thinkingModeGroup = document.getElementById('thinkingModeGroup');
+    thinkingLevelGroup = document.getElementById('thinkingLevelGroup');
+    manualBudgetGroup = document.getElementById('manualBudgetGroup');
+    thinkingBudgetGroup = document.getElementById('thinkingBudgetGroup');
 
     enableGoogleSearchToggle = document.getElementById('enableGoogleSearchToggle');
     
@@ -73,12 +81,31 @@ function modelUsesThinkingLevel(modelId) {
 
 function computeReasoningEffort(settings) {
     try {
-        if (!settings.enableThinking) return 0;
-        const lvl = (settings.thinkingLevel || '').toLowerCase();
-        const budget = parseInt(settings.thinkingBudget);
         const useLevels = modelUsesThinkingLevel(SELECTED_MODEL);
-        if (useLevels && (lvl === 'low' || lvl === 'high')) return lvl;
-        if (!isNaN(budget) && budget > 0) return budget;
+        const id = String(SELECTED_MODEL || '').toLowerCase();
+        const hasMainToggle = id.includes('flash');
+
+        if (useLevels) {
+            if (!settings.enableThinking) return 0;
+            const lvl = (settings.thinkingLevel || '').toLowerCase();
+            if (lvl === 'low' || lvl === 'high') return lvl;
+            return 'low';
+        }
+
+        if (hasMainToggle) {
+            if (!settings.enableThinking) return 0;
+            if (settings.enableManualBudget) {
+                const budget = parseInt(settings.thinkingBudget);
+                if (!isNaN(budget) && budget > 0) return budget;
+            }
+            return 'none';
+        }
+
+        if (settings.enableManualBudget) {
+            const budget = parseInt(settings.thinkingBudget);
+            if (!isNaN(budget) && budget > 0) return budget;
+            return 8192;
+        }
         return 'none';
     } catch (e) {
         return 'none';
@@ -111,6 +138,7 @@ let modelSettings = {
     topP: -1,
     stopSequences: "",
     enableThinking: false,
+    enableManualBudget: false,
     thinkingBudget: 8192,
     thinkingLevel: "",
     enableGoogleSearch: false
@@ -282,6 +310,35 @@ function updateControlsForSelectedModel() {
     modelSettings.temperature = parseFloat(temp);
     modelSettings.maxOutputTokens = parseInt(maxTokens);
     modelSettings.topP = parseFloat(topP);
+
+    try {
+        const id = String(SELECTED_MODEL || '').toLowerCase();
+        let budgetMax = 32768;
+        if (id.includes('flash-lite')) {
+            budgetMax = 24576;
+        } else if (id.includes('flash')) {
+            budgetMax = 24576;
+        } else if (id.includes('gemini-2.5-pro')) {
+            budgetMax = 32768;
+        }
+        if (thinkingBudgetSlider) thinkingBudgetSlider.max = String(budgetMax);
+        if (thinkingBudgetValue) thinkingBudgetValue.max = String(budgetMax);
+
+        const isGemini3Pro = id.includes('gemini-3') && id.includes('pro');
+        const isGemini25Pro = id.includes('gemini-2.5-pro');
+        const isFlashLite = id.includes('flash-lite');
+        const isFlash = id.includes('flash');
+
+        if (thinkingModeGroup) thinkingModeGroup.style.display = (isGemini3Pro || isGemini25Pro) ? 'none' : '';
+        if (thinkingLevelGroup) thinkingLevelGroup.style.display = isGemini3Pro ? '' : 'none';
+        if (manualBudgetGroup) manualBudgetGroup.style.display = (isGemini3Pro) ? 'none' : '';
+        if (thinkingBudgetGroup) thinkingBudgetGroup.style.display = (isGemini3Pro) ? 'none' : '';
+
+        if (thinkingBudgetControlsContainer) {
+            const shouldShowControls = !!(enableManualBudgetToggle && enableManualBudgetToggle.checked);
+            thinkingBudgetControlsContainer.style.display = shouldShowControls ? 'flex' : 'none';
+        }
+    } catch (e) { /* ignore */ }
 }
 
 // --- Theme Switching ---
@@ -934,8 +991,10 @@ function updateModelSettingsUI() {
     stopSequencesInput.value = modelSettings.stopSequences;
     if (enableThinkingToggle) enableThinkingToggle.checked = !!modelSettings.enableThinking;
     if (thinkingLevelSelector) thinkingLevelSelector.value = modelSettings.thinkingLevel || "";
+    if (enableManualBudgetToggle) enableManualBudgetToggle.checked = !!modelSettings.enableManualBudget;
     if (thinkingBudgetSlider) thinkingBudgetSlider.value = modelSettings.thinkingBudget;
     if (thinkingBudgetValue) thinkingBudgetValue.value = modelSettings.thinkingBudget;
+    if (thinkingBudgetControlsContainer) thinkingBudgetControlsContainer.style.display = modelSettings.enableManualBudget ? 'flex' : 'none';
     if (enableGoogleSearchToggle) enableGoogleSearchToggle.checked = !!modelSettings.enableGoogleSearch;
     
 }
@@ -948,6 +1007,7 @@ function saveModelSettings() {
     modelSettings.stopSequences = stopSequencesInput.value.trim();
     if (enableThinkingToggle) modelSettings.enableThinking = !!enableThinkingToggle.checked;
     if (thinkingLevelSelector) modelSettings.thinkingLevel = (thinkingLevelSelector.value || "").toLowerCase();
+    if (enableManualBudgetToggle) modelSettings.enableManualBudget = !!enableManualBudgetToggle.checked;
     if (thinkingBudgetValue) {
         const budgetVal = parseInt(thinkingBudgetValue.value);
         modelSettings.thinkingBudget = isNaN(budgetVal) ? 8192 : budgetVal;
@@ -1102,6 +1162,11 @@ function bindEventListeners() {
     }
     if (enableThinkingToggle) enableThinkingToggle.addEventListener('change', () => showSettingsStatus("思考模式设置已更新", false));
     if (thinkingLevelSelector) thinkingLevelSelector.addEventListener('change', () => showSettingsStatus("思考等级已更新", false));
+    if (enableManualBudgetToggle) enableManualBudgetToggle.addEventListener('change', () => {
+        const checked = !!enableManualBudgetToggle.checked;
+        if (thinkingBudgetControlsContainer) thinkingBudgetControlsContainer.style.display = checked ? 'flex' : 'none';
+        showSettingsStatus("思考预算限制已更新", false);
+    });
 
     saveModelSettingsButton.addEventListener('click', saveModelSettings);
     resetModelSettingsButton.addEventListener('click', resetModelSettings);
@@ -1111,7 +1176,7 @@ function bindEventListeners() {
     
 
     const debouncedSave = debounce(saveModelSettings, 1000);
-    [systemPromptInput, temperatureValue, maxOutputTokensValue, topPValue, stopSequencesInput, thinkingBudgetValue, thinkingLevelSelector, enableThinkingToggle, enableGoogleSearchToggle].forEach(
+    [systemPromptInput, temperatureValue, maxOutputTokensValue, topPValue, stopSequencesInput, thinkingBudgetValue, thinkingLevelSelector, enableThinkingToggle, enableManualBudgetToggle, enableGoogleSearchToggle].forEach(
         element => element && element.addEventListener('input', debouncedSave)
     );
 }
