@@ -1202,27 +1202,7 @@ class PageController:
                     )
                 except Exception as force_click_err:
                     self.logger.error(f"[{self.req_id}] 清空按钮强制点击仍失败: {force_click_err}")
-                    try:
-                        from config import AI_STUDIO_URL_PATTERN
-
-                        new_chat_url = (
-                            f"https://{AI_STUDIO_URL_PATTERN}prompts/new_chat"
-                        )
-                        self.logger.warning(
-                            f"[{self.req_id}] 兜底导航到 {new_chat_url} 以完成清空流程。"
-                        )
-                        await self.page.goto(
-                            new_chat_url, wait_until="domcontentloaded", timeout=30000
-                        )
-                        await expect_async(
-                            self.page.locator(INPUT_SELECTOR)
-                        ).to_be_visible(timeout=15000)
-                        return
-                    except Exception as nav_err:
-                        self.logger.error(
-                            f"[{self.req_id}] 兜底导航 new_chat 失败: {nav_err}"
-                        )
-                        raise
+                    raise
             await self._check_disconnect(check_client_disconnected, '清空聊天 - 点击"清空聊天"后')
 
             try:
@@ -1259,27 +1239,7 @@ class PageController:
                     self.logger.error(
                         f'[{self.req_id}] "继续"按钮 force 点击仍失败: {confirm_force_err}'
                     )
-                    # 兜底：尝试直接导航到 new_chat 页面
-                    try:
-                        from config import AI_STUDIO_URL_PATTERN
-
-                        new_chat_url = (
-                            f"https://{AI_STUDIO_URL_PATTERN}prompts/new_chat"
-                        )
-                        self.logger.warning(
-                            f"[{self.req_id}] 兜底导航到 {new_chat_url} 以完成清空流程。"
-                        )
-                        await self.page.goto(
-                            new_chat_url, wait_until="domcontentloaded", timeout=30000
-                        )
-                        await expect_async(
-                            self.page.locator(INPUT_SELECTOR)
-                        ).to_be_visible(timeout=15000)
-                    except Exception as nav_err:
-                        self.logger.error(
-                            f"[{self.req_id}] 兜底导航 new_chat 失败: {nav_err}"
-                        )
-                        raise
+                    raise
 
         await self._check_disconnect(check_client_disconnected, '清空聊天 - 点击"继续"后')
 
