@@ -138,26 +138,68 @@ class PageController:
         """
         reasoning_effort = request_params.get("reasoning_effort")
 
-        # 使用归一化模块标准化参数
         directive = normalize_reasoning_effort(reasoning_effort)
         self.logger.info(f"[{self.req_id}] 思考模式指令: {format_directive_log(directive)}")
 
-        if self._uses_thinking_level(model_id_to_use) and await self._has_thinking_dropdown():
+        uses_level = self._uses_thinking_level(model_id_to_use) and await self._has_thinking_dropdown()
+
+        def _should_enable_from_raw(rv: Any) -> bool:
+            try:
+                if isinstance(rv, str):
+                    rs = rv.strip().lower()
+                    if rs in ["high", "low", "none", "-1"]:
+                        return True
+                    v = int(rs)
+                    return v > 0
+                if isinstance(rv, int):
+                    return rv > 0 or rv == -1
+            except Exception:
+                return False
+            return False
+
+        desired_enabled = directive.thinking_enabled or _should_enable_from_raw(reasoning_effort)
+
+        has_main_toggle = self._model_has_main_thinking_toggle(model_id_to_use)
+        if has_main_toggle:
+            self.logger.info(f"[{self.req_id}] 开始设置主思考开关到: {'开启' if desired_enabled else '关闭'}")
+            await self._control_thinking_mode_toggle(
+                should_be_enabled=desired_enabled,
+                check_client_disconnected=check_client_disconnected,
+            )
+        else:
+            self.logger.info(f"[{self.req_id}] 该模型无主思考开关，跳过开关设置。")
+
+        if not desired_enabled:
+            # 若关闭思考，则确保预算开关关闭（兼容旧UI）
+            await self._control_thinking_budget_toggle(
+                should_be_checked=False,
+                check_client_disconnected=check_client_disconnected,
+            )
+            return
+
+        # 2) 已开启思考：根据模型类型设置等级或预算
+        if uses_level:
+            rv = reasoning_effort
             level_to_set = None
-            if reasoning_effort is None:
-                self.logger.info(
-                    f"[{self.req_id}] 该模型使用思考等级下拉，未指定 reasoning_effort，保持当前等级。"
-                )
-                return
-            if not directive.thinking_enabled:
-                level_to_set = "low"
-            elif not directive.budget_enabled:
-                level_to_set = "high"
+            if isinstance(rv, str):
+                rs = rv.strip().lower()
+                if rs == "low":
+                    level_to_set = "low"
+                elif rs in ["high", "none", "-1"]:
+                    level_to_set = "high"
+                else:
+                    try:
+                        v = int(rs)
+                        level_to_set = "high" if v >= 8000 else "low"
+                    except Exception:
+                        level_to_set = None
+            elif isinstance(rv, int):
+                level_to_set = "high" if rv >= 8000 or rv == -1 else "low"
+
+            if level_to_set is None:
+                self.logger.info(f"[{self.req_id}] 无法解析等级，保持当前等级。")
             else:
-                level_to_set = (
-                    "high" if (directive.budget_value or 0) >= 8000 else "low"
-                )
-            await self._set_thinking_level(level_to_set, check_client_disconnected)
+                await self._set_thinking_level(level_to_set, check_client_disconnected)
             return
 
         if not directive.thinking_enabled:
@@ -233,6 +275,13 @@ class PageController:
         try:
             mid = (model_id_to_use or "").lower()
             return ("gemini-3" in mid) and ("pro" in mid)
+        except Exception:
+            return False
+
+    def _model_has_main_thinking_toggle(self, model_id_to_use: Optional[str]) -> bool:
+        try:
+            mid = (model_id_to_use or "").lower()
+            return "flash" in mid
         except Exception:
             return False
 
@@ -562,30 +611,36 @@ class PageController:
 
         try:
             toggle_locator = self.page.locator(toggle_selector)
-
-            # 等待元素可见（5秒超时）
             await expect_async(toggle_locator).to_be_visible(timeout=5000)
+            try:
+                await toggle_locator.scroll_into_view_if_needed()
+            except Exception:
+                pass
             await self._check_disconnect(check_client_disconnected, "主思考开关 - 元素可见后")
 
-            # 检查当前状态
             is_checked_str = await toggle_locator.get_attribute("aria-checked")
             current_state_is_enabled = is_checked_str == "true"
             self.logger.info(
                 f"[{self.req_id}] 主思考开关当前状态: {is_checked_str} (是否开启: {current_state_is_enabled})"
             )
 
-            # 如果当前状态与期望状态不同，点击切换
             if current_state_is_enabled != should_be_enabled:
                 action = "开启" if should_be_enabled else "关闭"
                 self.logger.info(f"[{self.req_id}] 主思考开关需要切换，正在点击以{action}思考模式...")
 
-                await toggle_locator.click(timeout=CLICK_TIMEOUT_MS)
+                try:
+                    await toggle_locator.click(timeout=CLICK_TIMEOUT_MS)
+                except Exception:
+                    try:
+                        root = self.page.locator('mat-slide-toggle[data-test-toggle="enable-thinking"]')
+                        label = root.locator('label.mdc-label')
+                        await expect_async(label).to_be_visible(timeout=2000)
+                        await label.click(timeout=CLICK_TIMEOUT_MS)
+                    except Exception:
+                        raise
                 await self._check_disconnect(
                     check_client_disconnected, f"主思考开关 - 点击{action}后"
                 )
-
-                # 等待状态更新
-                await asyncio.sleep(0.5)
 
                 # 验证新状态
                 new_state_str = await toggle_locator.get_attribute("aria-checked")

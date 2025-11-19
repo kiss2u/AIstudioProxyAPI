@@ -54,7 +54,10 @@ USE_URL_CONTEXT_SELECTOR = 'button[aria-label="Browse the url context"]'
 
 # --- 思考模式相关选择器 ---
 # 主思考开关：控制是否启用思考模式（总开关）
-ENABLE_THINKING_MODE_TOGGLE_SELECTOR = '[data-test-toggle="enable-thinking"] button'
+ENABLE_THINKING_MODE_TOGGLE_SELECTOR = (
+    'mat-slide-toggle[data-test-toggle="enable-thinking"] button[role="switch"].mdc-switch, '
+    '[data-test-toggle="enable-thinking"] button[role="switch"].mdc-switch'
+)
 # 手动预算开关：控制是否手动限制思考预算
 SET_THINKING_BUDGET_TOGGLE_SELECTOR = (
     'mat-slide-toggle[data-test-toggle="manual-budget"] button[role="switch"].mdc-switch, '
