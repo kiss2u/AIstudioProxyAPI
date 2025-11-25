@@ -248,6 +248,34 @@ async def capture_system_context(
     if server.console_logs:
         context["recent_activity"]["last_console_logs"] = server.console_logs[-5:]
 
+        # Filter for errors/warnings
+        console_errors = [
+            log
+            for log in server.console_logs
+            if str(log.get("type", "")).lower() in ("error", "warning")
+        ]
+        if console_errors:
+            context["recent_activity"]["recent_console_errors"] = console_errors[-5:]
+
+    # Add failed network requests summary
+    if server.network_log and "responses" in server.network_log:
+        failed_responses = [
+            resp
+            for resp in server.network_log["responses"]
+            if isinstance(resp.get("status"), int) and resp.get("status") >= 400
+        ]
+        if failed_responses:
+            context["recent_activity"]["failed_network_responses"] = failed_responses[
+                -5:
+            ]
+
+    # Add current page details if available
+    if server.page_instance and not server.page_instance.is_closed():
+        try:
+            context["browser_state"]["current_url"] = server.page_instance.url
+        except Exception:
+            context["browser_state"]["current_url"] = "error_getting_url"
+
     return context
 
 
@@ -490,15 +518,15 @@ async def save_comprehensive_snapshot(
         except Exception as pw_err:
             logger.error(f"{log_prefix}   ❌ Playwright state failed: {pw_err}")
 
-        # === 7. System Context ===
-        context_path = snapshot_dir / "context.json"
+        # === 7. System Context (LLM Context) ===
+        context_path = snapshot_dir / "llm.json"
         try:
             system_context = await capture_system_context(req_id, error_name)
             with open(context_path, "w", encoding="utf-8") as f:
                 json.dump(system_context, f, indent=2, ensure_ascii=False)
-            logger.info(f"{log_prefix}   ✅ System context saved")
+            logger.info(f"{log_prefix}   ✅ LLM context saved")
         except Exception as ctx_err:
-            logger.error(f"{log_prefix}   ❌ System context failed: {ctx_err}")
+            logger.error(f"{log_prefix}   ❌ LLM context failed: {ctx_err}")
 
         # === 8. Metadata ===
         metadata_path = snapshot_dir / "metadata.json"

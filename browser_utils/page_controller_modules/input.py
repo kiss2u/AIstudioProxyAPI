@@ -66,14 +66,29 @@ class InputController(BaseController):
 
             # 等待发送按钮启用
             wait_timeout_ms_submit_enabled = 100000
+            start_time = asyncio.get_event_loop().time()
+            self.logger.info(f"[{self.req_id}] 等待发送按钮启用 (最大 {wait_timeout_ms_submit_enabled}ms)...")
+
             try:
-                await self._check_disconnect(
-                    check_client_disconnected, "填充提示后等待发送按钮启用 - 前置检查"
-                )
-                await expect_async(submit_button_locator).to_be_enabled(
-                    timeout=wait_timeout_ms_submit_enabled
-                )
-                self.logger.info(f"[{self.req_id}] ✅ 发送按钮已启用。")
+                while True:
+                    await self._check_disconnect(
+                        check_client_disconnected, "Waiting for Submit Button Enabled"
+                    )
+
+                    try:
+                        # 使用短超时轮询检查，以便能响应中断信号
+                        if await submit_button_locator.is_enabled(timeout=500):
+                            self.logger.info(f"[{self.req_id}] ✅ 发送按钮已启用。")
+                            break
+                    except Exception:
+                        # 忽略临时错误（如元素尚未出现）
+                        pass
+
+                    if (asyncio.get_event_loop().time() - start_time) * 1000 > wait_timeout_ms_submit_enabled:
+                        raise TimeoutError(f"Submit button not enabled within {wait_timeout_ms_submit_enabled}ms")
+
+                    await asyncio.sleep(0.5)
+
             except Exception as e_pw_enabled:
                 self.logger.error(f"[{self.req_id}] ❌ 等待发送按钮启用超时或错误: {e_pw_enabled}")
                 await save_error_snapshot(f"submit_button_enable_timeout_{self.req_id}")

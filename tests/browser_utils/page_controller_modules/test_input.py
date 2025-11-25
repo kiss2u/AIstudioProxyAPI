@@ -38,7 +38,9 @@ async def test_submit_prompt_success(input_controller, mock_page):
     with patch('browser_utils.page_controller_modules.input.expect_async', new_callable=MagicMock) as mock_expect:
         # Setup successful expectations
         mock_expect.return_value.to_be_visible = AsyncMock()
-        mock_expect.return_value.to_be_enabled = AsyncMock()
+        
+        # Mock is_enabled for polling loop
+        submit_button.is_enabled = AsyncMock(return_value=True)
         
         # Mock handle_post_upload_dialog
         input_controller._handle_post_upload_dialog = AsyncMock()
@@ -96,7 +98,9 @@ async def test_submit_prompt_fallback_enter(input_controller, mock_page):
     
     with patch('browser_utils.page_controller_modules.input.expect_async', new_callable=MagicMock) as mock_expect:
         mock_expect.return_value.to_be_visible = AsyncMock()
-        mock_expect.return_value.to_be_enabled = AsyncMock()
+        
+        # Mock is_enabled for polling loop
+        submit_button.is_enabled = AsyncMock(return_value=True)
         
         # Simulate button click failure
         submit_button.click.side_effect = Exception("Click failed")
@@ -133,7 +137,9 @@ async def test_submit_prompt_fallback_combo(input_controller, mock_page):
     
     with patch('browser_utils.page_controller_modules.input.expect_async', new_callable=MagicMock) as mock_expect:
         mock_expect.return_value.to_be_visible = AsyncMock()
-        mock_expect.return_value.to_be_enabled = AsyncMock()
+        
+        # Mock is_enabled for polling loop
+        submit_button.is_enabled = AsyncMock(return_value=True)
         
         # Simulate button click failure
         submit_button.click.side_effect = Exception("Click failed")
