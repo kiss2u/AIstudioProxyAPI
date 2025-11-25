@@ -139,6 +139,13 @@
 - **示例**: `AUTO_CONFIRM_LOGIN=false`
 - **说明**: 启用后会自动点击登录确认按钮
 
+### ONLY_COLLECT_CURRENT_USER_ATTACHMENTS
+- **用途**: 仅收集当前用户附件
+- **类型**: 布尔值
+- **默认值**: `false`
+- **示例**: `ONLY_COLLECT_CURRENT_USER_ATTACHMENTS=true`
+- **说明**: 启用后，仅处理当前用户消息中的附件，忽略历史消息中的附件
+
 ---
 
 ## 浏览器配置
@@ -230,6 +237,20 @@
 - **默认值**: `false`
 - **示例**: `ENABLE_GOOGLE_SEARCH=true`
 - **说明**: 当 API 请求未提供 `tools` 参数时，此配置决定是否启用 Google 搜索工具
+
+### MCP_HTTP_ENDPOINT
+- **用途**: MCP (Model Context Protocol) 服务端点
+- **类型**: 字符串 (URL)
+- **默认值**: 空
+- **示例**: `MCP_HTTP_ENDPOINT=http://localhost:7000`
+- **说明**: 指定 MCP 服务的 HTTP 端点，用于处理非内置工具调用。当请求中包含未知的工具调用时，系统会尝试将请求转发到此端点。
+
+### MCP_HTTP_TIMEOUT
+- **用途**: MCP 服务请求超时时间（秒）
+- **类型**: 浮点数
+- **默认值**: `15`
+- **示例**: `MCP_HTTP_TIMEOUT=30`
+- **说明**: 调用 MCP 服务端点时的最大等待时间
 
 ---
 
@@ -359,11 +380,11 @@
 ## 脚本注入配置
 
 ### ENABLE_SCRIPT_INJECTION
-- **用途**: 是否启用油猴脚本注入功能
+- **用途**: 是否启用油猴脚本注入功能 (v3.0)
 - **类型**: 布尔值
-- **默认值**: `false`
-- **示例**: `ENABLE_SCRIPT_INJECTION=true`
-- **说明**: ⚠️ 注意：此功能在当前版本已失效，保留配置仅为兼容性
+- **默认值**: `true`
+- **示例**: `ENABLE_SCRIPT_INJECTION=false`
+- **说明**: 启用后，系统将自动从油猴脚本解析模型列表并注入到 API 响应中。v3.0 版本使用 Playwright 原生网络拦截，提供更高的可靠性。
 
 ### USERSCRIPT_PATH
 - **用途**: 油猴脚本文件路径
@@ -532,10 +553,3 @@ curl http://127.0.0.1:2048/api/info
 # 健康检查
 curl http://127.0.0.1:2048/health
 ```
-
----
-
-**最后更新**: 2024年11月
-**版本**: v0.6.0
-
-如果发现文档中的错误或遗漏，请提交 Issue 或 Pull Request。

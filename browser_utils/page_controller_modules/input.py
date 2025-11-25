@@ -116,6 +116,8 @@ class InputController(BaseController):
             await self._check_disconnect(check_client_disconnected, "After Submit")
 
         except Exception as e_input_submit:
+            if isinstance(e_input_submit, asyncio.CancelledError):
+                raise
             self.logger.error(f"[{self.req_id}] 输入和提交过程中发生错误: {e_input_submit}")
             if not isinstance(e_input_submit, ClientDisconnectedError):
                 await save_error_snapshot(f"input_submit_error_{self.req_id}")
@@ -204,6 +206,8 @@ class InputController(BaseController):
             await self._handle_post_upload_dialog()
             return True
         except Exception as e:
+            if isinstance(e, asyncio.CancelledError):
+                raise
             self.logger.error(f"[{self.req_id}] 通过上传菜单设置文件失败: {e}")
             return False
 

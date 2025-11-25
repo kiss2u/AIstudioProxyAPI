@@ -1,6 +1,6 @@
 # Docker 部署指南 (AI Studio Proxy API)
 
-> 📁 **注意**: 所有 Docker 相关文件现在都位于 `docker/` 目录中，保持项目根目录的整洁。
+> 📁 **注意**: 主要的 Docker 配置文件（Dockerfile, docker-compose.yml）位于 `docker/` 目录中。部分通用配置文件（如 `.dockerignore`, `supervisord.conf`）位于项目根目录。
 
 本文档提供了使用 Docker 构建和运行 AI Studio Proxy API 项目的完整指南，包括 Poetry 依赖管理、`.env` 配置管理和脚本注入功能。
 
@@ -19,7 +19,7 @@ Docker 部署提供了以下优势：
 
 *   **Docker**: 确保您的系统已正确安装并正在运行 Docker。您可以从 [Docker 官方网站](https://www.docker.com/get-started) 下载并安装 Docker Desktop (适用于 Windows 和 macOS) 或 Docker Engine (适用于 Linux)。
 *   **项目代码**: 项目代码已下载到本地。
-*   **认证文件**: 首次运行需要在主机上完成认证文件获取，Docker环境目前仅支持日常运行。
+*   **认证文件**: ⚠️ **关键步骤** - 首次运行需要在主机上完成认证文件获取。由于 Docker 容器运行在无头模式（Headless）下，无法处理 Google 登录交互，因此必须先在本地生成认证文件。
 
 ## 🔧 Docker 环境规格
 
@@ -35,9 +35,9 @@ Docker 部署提供了以下优势：
 
 在项目根目录下，您会找到以下与 Docker 配置相关的文件：
 
-*   **[`Dockerfile`](./Dockerfile:1):** 这是构建 Docker 镜像的蓝图。它定义了基础镜像、依赖项安装、代码复制、端口暴露以及容器启动时执行的命令。
-*   **[`.dockerignore`](./.dockerignore:1):** 这个文件列出了在构建 Docker 镜像时应忽略的文件和目录。这有助于减小镜像大小并加快构建速度，例如排除 `.git` 目录、本地开发环境文件等。
-*   **[`supervisord.conf`](./supervisord.conf:1):** (如果项目使用 Supervisor) Supervisor 是一个进程控制系统，它允许用户在类 UNIX 操作系统上监控和控制多个进程。此配置文件定义了 Supervisor 应如何管理应用程序的进程 (例如，主服务和流服务)。
+*   **[`Dockerfile`](./Dockerfile):** 这是构建 Docker 镜像的蓝图。它定义了基础镜像、依赖项安装、代码复制、端口暴露以及容器启动时执行的命令。
+*   **[`../.dockerignore`](../.dockerignore):** (位于项目根目录) 这个文件列出了在构建 Docker 镜像时应忽略的文件和目录。这有助于减小镜像大小并加快构建速度，例如排除 `.git` 目录、本地开发环境文件等。
+*   **[`../supervisord.conf`](../supervisord.conf):** (位于项目根目录) Supervisor 是一个进程控制系统，用于在容器内同时管理主服务和流服务。此配置文件定义了进程的启动命令和参数。
 
 ## 2. 构建 Docker 镜像
 
@@ -88,7 +88,9 @@ docker compose down
 
 ### 方式 B: 使用 Docker 命令
 
-您也可以使用传统的 Docker 命令来创建并运行容器：
+您也可以使用传统的 Docker 命令来创建并运行容器。
+
+**注意**: 以下命令假设您当前位于 `docker/` 目录下。如果您在项目根目录，请相应调整 `-v` 挂载路径。
 
 ### 方法 1: 使用 .env 文件 (推荐)
 
@@ -135,10 +137,12 @@ docker run -d \
 *   `docker run`: 这是 Docker CLI 中用于从镜像创建并启动容器的命令。
 *   `-d`: 以“分离模式”(detached mode) 运行容器。这意味着容器将在后台运行，您的终端提示符将立即可用，而不会被容器的日志输出占用。
 *   `-p <宿主机_服务端口>:2048`: 端口映射 (Port mapping)。
-    *   此参数将宿主机的某个端口映射到容器内部的 `2048` 端口。`2048` 是应用程序主服务在容器内监听的端口。
-    *   您需要将 `<宿主机_服务端口>` 替换为您希望在宿主机上用于访问此服务的实际端口号 (例如，如果您想通过宿主机的 `8080` 端口访问服务，则使用 `-p 8080:2048`)。
-*   `-p <宿主机_流端口>:3120`: 类似地，此参数将宿主机的某个端口映射到容器内部的 `3120` 端口，这是应用程序流服务在容器内监听的端口。
-    *   您需要将 `<宿主机_流端口>` 替换为您希望在宿主机上用于访问流服务的实际端口号 (例如 `-p 8081:3120`)。
+    *   **建议仅修改冒号左侧的宿主机端口**。
+    *   此参数将宿主机的某个端口映射到容器内部的 `2048` 端口。`2048` 是应用程序主服务在容器内监听的默认端口。
+    *   例如：`-p 8080:2048` 表示通过宿主机的 8080 端口访问服务。
+*   `-p <宿主机_流端口>:3120`:
+    *   将宿主机的端口映射到容器内部的 `3120` 流服务端口。
+    *   例如：`-p 8081:3120`。
 *   `-v "$(pwd)/../auth_profiles":/app/auth_profiles`: 卷挂载 (Volume mounting)。
     *   此参数将宿主机当前工作目录 (`$(pwd)`) 下的 `auth_profiles/` 目录挂载到容器内的 `/app/auth_profiles/` 目录。
     *   这样做的好处是：
@@ -179,7 +183,20 @@ docker run -d \
    - ✅ **Docker 兼容**: 容器会自动读取挂载的 `.env` 文件
    - ✅ **安全性**: `.env` 文件已被 `.gitignore` 忽略，不会泄露配置
 
-2. **创建 `auth_profiles/` 目录:** 在项目根目录下 (与 [`Dockerfile`](./Dockerfile:1) 同级)，手动创建一个名为 `auth_profiles` 的目录。如果您的应用程序需要初始的认证配置文件，请将它们放入此目录中。
+2. **准备认证文件 (必需):**
+   
+   Docker 容器无法进行初始登录交互，您必须在主机上运行程序（使用 `python launch_camoufox.py --debug`）完成登录，生成认证文件，然后将其放入 `auth_profiles/active/` 目录。
+
+   **目录结构示例：**
+   ```text
+   项目根目录/
+   ├── auth_profiles/
+   │   └── active/
+   │       └── account_xxx.json  <-- 必需的认证文件
+   ├── docker/
+   │   ├── .env
+   │   └── docker-compose.yml
+   ```
 
 3. **(可选) 创建 `certs/` 目录:** 如果您计划使用自己的证书并取消了相关卷挂载行的注释，请在项目根目录下创建一个名为 `certs` 的目录，并将您的证书文件 (例如 `server.crt`, `server.key`) 放入其中。
 
@@ -200,9 +217,10 @@ docker run -d \
 
 ```env
 # 服务端口配置
-PORT=8000
+# 注意：在 Docker 环境中，建议仅修改 docker-compose.yml 中的端口映射，
+# 而不要修改这里的内部端口默认值，以免造成映射错误。
+SERVER_PORT=2048
 DEFAULT_FASTAPI_PORT=2048
-DEFAULT_CAMOUFOX_PORT=9222
 STREAM_PORT=3120
 
 # 代理配置
@@ -220,11 +238,11 @@ AUTO_CONFIRM_LOGIN=true
 AUTO_SAVE_AUTH=false
 AUTH_SAVE_TIMEOUT=30
 
-# 脚本注入配置 v3.0 (重大升级)
+# 脚本注入配置
 ENABLE_SCRIPT_INJECTION=true
 USERSCRIPT_PATH=browser_utils/more_modles.js
 # 注意：MODEL_CONFIG_PATH 已废弃，现在直接从油猴脚本解析模型数据
-# v3.0 使用 Playwright 原生网络拦截，100% 可靠
+# 使用 Playwright 原生网络拦截
 
 # API 默认参数
 DEFAULT_TEMPERATURE=1.0
@@ -337,16 +355,16 @@ docker run -d \
 
 希望本教程能帮助您成功地通过 Docker 部署和运行 AI Studio Proxy API 项目！
 
-## 脚本注入配置 (v3.0 新功能) 🆕
+## 脚本注入配置
 
 ### 概述
 
-Docker 环境完全支持最新的脚本注入功能 v3.0，提供革命性的改进：
+Docker 环境完全支持脚本注入功能，提供以下改进：
 
-- **🚀 Playwright 原生拦截**: 使用 Playwright 路由拦截，100% 可靠性
-- **🔄 双重保障机制**: 网络拦截 + 脚本注入，确保万无一失
+- **🚀 Playwright 原生拦截**: 使用 Playwright 路由拦截，提供高可靠性
+- **🔄 双重保障机制**: 网络拦截 + 脚本注入，提高稳定性
 - **📝 直接脚本解析**: 从油猴脚本中自动解析模型列表，无需配置文件
-- **🔗 前后端同步**: 前端和后端使用相同的模型数据源，100%一致
+- **🔗 前后端同步**: 前端和后端使用相同的模型数据源，保持一致
 - **⚙️ 零配置维护**: 无需手动维护模型配置文件，脚本更新自动生效
 - **🔄 自动适配**: 油猴脚本更新时无需手动更新配置
 
@@ -395,8 +413,6 @@ USERSCRIPT_PATH=browser_utils/more_modles.js
 
 ```yaml
 volumes:
-  # 挂载自定义模型配置
-  - ../browser_utils/model_configs.json:/app/browser_utils/model_configs.json:ro
   # 挂载自定义脚本目录
   - ../browser_utils/custom_scripts:/app/browser_utils/custom_scripts:ro
 ```
@@ -415,11 +431,11 @@ volumes:
 4. **日志查看**: 可以通过 `docker logs` 命令查看容器运行日志，便于调试和监控。
 5. **脚本注入**: 新增的脚本注入功能默认启用，可通过 `ENABLE_SCRIPT_INJECTION=false` 禁用。
 
-## 配置管理总结 ⭐
+## 配置管理总结
 
-### 新功能：统一的 .env 配置
+### 统一的 .env 配置
 
-现在 Docker 部署完全支持 `.env` 文件配置管理：
+Docker 部署完全支持 `.env` 文件配置管理：
 
 ✅ **统一配置**: 使用 `.env` 文件管理所有配置
 ✅ **版本更新无忧**: `git pull` + `docker compose up -d` 即可完成更新

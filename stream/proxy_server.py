@@ -55,32 +55,42 @@ class ProxyServer:
         """
         try:
             # Read the initial request line
-            request_line = await reader.readline()
-            request_line = request_line.decode('utf-8').strip()
+            request_line_bytes = await reader.readline()
+            request_line_str = request_line_bytes.decode('utf-8').strip()
             
-            if not request_line:
+            if not request_line_str:
                 writer.close()
+                try:
+                    await writer.wait_closed()
+                except Exception:
+                    pass
                 return
             
             # Parse the request line
-            method, target, version = request_line.split(' ')
+            method, target, version = request_line_str.split(' ')
             
             if method == 'CONNECT':
                 # Handle HTTPS connection
                 await self._handle_connect(reader, writer, target)
 
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             self.logger.error(f"Error handling client: {e}")
         finally:
             writer.close()
+            try:
+                await writer.wait_closed()
+            except Exception:
+                pass
     
     async def _handle_connect(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter, target: str):
         """
         Handle CONNECT method (for HTTPS connections)
         """
 
-        host, port = target.split(':')
-        port = int(port)
+        host, port_str = target.split(':')
+        port = int(port_str)
         # Determine if we should intercept this connection
         intercept = self.should_intercept(host)
 
@@ -144,10 +154,15 @@ class ProxyServer:
                     server_reader, server_writer,
                     host
                 )
+            except asyncio.CancelledError:
+                raise
             except Exception as e:
-                # --- FIX: Log the unused exception variable ---
                 self.logger.error(f"Error connecting to server {host}:{port}: {e}")
                 client_writer.close()
+                try:
+                    await client_writer.wait_closed()
+                except Exception:
+                    pass
         else:
             # No interception, just forward the connection
             writer.write(b'HTTP/1.1 200 Connection Established\r\n\r\n')
@@ -167,10 +182,15 @@ class ProxyServer:
                     reader, writer,
                     server_reader, server_writer
                 )
+            except asyncio.CancelledError:
+                raise
             except Exception as e:
-                # --- FIX: Log the unused exception variable ---
                 self.logger.error(f"Error connecting to server {host}:{port}: {e}")
                 writer.close()
+                try:
+                    await writer.wait_closed()
+                except Exception:
+                    pass
 
     async def _forward_data(self, client_reader, client_writer, server_reader, server_writer):
         """
@@ -184,18 +204,31 @@ class ProxyServer:
                         break
                     writer.write(data)
                     await writer.drain()
+            except asyncio.CancelledError:
+                raise
             except Exception as e:
                 self.logger.error(f"Error forwarding data: {e}")
             finally:
                 writer.close()
+                try:
+                    await writer.wait_closed()
+                except Exception:
+                    pass
         
         # Create tasks for both directions
         client_to_server = asyncio.create_task(_forward(client_reader, server_writer))
         server_to_client = asyncio.create_task(_forward(server_reader, client_writer))
         
-        # Wait for both tasks to complete
+        # Wait for either task to complete, then cancel the other
         tasks = [client_to_server, server_to_client]
-        await asyncio.gather(*tasks)
+        done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+
+        for task in pending:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
     
     async def _forward_data_with_interception(self, client_reader, client_writer, 
                                              server_reader, server_writer, host):
@@ -239,7 +272,7 @@ class ProxyServer:
                             continue
                         
                         # Check if we should intercept this request
-                        if 'GenerateContent' in path:
+                        if 'GenerateContent' in path or 'generateContent' in path:
                             should_sniff = True
                             # Process the request body
                             processed_body = await self.interceptor.process_request(
@@ -261,10 +294,16 @@ class ProxyServer:
                         server_writer.write(data)
                         await server_writer.drain()
                         client_buffer.clear()
+            except asyncio.CancelledError:
+                raise
             except Exception as e:
                 self.logger.error(f"Error processing client data: {e}")
             finally:
                 server_writer.close()
+                try:
+                    await server_writer.wait_closed()
+                except Exception:
+                    pass
         
         # Parse HTTP headers from server
         async def _process_server_data():
@@ -306,27 +345,41 @@ class ProxyServer:
 
                                 if self.queue is not None:
                                     self.queue.put(json.dumps(resp))
+                            except asyncio.CancelledError:
+                                raise
                             except Exception as e:
-                                # --- FIX: Log the unused exception variable ---
                                 self.logger.error(f"Error during response interception: {e}")
 
                     # Not enough data to parse headers, forward as is
                     client_writer.write(data)
                     if b"0\r\n\r\n" in server_buffer:
                         server_buffer.clear()
+            except asyncio.CancelledError:
+                raise
             except Exception as e:
                 self.logger.error(f"Error processing server data: {e}")
             finally:
                 client_writer.close()
+                try:
+                    await client_writer.wait_closed()
+                except Exception:
+                    pass
         
         # Create tasks for both directions
         client_to_server = asyncio.create_task(_process_client_data())
         server_to_client = asyncio.create_task(_process_server_data())
 
 
-        # Wait for both tasks to complete
+        # Wait for either task to complete, then cancel the other
         tasks = [client_to_server, server_to_client]
-        await asyncio.gather(*tasks)
+        done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+
+        for task in pending:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
     
     async def start(self):
         """

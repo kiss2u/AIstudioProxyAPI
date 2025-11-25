@@ -1,12 +1,14 @@
 # AI Studio Proxy Server (Javascript Version - DEPRECATED)
 
+**⚠️ WARNING: This Javascript version is DEPRECATED and UNMAINTAINED. Please use the Python version in the project root, which is more stable and actively developed.**
+
 **⚠️ 警告：此 Javascript 版本 (`server.cjs`, `auto_connect_aistudio.cjs`) 已被弃用且不再维护。推荐使用项目根目录下的 Python 版本，该版本采用了模块化架构设计，具有更好的稳定性和可维护性。**
+
+**📖 View Latest Documentation**: Please refer to the [`README.md`](../README.md) in the project root for the current Python version.
 
 **📖 查看最新文档**: 请参考项目根目录下的 [`README.md`](../README.md) 了解当前Python版本的完整使用说明。
 
 ---
-
-[点击查看项目使用演示视频](https://drive.google.com/file/d/1efR-cNG2CNboNpogHA1ASzmx45wO579p/view?usp=drive_link)
 
 这是一个 Node.js + Playwright 服务器，通过模拟 OpenAI API 的方式来访问 Google AI Studio 网页版，服务器无缝交互转发 Gemini 对话。这使得兼容 OpenAI API 的客户端（如 Open WebUI, NextChat 等）可以使用 AI Studio 的无限额度及能力。
 
@@ -138,7 +140,7 @@ node auto_connect_aistudio.cjs
 
 ```
 =============================================================
-          🚀 AI Studio Proxy Server (vX.XX - Queue & Auto Clear) 🚀
+          🚀 AI Studio Proxy Server (Legacy - Queue & Auto Clear) 🚀
 =============================================================
 🔗 监听地址: http://localhost:2048
    - Web UI (测试): http://localhost:2048/
@@ -230,4 +232,4 @@ node auto_connect_aistudio.cjs
     *   **原因**: AI Studio 网页更新导致 `server.cjs` 中的 `CLEAR_CHAT_BUTTON_SELECTOR` 或 `CLEAR_CHAT_CONFIRM_BUTTON_SELECTOR` 失效。
     *   **解决**: 检查 `errors/` 快照，使用浏览器开发者工具检查实际页面元素，并更新 `server.cjs` 文件顶部的选择器常量。
     *   **原因**: 清空操作本身耗时超过了 `CLEAR_CHAT_VERIFY_TIMEOUT_MS`。
-    *   **解决**: 如果网络或机器较慢，可以尝试在 `server.cjs` 中适当增加这个超时时间。 
+    *   **解决**: 如果网络或机器较慢，可以尝试在 `server.cjs` 中适当增加这个超时时间。

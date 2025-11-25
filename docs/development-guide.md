@@ -8,7 +8,7 @@
 
 - **Python**: >=3.9, <4.0 (推荐 3.10+ 以获得最佳性能)
 - **Poetry**: 现代化 Python 依赖管理工具
-- **Node.js**: >=16.0 (用于 Pyright 类型检查，可选)
+- **Node.js**: >=16.0 (仅用于安装 Pyright 类型检查器，非运行时依赖)
 - **Git**: 版本控制
 
 ### 快速开始
@@ -38,7 +38,6 @@ AIstudioProxyAPI/
 ├── api_utils/              # FastAPI 应用核心模块
 │   ├── app.py             # FastAPI 应用入口
 │   ├── routers/           # API 路由（按职责拆分）
-│   ├── routers/           # 端点在此按职责维护（已弃用 routes.py）
 │   ├── request_processor.py # 请求处理逻辑
 │   ├── queue_worker.py    # 队列工作器
 │   └── auth_utils.py      # 认证工具
@@ -46,7 +45,9 @@ AIstudioProxyAPI/
 │   ├── page_controller.py # 页面控制器
 │   ├── model_management.py # 模型管理
 │   ├── script_manager.py  # 脚本注入管理
-│   └── operations.py      # 浏览器操作
+│   ├── operations.py      # 浏览器操作入口
+│   ├── initialization/    # 初始化模块 (core, network, auth, scripts, debug)
+│   └── operations_modules/ # 操作子模块 (parsers, interactions, errors)
 ├── config/                 # 配置管理模块
 │   ├── settings.py        # 主要设置
 │   ├── constants.py       # 常量定义
@@ -213,10 +214,19 @@ class ChatRequest(BaseModel):
 
 ## 🧪 测试
 
+### ⚠️ 防挂起协议 (Anti-Hang Protocol)
+
+本项目严格执行防挂起协议，特别是在 Windows 环境下，以防止测试死锁。
+
+1.  **强制超时**: 所有测试必须有超时限制。项目已配置全局 `timeout = 10` (在 `pytest.ini` 中)。
+    *   对于耗时较长的测试，请使用 `@pytest.mark.timeout(30)` 装饰器。
+2.  **资源清理**: Fixtures 必须在 `yield` 后显式关闭资源（如数据库连接、浏览器上下文）。
+3.  **Async 安全**: 严禁在 `except Exception:` 中吞掉 `asyncio.CancelledError`，否则会导致测试挂起。
+
 ### 运行测试
 
 ```bash
-# 运行所有测试
+# 运行所有测试 (自动应用 10s 超时)
 poetry run pytest
 
 # 运行特定测试文件
@@ -325,15 +335,9 @@ poetry build
 ls dist/
 ```
 
-### Docker 开发
+### Docker 部署
 
-```bash
-# 构建开发镜像
-docker build -f docker/Dockerfile.dev -t aistudio-dev .
-
-# 运行开发容器
-docker run -it --rm -v $(pwd):/app aistudio-dev bash
-```
+详细的 Docker 开发和部署指南请参考 [Docker 部署指南](../docker/README-Docker.md)。
 
 ## 🤝 贡献指南
 

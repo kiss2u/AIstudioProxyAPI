@@ -63,44 +63,47 @@ sudo apt update && sudo apt install python3.11
 # Windows: 从 python.org 下载安装
 ```
 
-**虚拟环境版本问题**:
+**Poetry 环境 Python 版本**:
 
 ```bash
-# 检查虚拟环境中的 Python 版本
-python -c "import sys; print(sys.version)"
+# 检查 Poetry 环境中的 Python 版本
+poetry run python --version
 
-# 使用指定版本创建虚拟环境
-python3.11 -m venv venv
-source venv/bin/activate  # Linux/macOS
-# venv\Scripts\activate  # Windows
+# 如果版本不正确，可以指定 Python 版本重新安装环境
+poetry env use python3.11
+poetry install
 ```
 
-### `pip install camoufox[geoip]` 失败
+### `poetry install` 失败 (Camoufox 相关)
 
-- 可能是网络问题或缺少编译环境。尝试不带 `[geoip]` 安装 (`pip install camoufox`)。
+- **问题**: 安装依赖时报错，提示 `camoufox` 或 `geoip` 相关错误。
+- **原因**: 可能是网络问题或缺少编译环境。
+- **解决方案**: 尝试修改 `pyproject.toml`，暂时移除 `extras = ["geoip"]`，然后运行 `poetry lock && poetry install`。
 
 ### `camoufox fetch` 失败
 
 - 常见原因是网络问题或 SSL 证书验证失败。
-- 可以尝试运行 [`python fetch_camoufox_data.py`](../fetch_camoufox_data.py) 脚本，它会尝试禁用 SSL 验证来下载 (有安全风险，仅在确认网络环境可信时使用)。
+- 可以尝试运行 [`poetry run python fetch_camoufox_data.py`](../fetch_camoufox_data.py) 脚本，它会尝试禁用 SSL 验证来下载 (有安全风险，仅在确认网络环境可信时使用)。
 
 ### `playwright install-deps` 失败
 
 - 通常是 Linux 系统缺少必要的库。仔细阅读错误信息，根据提示安装缺失的系统包 (如 `libgbm-dev`, `libnss3` 等)。
+- 确保使用 `poetry run playwright install-deps` 运行，以便在正确的环境中安装。
 
 ## 启动相关问题
 
 ### `launch_camoufox.py` 启动报错
 
-- 检查 Camoufox 是否已通过 `camoufox fetch` 正确下载。
-- 查看终端输出，是否有来自 Camoufox 库的具体错误信息。
-- 确保没有其他 Camoufox 或 Playwright 进程冲突。
+- **浏览器未找到**: 检查 Camoufox 是否已通过 `poetry run camoufox fetch` 正确下载。
+- **依赖缺失**: Linux 系统下可能需要运行 `poetry run playwright install-deps`。
+- **查看错误**: 查看终端输出，是否有来自 Camoufox 库的具体错误信息。
+- **进程冲突**: 确保没有其他 Camoufox 或 Playwright 进程冲突。
 
 ### 端口被占用
 
 如果 [`server.py`](../server.py) 启动时提示端口 (`2048`) 被占用：
 
-- 如果使用 [`gui_launcher.py`](../gui_launcher.py) 启动，它会尝试自动检测并提示终止占用进程。
+- 如果使用 [`poetry run python gui_launcher.py`](../gui_launcher.py) 启动，它会尝试自动检测并提示终止占用进程。
 - 手动查找并结束占用进程：
 
   ```bash
@@ -113,6 +116,20 @@ source venv/bin/activate  # Linux/macOS
 
 - 或修改 [`launch_camoufox.py`](../launch_camoufox.py) 的 `--server-port` 参数。
 
+### Docker 认证问题 (Headless)
+
+**问题**: Docker 容器启动后无法通过认证，或一直卡在登录页面。
+
+**原因**: Docker 容器通常运行在无头模式 (Headless)，无法进行 Google 账号的交互式登录。
+
+**解决方案**:
+1. **在宿主机生成认证**: 在运行 Docker 的主机上（或任何可以运行浏览器的机器上），使用调试模式运行程序：
+   ```bash
+   poetry run python launch_camoufox.py --debug
+   ```
+2. **完成登录**: 在弹出的浏览器中完成 Google 登录。
+3. **挂载文件**: 将生成的 `auth_profiles/active/` 目录挂载到 Docker 容器中。
+
 ### Camoufox 启动时 proxy 错误
 
 **问题现象**: 未配置代理环境变量时，Camoufox 启动失败：
@@ -123,10 +140,12 @@ Error: proxy: expected object, got null
 
 **原因**: Camoufox 0.4.11 的 utils.py 会无条件传递 proxy 参数给 Playwright，即使值为 None。
 
-**修复方法**: 修改 Camoufox 源码文件：
+**修复方法**: 修改 Camoufox 源码文件 (位于 Poetry 虚拟环境中)：
 
-```
-/usr/local/lib/python3.10/site-packages/camoufox/utils.py
+```bash
+# 查找文件位置
+find $(poetry env info --path) -name "utils.py" | grep camoufox
+# 通常位于: .venv/lib/python3.x/site-packages/camoufox/utils.py
 ```
 
 在 `launch_options` 函数中，将：
@@ -159,7 +178,7 @@ return result
 **解决方案**:
 
 1. 删除 `active` 下的文件
-2. 重新运行 [`python launch_camoufox.py --debug`](../launch_camoufox.py) 生成新的认证文件
+2. 重新运行 [`poetry run python launch_camoufox.py --debug`](../launch_camoufox.py) 生成新的认证文件
 3. 将新文件移动到 `active` 目录
 4. 确认 `active` 目录下只有一个 `.json` 文件
 
@@ -372,7 +391,7 @@ chmod 644 key.txt
 - **无法发送空消息**: 这是正常的安全机制
 - **对话请求失败**: 检查网络连接，确认服务器正常运行
 
-## 脚本注入问题 🆕
+## 脚本注入问题
 
 ### 脚本注入功能未启用
 
@@ -415,7 +434,7 @@ chmod 644 browser_utils/more_modles.js
 
 ```bash
 # 查看脚本注入相关日志
-python launch_camoufox.py --debug | grep -i "script\|inject\|model"
+poetry run python launch_camoufox.py --debug | grep -i "script\|inject\|model"
 
 # 检查 API 响应
 curl http://localhost:2048/v1/models | jq '.data[] | select(.injected == true)'
@@ -461,7 +480,7 @@ const MODELS_TO_INJECT = [
 ```bash
 # 启用详细日志查看网络拦截状态
 export DEBUG_LOGS_ENABLED=true
-python launch_camoufox.py --debug
+poetry run python launch_camoufox.py --debug
 ```
 
 **常见错误**:
@@ -544,7 +563,7 @@ echo "ENABLE_SCRIPT_INJECTION=false" >> .env
 
 # 方法2：使用环境变量
 export ENABLE_SCRIPT_INJECTION=false
-python launch_camoufox.py --headless
+poetry run python launch_camoufox.py --headless
 
 # 方法3：删除脚本文件（临时）
 mv browser_utils/more_modles.js browser_utils/more_modles.js.bak

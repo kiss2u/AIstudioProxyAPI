@@ -2,10 +2,25 @@ import logging
 import logging.handlers
 import os
 import sys
+from datetime import datetime
 from typing import Tuple
+from zoneinfo import ZoneInfo
 
 from config import LOG_DIR, ACTIVE_AUTH_DIR, SAVED_AUTH_DIR, APP_LOG_FILE_PATH
 from models import StreamToLogger, WebSocketLogHandler, WebSocketConnectionManager
+
+
+class USCentralFormatter(logging.Formatter):
+    """Formatter that enforces US/Central time."""
+    
+    def formatTime(self, record, datefmt=None):
+        dt = datetime.fromtimestamp(record.created, tz=ZoneInfo("America/Chicago"))
+        if datefmt:
+            s = dt.strftime(datefmt)
+        else:
+            s = dt.strftime("%Y-%m-%d %H:%M:%S")
+            s = "%s,%03d" % (s, record.msecs)
+        return s
 
 
 def setup_server_logging(
@@ -35,7 +50,7 @@ def setup_server_logging(
     os.makedirs(SAVED_AUTH_DIR, exist_ok=True)
     
     # 设置文件日志格式器
-    file_log_formatter = logging.Formatter('%(asctime)s - %(levelname)s - [%(name)s:%(funcName)s:%(lineno)d] - %(message)s')
+    file_log_formatter = USCentralFormatter('%(asctime)s - %(levelname)s - [%(name)s:%(funcName)s:%(lineno)d] - %(message)s')
     
     # 清理现有的处理器
     if logger_instance.hasHandlers():
@@ -66,7 +81,7 @@ def setup_server_logging(
         logger_instance.addHandler(ws_handler)
     
     # 添加控制台处理器
-    console_server_log_formatter = logging.Formatter('%(asctime)s - %(levelname)s [SERVER] - %(message)s')
+    console_server_log_formatter = USCentralFormatter('%(asctime)s - %(levelname)s [SERVER] - %(message)s')
     console_handler = logging.StreamHandler(sys.stderr)
     console_handler.setFormatter(console_server_log_formatter)
     console_handler.setLevel(log_level)

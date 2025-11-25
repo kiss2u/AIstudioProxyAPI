@@ -43,8 +43,10 @@ class ThinkingController(BaseController):
             try:
                 if isinstance(rv, str):
                     rs = rv.strip().lower()
-                    if rs in ["high", "low", "none", "-1"]:
+                    if rs in ["high", "low", "-1"]:
                         return True
+                    if rs == "none":
+                        return False
                     v = int(rs)
                     return v > 0
                 if isinstance(rv, int):
@@ -226,6 +228,8 @@ class ThinkingController(BaseController):
                     f"[{self.req_id}] Thinking Level 验证失败，页面值: {value_text}, 期望: {level}"
                 )
         except Exception as e:
+            if isinstance(e, asyncio.CancelledError):
+                raise
             self.logger.error(f"[{self.req_id}] 设置 Thinking Level 时出错: {e}")
             if isinstance(e, ClientDisconnectedError):
                 raise
@@ -355,6 +359,8 @@ class ThinkingController(BaseController):
                         )
 
         except Exception as e:
+            if isinstance(e, asyncio.CancelledError):
+                raise
             self.logger.error(f"[{self.req_id}] ❌ 调整思考预算时出错: {e}")
             if isinstance(e, ClientDisconnectedError):
                 raise
@@ -432,6 +438,8 @@ class ThinkingController(BaseController):
             self.logger.warning(f"[{self.req_id}] ⚠️ 主思考开关元素未找到或不可见（当前模型可能不支持思考模式）")
             return False
         except Exception as e:
+            if isinstance(e, asyncio.CancelledError):
+                raise
             self.logger.error(f"[{self.req_id}] ❌ 操作主思考开关时发生错误: {e}")
             await save_error_snapshot(f"thinking_mode_toggle_error_{self.req_id}")
             if isinstance(e, ClientDisconnectedError):
@@ -498,6 +506,8 @@ class ThinkingController(BaseController):
                 self.logger.info(f"[{self.req_id}] 'Thinking Budget' 开关已处于期望状态，无需操作。")
 
         except Exception as e:
+            if isinstance(e, asyncio.CancelledError):
+                raise
             self.logger.error(
                 f"[{self.req_id}] ❌ 操作 'Thinking Budget toggle' 开关时发生错误: {e}"
             )

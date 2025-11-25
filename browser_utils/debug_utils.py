@@ -134,6 +134,123 @@ async def capture_dom_structure(page: AsyncPage) -> str:
         return f"Error capturing DOM structure: {str(e)}\n"
 
 
+async def capture_system_context(
+    req_id: str = "unknown", error_name: str = "unknown"
+) -> Dict[str, Any]:
+    """
+    Captures the current system global state for debugging context.
+
+    This function gathers critical system metrics, application state (locks, queues),
+    and configuration details to help diagnose issues like client disconnects
+    or headless mode failures.
+
+    Args:
+        req_id: Request ID associated with the context
+        error_name: Name of the error triggering the capture
+
+    Returns:
+        Dict containing comprehensive system context
+    """
+    # Import server locally to avoid circular dependency
+    import server
+    import platform
+    import sys
+
+    iso_time, texas_time = get_texas_timestamp()
+
+    # Helper to safely get queue size
+    def get_qsize(q: Any) -> int:
+        try:
+            return q.qsize() if q else -1
+        except NotImplementedError:
+            return -1  # Some queue types (like multiprocessing.Queue on macOS) might not support qsize
+
+    # Helper to safely check lock state
+    def is_locked(l: Any) -> bool:
+        return l.locked() if l else False
+
+    # Helper to sanitize proxy settings
+    def _sanitize_proxy(settings: Optional[Dict[str, str]]) -> Optional[Dict[str, str]]:
+        if not settings:
+            return None
+        safe_settings = settings.copy()
+        if "server" in safe_settings:
+            # Simple redaction for now, can be improved with regex if needed
+            if "@" in safe_settings["server"]:
+                # Redact credentials in http://user:pass@host format
+                try:
+                    parts = safe_settings["server"].split("@")
+                    scheme_creds = parts[0].split("://")
+                    if len(scheme_creds) == 2:
+                        safe_settings["server"] = (
+                            f"{scheme_creds[0]}://***:***@{parts[1]}"
+                        )
+                except Exception:
+                    safe_settings["server"] = "REDACTED"
+        return safe_settings
+
+    context = {
+        "meta": {
+            "timestamp_iso": iso_time,
+            "timestamp_texas": texas_time,
+            "req_id": req_id,
+            "error_name": error_name,
+        },
+        "system": {
+            "platform": platform.platform(),
+            "python_version": sys.version.split()[0],
+            "pid": os.getpid(),
+        },
+        "application_state": {
+            "flags": {
+                "is_playwright_ready": server.is_playwright_ready,
+                "is_browser_connected": server.is_browser_connected,
+                "is_page_ready": server.is_page_ready,
+                "is_initializing": server.is_initializing,
+            },
+            "queues": {
+                "request_queue_size": get_qsize(server.request_queue),
+                "stream_queue_active": server.STREAM_QUEUE is not None,
+            },
+            "locks": {
+                "processing_lock_locked": is_locked(server.processing_lock),
+                "model_switching_lock_locked": is_locked(server.model_switching_lock),
+            },
+            "active_model": {
+                "current_id": server.current_ai_studio_model_id,
+                "excluded_count": len(server.excluded_model_ids),
+            },
+        },
+        "browser_state": {
+            "connected": (
+                server.browser_instance.is_connected()
+                if server.browser_instance
+                else False
+            ),
+            "page_available": (
+                not server.page_instance.is_closed() if server.page_instance else False
+            ),
+        },
+        "configuration": {
+            "launch_args": {
+                "headless": os.environ.get("HEADLESS", "unknown"),
+                "debug_logs": os.environ.get("DEBUG_LOGS_ENABLED", "unknown"),
+            },
+            "proxy_settings": _sanitize_proxy(server.PLAYWRIGHT_PROXY_SETTINGS),
+        },
+        "recent_activity": {
+            "console_logs_count": len(server.console_logs),
+            "network_requests_count": len(server.network_log.get("requests", [])),
+        },
+    }
+
+    # Add snippets of recent logs (last 5)
+    if server.console_logs:
+        context["recent_activity"]["last_console_logs"] = server.console_logs[-5:]
+
+    return context
+
+
 async def capture_playwright_state(
     page: AsyncPage, locators: Optional[Dict[str, Locator]] = None
 ) -> Dict[str, Any]:
@@ -373,7 +490,17 @@ async def save_comprehensive_snapshot(
         except Exception as pw_err:
             logger.error(f"{log_prefix}   ❌ Playwright state failed: {pw_err}")
 
-        # === 7. Metadata ===
+        # === 7. System Context ===
+        context_path = snapshot_dir / "context.json"
+        try:
+            system_context = await capture_system_context(req_id, error_name)
+            with open(context_path, "w", encoding="utf-8") as f:
+                json.dump(system_context, f, indent=2, ensure_ascii=False)
+            logger.info(f"{log_prefix}   ✅ System context saved")
+        except Exception as ctx_err:
+            logger.error(f"{log_prefix}   ❌ System context failed: {ctx_err}")
+
+        # === 8. Metadata ===
         metadata_path = snapshot_dir / "metadata.json"
         try:
             # Build metadata

@@ -71,7 +71,51 @@ class ResponseController(BaseController):
             return final_content
 
         except Exception as e:
+            if isinstance(e, asyncio.CancelledError):
+                self.logger.info(f"[{self.req_id}] 获取响应任务被取消")
+                raise
             self.logger.error(f"[{self.req_id}] ❌ 获取响应时出错: {e}")
             if not isinstance(e, ClientDisconnectedError):
                 await save_error_snapshot(f"get_response_error_{self.req_id}")
             raise
+
+    async def ensure_generation_stopped(self, check_client_disconnected: Callable) -> None:
+        """
+        确保生成已停止。
+        如果提交按钮仍处于启用状态，则点击它以停止生成。
+        等待直到提交按钮变为禁用状态。
+        """
+        submit_button_locator = self.page.locator(SUBMIT_BUTTON_SELECTOR)
+        
+        # 检查客户端连接状态
+        check_client_disconnected("确保生成停止 - 前置检查")
+        await asyncio.sleep(0.5)  # 给UI一点时间更新
+
+        # 检查按钮是否仍然启用，如果启用则直接点击停止
+        self.logger.info(f"[{self.req_id}] 检查发送按钮状态以确保生成停止...")
+        try:
+            is_button_enabled = await submit_button_locator.is_enabled(timeout=2000)
+            self.logger.info(f"[{self.req_id}] 发送按钮启用状态: {is_button_enabled}")
+
+            if is_button_enabled:
+                # 流式响应完成后按钮仍启用，直接点击停止
+                self.logger.info(f"[{self.req_id}] 按钮仍启用，主动点击按钮停止生成...")
+                await submit_button_locator.click(timeout=5000, force=True)
+                self.logger.info(f"[{self.req_id}] ✅ 发送按钮点击完成。")
+            else:
+                self.logger.info(f"[{self.req_id}] 发送按钮已禁用，无需点击。")
+        except Exception as button_check_err:
+            if isinstance(button_check_err, asyncio.CancelledError):
+                raise
+            self.logger.warning(f"[{self.req_id}] 检查按钮状态失败: {button_check_err}")
+
+        # 等待按钮最终禁用
+        self.logger.info(f"[{self.req_id}] 等待发送按钮最终禁用...")
+        try:
+            await expect_async(submit_button_locator).to_be_disabled(timeout=30000)
+            self.logger.info(f"[{self.req_id}] ✅ 发送按钮已禁用。")
+        except Exception as e:
+            if isinstance(e, asyncio.CancelledError):
+                raise
+            self.logger.warning(f"[{self.req_id}] ⚠️ 确保生成停止时超时或错误: {e}")
+            # 即使超时也不抛出异常，因为这只是清理步骤

@@ -1,58 +1,77 @@
 import asyncio
-from typing import Callable, Tuple
-from asyncio import Event
+from typing import Callable, Tuple, Optional
+from asyncio import Event, Task
 from fastapi import HTTPException, Request
+from models import ClientDisconnectedError
 
-
-async def test_client_connection(req_id: str, http_request: Request) -> bool:
+async def check_client_connection(req_id: str, http_request: Request) -> bool:
+    """
+    Checks if the client is still connected.
+    Returns True if connected, False if disconnected.
+    """
     try:
         if hasattr(http_request, '_receive'):
             try:
-                receive_task = asyncio.create_task(http_request._receive())
+                # Use a very short timeout to check for disconnect message
+                # Cast to Coroutine to satisfy mypy, as _receive is awaitable
+                from typing import Coroutine, Any
+                receive_coro: Coroutine[Any, Any, Any] = http_request._receive() # type: ignore
+                receive_task: Task = asyncio.create_task(receive_coro)
                 done, pending = await asyncio.wait([receive_task], timeout=0.01)
+                
                 if done:
                     message = receive_task.result()
                     if message.get("type") == "http.disconnect":
                         return False
                 else:
+                    # Cancel the task if it didn't complete immediately
                     receive_task.cancel()
                     try:
                         await receive_task
                     except asyncio.CancelledError:
                         pass
             except Exception:
+                # If checking fails, assume disconnected to be safe, or log and continue?
+                # Usually if _receive fails it might mean connection issues.
                 return False
+        
+        # Fallback to is_disconnected() if available (Starlette/FastAPI)
+        if await http_request.is_disconnected():
+            return False
+            
         return True
     except Exception:
         return False
 
 
-async def setup_disconnect_monitoring(req_id: str, http_request: Request, result_future) -> Tuple[Event, asyncio.Task, Callable]:
+async def setup_disconnect_monitoring(req_id: str, http_request: Request, result_future) -> Tuple[Event, Task, Callable]:
+    """
+    Sets up a background task to monitor client disconnection.
+    Returns:
+        - client_disconnected_event: Event set when disconnect is detected
+        - disconnect_check_task: The background task
+        - check_client_disconnected: Helper function to raise error if disconnected
+    """
     from server import logger
     client_disconnected_event = Event()
 
     async def check_disconnect_periodically():
         while not client_disconnected_event.is_set():
             try:
-                is_connected = await test_client_connection(req_id, http_request)
+                is_connected = await check_client_connection(req_id, http_request)
                 if not is_connected:
-                    logger.info(f"[{req_id}] 主动检测到客户端断开连接。")
+                    logger.info(f"[{req_id}] Active disconnect check detected client disconnection.")
                     client_disconnected_event.set()
                     if not result_future.done():
-                        result_future.set_exception(HTTPException(status_code=499, detail=f"[{req_id}] 客户端关闭了请求"))
+                        result_future.set_exception(HTTPException(status_code=499, detail=f"[{req_id}] Client closed request"))
                     break
-
-                if await http_request.is_disconnected():
-                    logger.info(f"[{req_id}] 备用检测到客户端断开连接。")
-                    client_disconnected_event.set()
-                    if not result_future.done():
-                        result_future.set_exception(HTTPException(status_code=499, detail=f"[{req_id}] 客户端关闭了请求"))
-                    break
+                
                 await asyncio.sleep(0.3)
             except asyncio.CancelledError:
+                # Task cancelled, exit gracefully
                 break
             except Exception as e:
-                logger.error(f"[{req_id}] (Disco Check Task) 错误: {e}")
+                logger.error(f"[{req_id}] (Disco Check Task) Error: {e}")
                 client_disconnected_event.set()
                 if not result_future.done():
                     result_future.set_exception(HTTPException(status_code=500, detail=f"[{req_id}] Internal disconnect checker error: {e}"))
@@ -62,10 +81,61 @@ async def setup_disconnect_monitoring(req_id: str, http_request: Request, result
 
     def check_client_disconnected(stage: str = ""):
         if client_disconnected_event.is_set():
-            logger.info(f"[{req_id}] 在 '{stage}' 检测到客户端断开连接。")
-            from models import ClientDisconnectedError
+            logger.info(f"[{req_id}] Client disconnected detected at stage: '{stage}'")
             raise ClientDisconnectedError(f"[{req_id}] Client disconnected at stage: {stage}")
         return False
 
     return client_disconnected_event, disconnect_check_task, check_client_disconnected
 
+
+async def enhanced_disconnect_monitor(req_id: str, http_request: Request, completion_event: Event, logger) -> bool:
+    """
+    Enhanced disconnect monitor for streaming responses.
+    Returns True if client disconnected early.
+    """
+    client_disconnected_early = False
+    while not completion_event.is_set():
+        try:
+            is_connected = await check_client_connection(req_id, http_request)
+            if not is_connected:
+                logger.info(f"[{req_id}] (Monitor) ✅ Client disconnected during streaming, triggering completion event.")
+                client_disconnected_early = True
+                if not completion_event.is_set():
+                    completion_event.set()
+                break
+            await asyncio.sleep(0.3)
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error(f"[{req_id}] (Monitor) Enhanced disconnect checker error: {e}")
+            break
+    return client_disconnected_early
+
+
+async def non_streaming_disconnect_monitor(req_id: str, http_request: Request, result_future: asyncio.Future, logger) -> bool:
+    """
+    Disconnect monitor for non-streaming responses.
+    Returns True if client disconnected early.
+    """
+    client_disconnected_early = False
+    while not result_future.done():
+        try:
+            is_connected = await check_client_connection(req_id, http_request)
+            if not is_connected:
+                logger.info(f"[{req_id}] (Monitor) ✅ Client disconnected during non-streaming processing.")
+                client_disconnected_early = True
+                if not result_future.done():
+                    result_future.set_exception(
+                        HTTPException(
+                            status_code=499,
+                            detail=f"[{req_id}] Client disconnected during processing",
+                        )
+                    )
+                break
+            await asyncio.sleep(0.3)
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error(f"[{req_id}] (Monitor) Non-streaming disconnect checker error: {e}")
+            break
+    return client_disconnected_early

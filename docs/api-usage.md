@@ -145,9 +145,12 @@ response = requests.post(
 **端点**: `POST /v1/chat/completions`
 
 - 请求体与 OpenAI API 兼容，需要 `messages` 数组。
-- `model` 字段现在用于指定目标模型，代理会尝试在 AI Studio 页面切换到该模型。如果为空或为代理的默认模型名，则使用 AI Studio 当前激活的模型。
+- `model` 字段用于指定目标模型，代理会尝试在 AI Studio 页面切换到该模型。如果为空或为代理的默认模型名，则使用 AI Studio 当前激活的模型。
 - `stream` 字段控制流式 (`true`) 或非流式 (`false`) 输出。
-- 现在支持 `temperature`, `max_output_tokens`, `top_p`, `stop`, `reasoning_effort` 等参数，代理会尝试在 AI Studio 页面上应用它们。
+- 支持 `temperature`, `max_output_tokens`, `top_p`, `stop`, `reasoning_effort`, `tools`, `tool_choice`, `response_format`, `seed` 等参数，代理会尝试在 AI Studio 页面上应用它们。
+- **扩展参数**:
+  - `attachments`: (可选) 顶层附件列表，兼容部分第三方客户端。
+  - `mcp_endpoint`: (可选) 指定 MCP (Model Context Protocol) 服务端点，用于工具调用的回退处理。
 - **需要认证**: 如果配置了 API 密钥，此端点需要有效的认证头。
 
 #### 思考模式控制 (reasoning_effort 参数)
@@ -170,7 +173,7 @@ response = requests.post(
 
 行为:
 - 关闭主思考开关，完全禁用思考模式
-- 如果主开关不可用（某些模型版本），将预算设置为 0 作为降级方案，网页会自动设置成最低的budget
+- 如果主开关不可用（某些模型版本），将预算设置为 0 作为降级方案，网页会自动设置成最低的预算
 
 **场景2: 开启思考并限制预算**
 
@@ -241,7 +244,7 @@ response = requests.post(
 curl -X POST http://127.0.0.1:2048/v1/chat/completions \
 -H "Content-Type: application/json" \
 -d '{
-  "model": "gemini-2.5-pro",
+  "model": "gemini-1.5-pro",
   "messages": [
     {"role": "system", "content": "Be concise."},
     {"role": "user", "content": "What is the capital of France?"}
@@ -276,7 +279,7 @@ curl -X POST http://127.0.0.1:2048/v1/chat/completions \
 curl -X POST http://127.0.0.1:2048/v1/chat/completions \
 -H "Content-Type: application/json" \
 -d '{
-  "model": "gemini-2.5-pro",
+  "model": "gemini-1.5-pro",
   "messages": [
     {"role": "user", "content": "Write a short story about a cat."}
   ],
@@ -296,7 +299,7 @@ import json
 API_URL = "http://127.0.0.1:2048/v1/chat/completions"
 headers = {"Content-Type": "application/json"}
 data = {
-    "model": "gemini-2.5-flash-latest",
+    "model": "gemini-1.5-flash",
     "messages": [
         {"role": "user", "content": "Translate 'hello' to Spanish."}
     ],
@@ -344,10 +347,9 @@ else:
 **端点**: `GET /v1/models`
 
 - 返回 AI Studio 页面上检测到的可用模型列表，以及一个代理本身的默认模型条目。
-- 现在会尝试从 AI Studio 动态获取模型列表。如果获取失败，会返回一个后备模型。
+- 代理会尝试从 AI Studio 动态获取模型列表。如果获取失败，会返回一个后备模型。
 - 支持 [`excluded_models.txt`](../excluded_models.txt) 文件，用于从列表中排除特定的模型 ID。
-- 注入模型功能已不再支持
-<!-- - **🆕 脚本注入模型**: 如果启用了脚本注入功能，列表中还会包含通过油猴脚本注入的自定义模型，这些模型会标记为 `"injected": true`。
+- **脚本注入模型**: 如果启用了脚本注入功能，列表中还会包含通过油猴脚本注入的自定义模型，这些模型会标记为 `"injected": true`。
 
 **脚本注入模型特点**:
 
@@ -373,7 +375,7 @@ else:
     }
   ]
 }
-``` -->
+```
 
 ### API 信息
 
@@ -398,6 +400,14 @@ else:
 **端点**: `POST /v1/cancel/{req_id}`
 
 - 尝试取消仍在队列中等待处理的请求。
+
+### 实时日志流
+
+**端点**: `WS /ws/logs`
+
+- 建立 WebSocket 连接以接收服务器的实时日志流。
+- 用于监控服务器活动、调试和查看请求处理状态。
+- **无需认证**: 此端点不需要 API 密钥认证。
 
 ### API 密钥管理端点
 
@@ -477,7 +487,7 @@ else:
   - 支持动态模型列表获取和模型 ID 验证
   - [`excluded_models.txt`](../excluded_models.txt) 文件可排除特定模型 ID
 
-- **🆕 脚本注入功能 v3.0**:
+- **脚本注入功能**:
   - 使用 Playwright 原生网络拦截，100% 可靠性
   - 直接从油猴脚本解析模型数据，无需配置文件维护
   - 前后端模型数据完全同步，注入模型标记为 `"injected": true`
@@ -504,9 +514,6 @@ else:
 - **HTTP 协议**: 支持 HTTP/1.1 和 HTTP/2，完整的异步处理
 - **认证方式**: 支持 Bearer Token 和 X-API-Key 头部认证，OpenAI 标准兼容
 - **流式响应**: 完整支持 Server-Sent Events (SSE) 流式输出
-- **FastAPI**: 基于 0.111.0 版本，支持现代异步特性
-- **HTTP 协议**: 支持 HTTP/1.1 和 HTTP/2
-- **认证方式**: 支持 Bearer Token 和 X-API-Key 头部认证
 
 ## 下一步
 

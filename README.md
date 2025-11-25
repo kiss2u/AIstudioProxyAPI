@@ -36,14 +36,14 @@ This project is generously sponsored by ZMTO. Visit their website: [https://zmto
 | **内存** | ≥2GB | ≥4GB | 浏览器自动化需要 |
 | **网络** | 稳定互联网连接 | - | 可配置代理访问 Google AI Studio |
 | **依赖管理** | Poetry | 最新版本 | 现代化 Python 依赖管理工具 |
-| **类型检查** | Pyright (可选) | 最新版本 | 用于开发时类型检查和 IDE 支持 |
+| **类型检查** | Pyright (可选) | 最新版本 | 用于开发时类型检查和 IDE 支持 (需要 Node.js) |
 
 
 ## 系统要求
 
 - **Python**: >=3.9, <4.0 (推荐 3.10+ 以获得最佳性能，Docker 环境使用 3.10)
 - **依赖管理**: [Poetry](https://python-poetry.org/) (现代化 Python 依赖管理工具，替代传统 requirements.txt)
-- **类型检查**: [Pyright](https://github.com/microsoft/pyright) (可选，用于开发时类型检查和 IDE 支持)
+- **类型检查**: [Pyright](https://github.com/microsoft/pyright) (可选，用于开发时类型检查和 IDE 支持，需要 Node.js 环境)
 - **操作系统**: Windows, macOS, Linux (完全跨平台支持，Docker 部署支持 x86_64 和 ARM64)
 - **内存**: 建议 2GB+ 可用内存 (浏览器自动化需要)
 - **网络**: 稳定的互联网连接访问 Google AI Studio (支持代理配置)
@@ -55,7 +55,7 @@ This project is generously sponsored by ZMTO. Visit their website: [https://zmto
 - **智能模型切换**: 通过 API 请求中的 `model` 字段动态切换 AI Studio 中的模型
 - **完整参数控制**: 支持 `temperature`、`max_output_tokens`、`top_p`、`stop`、`reasoning_effort` 等所有主要参数
 - **反指纹检测**: 使用 Camoufox 浏览器降低被检测为自动化脚本的风险
-- **脚本注入功能 v3.0**: 使用 Playwright 原生网络拦截，支持油猴脚本动态挂载，100%可靠 🆕
+- **脚本注入功能 v3.0**: 使用 Playwright 原生网络拦截，支持油猴脚本动态挂载，更加稳定
 - **现代化 Web UI**: 内置测试界面，支持实时聊天、状态监控、分级 API 密钥管理
 - **图形界面启动器**: 提供功能丰富的 GUI 启动器，简化配置和进程管理
 - **灵活认证系统**: 支持可选的 API 密钥认证，完全兼容 OpenAI 标准的 Bearer token 格式
@@ -87,7 +87,8 @@ graph TD
         RequestProcessor["api_utils/request_processor.py (请求处理)"]
         AuthUtils["api_utils/auth_utils.py (认证管理)"]
         PageController["browser_utils/page_controller.py (页面控制)"]
-        ScriptManager["browser_utils/script_manager.py (脚本注入)"]
+        BrowserInit["browser_utils/initialization/ (初始化模块)"]
+        BrowserOps["browser_utils/operations_modules/ (操作模块)"]
         ModelManager["browser_utils/model_management.py (模型管理)"]
         StreamProxy["stream/ (流式代理服务器)"]
     end
@@ -119,10 +120,11 @@ graph TD
     RequestProcessor -- "控制浏览器 (Controls Browser)" --> PageController
     RequestProcessor -- "通过代理 (Uses Proxy)" --> StreamProxy
 
+    PageController -- "初始化 (Initializes)" --> BrowserInit
+    PageController -- "执行操作 (Executes Ops)" --> BrowserOps
     PageController -- "模型管理 (Model Management)" --> ModelManager
-    PageController -- "脚本注入 (Script Injection)" --> ScriptManager
-    ScriptManager -- "加载脚本 (Loads Script)" --> UserScript
-    ScriptManager -- "增强功能 (Enhances)" --> CamoufoxInstance
+    BrowserInit -- "脚本注入 (Script Injection)" --> UserScript
+    BrowserInit -- "增强功能 (Enhances)" --> CamoufoxInstance
     PageController -- "自动化 (Automates)" --> CamoufoxInstance
     CamoufoxInstance -- "访问 (Accesses)" --> AI_Studio
     StreamProxy -- "转发请求 (Forwards Request)" --> AI_Studio
@@ -171,12 +173,12 @@ curl http://127.0.0.1:2048/v1/models
 # 测试聊天（非流式）
 curl -X POST http://127.0.0.1:2048/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -d '{"model":"gemini-2.5-pro","messages":[{"role":"user","content":"Hello"}]}'
+  -d '{"model":"gemini-1.5-pro","messages":[{"role":"user","content":"Hello"}]}'
 
 # 测试流式聊天
 curl -X POST http://127.0.0.1:2048/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -d '{"model":"gemini-2.5-pro","messages":[{"role":"user","content":"讲个故事"}],"stream":true}' --no-buffer
+  -d '{"model":"gemini-1.5-pro","messages":[{"role":"user","content":"讲个故事"}],"stream":true}' --no-buffer
 ```
 
 ### 访问 Web UI
@@ -369,11 +371,11 @@ nano .env  # 或使用其他编辑器
 - **[OpenAI 兼容性说明](docs/openai-compatibility.md)** - 与 OpenAI API 的差异和限制 🔄
 - **[客户端集成示例](docs/client-examples.md)** - Python、JavaScript、cURL 等示例代码 💻
 - [Web UI 使用指南](docs/webui-guide.md) - Web 界面功能说明
-- [脚本注入指南](docs/script_injection_guide.md) - 油猴脚本动态挂载功能使用指南 (v3.0) 🆕
+- [脚本注入指南](docs/script_injection_guide.md) - 油猴脚本动态挂载功能使用指南 (v3.0)
 
 #### ⚙️ 高级配置
 
-- [流式处理模式详解](docs/streaming-modes.md) - 三层响应获取机制详细说明 🆕
+- [流式处理模式详解](docs/streaming-modes.md) - 三层响应获取机制详细说明
 - [高级配置指南](docs/advanced-configuration.md) - 高级功能和配置选项
 - [日志控制指南](docs/logging-control.md) - 日志系统配置和调试
 - [故障排除指南](docs/troubleshooting.md) - 常见问题解决方案
@@ -386,7 +388,7 @@ nano .env  # 或使用其他编辑器
 
 #### 🛠️ 开发相关
 
-- [项目架构指南](docs/architecture-guide.md) - 模块化架构设计和组件详解 🆕
+- [项目架构指南](docs/architecture-guide.md) - 模块化架构设计和组件详解
 - [开发者指南](docs/development-guide.md) - Poetry、Pyright 和开发工作流程
 - [依赖版本说明](docs/dependency-versions.md) - Poetry 依赖管理和版本控制详解
 

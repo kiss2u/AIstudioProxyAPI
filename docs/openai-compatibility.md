@@ -25,6 +25,7 @@ AI Studio Proxy API 旨在提供与 OpenAI API 最大程度的兼容性，使现
 | `GET /api/info` | API 信息 | 自定义端点，非 OpenAI 标准 |
 | `GET /v1/queue` | 队列状态 | 自定义端点，非 OpenAI 标准 |
 | `POST /v1/cancel/{req_id}` | 取消请求 | 自定义端点，非 OpenAI 标准 |
+| `GET/POST/DELETE /api/keys` | API 密钥管理 | 自定义端点，用于管理访问密钥 |
 
 ### ❌ 不支持
 
@@ -64,6 +65,13 @@ AI Studio Proxy API 旨在提供与 OpenAI API 最大程度的兼容性，使现
 | `response_format` | Object | 响应格式 | 部分支持，取决于 AI Studio 能力 |
 | `seed` | Number | 随机种子 | 接受但可能不生效，AI Studio 不保证可重现性 |
 
+#### 🧩 自定义扩展参数
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `attachments` | Array | 顶层附件列表 | 兼容部分第三方客户端，支持 `data:`, `file:`, 绝对路径 |
+| `mcp_endpoint` | String | MCP 服务端点 | 用于将工具调用回退到指定的 MCP 服务 |
+
 #### ❌ 不支持或忽略
 
 | 参数 | 说明 | 原因 |
@@ -85,7 +93,7 @@ AI Studio Proxy API 旨在提供与 OpenAI API 最大程度的兼容性，使现
   "id": "chatcmpl-1234567890-123",
   "object": "chat.completion",
   "created": 1699999999,
-  "model": "gemini-2.5-pro",
+  "model": "gemini-1.5-pro",
   "choices": [
     {
       "index": 0,
@@ -109,11 +117,11 @@ AI Studio Proxy API 旨在提供与 OpenAI API 最大程度的兼容性，使现
 #### 流式响应 (SSE)
 
 ```
-data: {"id":"chatcmpl-xxx","object":"chat.completion.chunk","created":1699999999,"model":"gemini-2.5-pro","choices":[{"index":0,"delta":{"role":"assistant","content":"你好"},"finish_reason":null}]}
+data: {"id":"chatcmpl-xxx","object":"chat.completion.chunk","created":1699999999,"model":"gemini-1.5-pro","choices":[{"index":0,"delta":{"role":"assistant","content":"你好"},"finish_reason":null}]}
 
-data: {"id":"chatcmpl-xxx","object":"chat.completion.chunk","created":1699999999,"model":"gemini-2.5-pro","choices":[{"index":0,"delta":{"content":"！"},"finish_reason":null}]}
+data: {"id":"chatcmpl-xxx","object":"chat.completion.chunk","created":1699999999,"model":"gemini-1.5-pro","choices":[{"index":0,"delta":{"content":"！"},"finish_reason":null}]}
 
-data: {"id":"chatcmpl-xxx","object":"chat.completion.chunk","created":1699999999,"model":"gemini-2.5-pro","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":2,"total_tokens":12}}
+data: {"id":"chatcmpl-xxx","object":"chat.completion.chunk","created":1699999999,"model":"gemini-1.5-pro","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":2,"total_tokens":12}}
 
 data: [DONE]
 ```
@@ -122,11 +130,35 @@ data: [DONE]
 
 ## 主要差异
 
-### 1. 响应延迟
+### 1. 并发处理与排队 (Sequential Processing)
+
+**机制**:
+- 本项目使用**单浏览器实例**作为后端，因此所有请求必须**排队顺序处理**。
+- 不支持真正的并行请求处理。如果同时发起多个请求，它们会进入队列等待。
+
+**影响**:
+- **高并发场景**: 响应时间会随着队列长度增加而显著延长。
+- **流式请求**: 即使是流式请求，也需要等待前一个请求完全结束（包括流结束）后，下一个请求才能开始处理。
+
+**建议**:
+- 适合个人使用或低并发场景。
+- 不适合作为高并发生产环境的后端。
+
+### 2. 速率限制 (Rate Limits)
+
+**机制**:
+- 限制源于 **Google AI Studio 网页版** 的账户限制，而非 OpenAI API 的 Token 配额。
+- 限制通常基于 Google 账号的单位时间请求数或计算资源使用量。
+
+**特点**:
+- **浏览器级限制**: 如果网页提示 "Too many requests" 或触发验证码，API 也会受到影响。
+- **账号相关**: 限制与登录的 Google 账号绑定。
+
+### 3. 响应延迟
 
 **原因**: 通过浏览器自动化访问 AI Studio，存在额外的渲染和DOM操作开销。
 
-**影响**: 
+**影响**:
 - 首字节时间 (TTFB) 比官方 API 长
 - 流式响应的分块可能不如官方 API 细腻
 
@@ -134,7 +166,7 @@ data: [DONE]
 - 使用集成流式代理服务（默认启用，端口 3120）可显著减少延迟
 - 三层响应获取机制确保在不同场景下的可用性
 
-### 2. Token 计数
+### 4. Token 计数
 
 **原因**: 使用简化的 token 估算算法（基于字符数和 UTF-8 编码）。
 
@@ -146,7 +178,7 @@ data: [DONE]
 - 不要依赖精确的 token 计数进行计费
 - 用于监控和调试目的即可
 
-### 3. 思考内容 (reasoning_content)
+### 5. 思考内容 (reasoning_content)
 
 **扩展字段**: 非 OpenAI 标准字段，用于返回 AI Studio 的 "thinking" 过程。
 
@@ -163,7 +195,7 @@ data: [DONE]
 
 **兼容性**: OpenAI SDK 会忽略未知字段，不影响正常使用。
 
-### 4. 模型切换
+### 6. 模型切换
 
 **行为**: `model` 参数用于在 AI Studio 页面切换模型。
 
@@ -176,7 +208,7 @@ data: [DONE]
 - 使用 `excluded_models.txt` 过滤不需要的模型
 - 连续请求使用相同模型时性能更好
 
-### 5. 函数调用 (Function Calling)
+### 7. 函数调用 (Function Calling)
 
 **支持情况**:
 - ✅ 支持 Google Search 工具（通过 AI Studio 原生能力）
@@ -194,7 +226,7 @@ data: [DONE]
 }
 ```
 
-### 6. 参数控制机制
+### 8. 参数控制机制
 
 **三层响应获取机制**对参数支持的影响：
 
@@ -229,7 +261,7 @@ client = OpenAI(
 
 # 非流式请求
 response = client.chat.completions.create(
-    model="gemini-2.5-pro",
+    model="gemini-1.5-pro",
     messages=[
         {"role": "user", "content": "Hello!"}
     ]
@@ -238,7 +270,7 @@ print(response.choices[0].message.content)
 
 # 流式请求
 stream = client.chat.completions.create(
-    model="gemini-2.5-pro",
+    model="gemini-1.5-pro",
     messages=[
         {"role": "user", "content": "Tell me a story"}
     ],
@@ -250,7 +282,7 @@ for chunk in stream:
         print(chunk.choices[0].delta.content, end="", flush=True)
 ```
 
-### 使用 OpenAI Node.js SDK
+### 客户端示例：使用 OpenAI Node.js SDK
 
 ```javascript
 import OpenAI from 'openai';
@@ -262,14 +294,14 @@ const client = new OpenAI({
 
 // 非流式
 const response = await client.chat.completions.create({
-  model: 'gemini-2.5-pro',
+  model: 'gemini-1.5-pro',
   messages: [{ role: 'user', content: 'Hello!' }],
 });
 console.log(response.choices[0].message.content);
 
 // 流式
 const stream = await client.chat.completions.create({
-  model: 'gemini-2.5-pro',
+  model: 'gemini-1.5-pro',
   messages: [{ role: 'user', content: 'Tell me a story' }],
   stream: true,
 });
@@ -360,8 +392,8 @@ except Exception as e:
 ### 2. 模型选择
 
 **优先使用高性能模型**:
-- `gemini-2.5-flash` - 快速响应，适合对话
-- `gemini-2.5-pro` - 平衡性能和质量
+- `gemini-1.5-flash` - 快速响应，适合对话
+- `gemini-1.5-pro` - 平衡性能和质量
 - `gemini-exp-*` - 实验性模型，功能最新但可能不稳定
 
 **避免频繁切换模型**:
@@ -379,7 +411,7 @@ def chat_with_retry(client, messages, max_retries=3):
     for attempt in range(max_retries):
         try:
             return client.chat.completions.create(
-                model="gemini-2.5-pro",
+                model="gemini-1.5-pro",
                 messages=messages
             )
         except APIError as e:
@@ -404,24 +436,6 @@ SILENCE_TIMEOUT_MS=60000  # 1分钟无输出超时
 
 ---
 
-## 兼容性路线图
-
-### 近期计划
-
-- [ ] 改进 token 计数精度（使用官方 tokenizer）
-- [ ] 支持更多 AI Studio 原生功能
-- [ ] 优化流式响应分块策略
-- [ ] 改进参数透传机制
-
-### 长期计划
-
-- [ ] 支持图像生成（如 AI Studio 添加此功能）
-- [ ] 支持多模态输入（图像、音频）
-- [ ] 支持更多 OpenAI API 端点
-- [ ] 实现完整的函数调用支持
-
----
-
 ## 相关文档
 
 - [API 使用指南](api-usage.md) - API 端点详细说明
@@ -430,8 +444,5 @@ SILENCE_TIMEOUT_MS=60000  # 1分钟无输出超时
 - [故障排除指南](troubleshooting.md) - 常见问题解决
 
 ---
-
-**最后更新**: 2024年11月  
-**当前版本**: v0.6.0
 
 如有疑问或发现兼容性问题，请提交 Issue 反馈。

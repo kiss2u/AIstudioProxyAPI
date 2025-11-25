@@ -27,12 +27,12 @@ async def chat_completions(
     launch_mode = get_environment_variable('LAUNCH_MODE', 'unknown')
     browser_page_critical = launch_mode != "direct_debug_no_browser"
 
-    service_unavailable = server_state["is_initializing"] or \
+    is_service_unavailable = server_state["is_initializing"] or \
                           not server_state["is_playwright_ready"] or \
                           (browser_page_critical and (not server_state["is_page_ready"] or not server_state["is_browser_connected"])) or \
                           not worker_task or worker_task.done()
 
-    if service_unavailable:
+    if is_service_unavailable:
         raise service_unavailable(req_id)
 
     result_future = Future()

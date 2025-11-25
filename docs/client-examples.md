@@ -34,7 +34,7 @@ curl -X POST http://127.0.0.1:2048/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer your-api-key" \
   -d '{
-    "model": "gemini-2.5-pro",
+    "model": "gemini-1.5-pro",
     "messages": [
       {
         "role": "user",
@@ -54,7 +54,7 @@ curl -X POST http://127.0.0.1:2048/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer your-api-key" \
   -d '{
-    "model": "gemini-2.5-flash",
+    "model": "gemini-1.5-flash",
     "messages": [
       {
         "role": "user",
@@ -71,7 +71,7 @@ curl -X POST http://127.0.0.1:2048/v1/chat/completions \
 curl -X POST http://127.0.0.1:2048/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "gemini-2.5-pro",
+    "model": "gemini-1.5-pro",
     "messages": [
       {
         "role": "system",
@@ -116,7 +116,7 @@ client = OpenAI(
 # 非流式请求
 def basic_chat():
     response = client.chat.completions.create(
-        model="gemini-2.5-pro",
+        model="gemini-1.5-pro",
         messages=[
             {"role": "system", "content": "你是一个有用的助手"},
             {"role": "user", "content": "什么是 FastAPI?"}
@@ -140,7 +140,7 @@ client = OpenAI(
 
 def streaming_chat():
     stream = client.chat.completions.create(
-        model="gemini-2.5-pro",
+        model="gemini-1.5-pro",
         messages=[
             {"role": "user", "content": "请讲一个关于机器学习的故事"}
         ],
@@ -168,7 +168,7 @@ client = OpenAI(
 
 def advanced_chat():
     response = client.chat.completions.create(
-        model="gemini-2.5-pro",
+        model="gemini-1.5-pro",
         messages=[
             {"role": "system", "content": "你是一个 Python 专家"},
             {"role": "user", "content": "解释装饰器的工作原理"}
@@ -202,7 +202,7 @@ def chat_with_retry(messages, max_retries=3):
     for attempt in range(max_retries):
         try:
             response = client.chat.completions.create(
-                model="gemini-2.5-pro",
+                model="gemini-1.5-pro",
                 messages=messages
             )
             return response.choices[0].message.content
@@ -249,7 +249,7 @@ def chat_non_streaming():
         "Authorization": "Bearer your-api-key"
     }
     data = {
-        "model": "gemini-2.5-pro",
+        "model": "gemini-1.5-pro",
         "messages": [
             {"role": "user", "content": "什么是深度学习?"}
         ],
@@ -280,7 +280,7 @@ def chat_streaming():
         "Authorization": "Bearer your-api-key"
     }
     data = {
-        "model": "gemini-2.5-pro",
+        "model": "gemini-1.5-pro",
         "messages": [
             {"role": "user", "content": "请讲一个故事"}
         ],
@@ -317,6 +317,8 @@ chat_streaming()
 
 ## JavaScript / Node.js
 
+> **注意**: 以下代码示例展示了如何作为**客户端**连接到 AI Studio Proxy API。这些代码旨在您的应用程序中运行，用于向 Proxy 服务器发送请求，而不是作为服务器代码运行。
+
 ### 使用 OpenAI SDK
 
 #### 安装
@@ -328,6 +330,8 @@ npm install openai
 #### 基本用法
 
 ```javascript
+// 注意：此示例使用 ES Modules 语法。
+// 如果您使用 CommonJS (require)，请改用: const OpenAI = require('openai');
 import OpenAI from 'openai';
 
 const client = new OpenAI({
@@ -338,7 +342,7 @@ const client = new OpenAI({
 // 非流式请求
 async function basicChat() {
   const response = await client.chat.completions.create({
-    model: 'gemini-2.5-pro',
+    model: 'gemini-1.5-pro',
     messages: [
       { role: 'system', content: '你是一个有用的助手' },
       { role: 'user', content: '什么是 Node.js?' }
@@ -363,7 +367,7 @@ const client = new OpenAI({
 
 async function streamingChat() {
   const stream = await client.chat.completions.create({
-    model: 'gemini-2.5-pro',
+    model: 'gemini-1.5-pro',
     messages: [
       { role: 'user', content: '请讲一个关于编程的故事' }
     ],
@@ -396,7 +400,7 @@ async function chatWithRetry(messages, maxRetries = 3) {
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
       const response = await client.chat.completions.create({
-        model: 'gemini-2.5-pro',
+        model: 'gemini-1.5-pro',
         messages: messages,
       });
       
@@ -427,6 +431,8 @@ chatWithRetry([
 
 ### 使用 Fetch API
 
+> **注意**: Node.js 18+ 内置了 fetch API。如果您使用旧版本，可能需要安装 `node-fetch`。
+
 ```javascript
 // 非流式请求
 async function chatNonStreaming() {
@@ -437,7 +443,7 @@ async function chatNonStreaming() {
       'Authorization': 'Bearer your-api-key',
     },
     body: JSON.stringify({
-      model: 'gemini-2.5-pro',
+      model: 'gemini-1.5-pro',
       messages: [
         { role: 'user', content: '什么是 JavaScript?' }
       ],
@@ -458,7 +464,7 @@ async function chatStreaming() {
       'Authorization': 'Bearer your-api-key',
     },
     body: JSON.stringify({
-      model: 'gemini-2.5-pro',
+      model: 'gemini-1.5-pro',
       messages: [
         { role: 'user', content: '请讲一个故事' }
       ],
@@ -558,7 +564,7 @@ chatStreaming();
     {
       "title": "AI Studio Gemini",
       "provider": "openai",
-      "model": "gemini-2.5-pro",
+      "model": "gemini-1.5-pro",
       "apiBase": "http://127.0.0.1:2048/v1",
       "apiKey": "your-api-key"
     }
@@ -581,7 +587,7 @@ def robust_chat(client, messages, max_retries=3):
     for attempt in range(max_retries):
         try:
             response = client.chat.completions.create(
-                model="gemini-2.5-pro",
+                model="gemini-1.5-pro",
                 messages=messages,
                 timeout=60
             )
@@ -610,7 +616,7 @@ client = OpenAI(
 
 ```python
 stream = client.chat.completions.create(
-    model="gemini-2.5-pro",
+    model="gemini-1.5-pro",
     messages=[{"role": "user", "content": "写一篇长文"}],
     stream=True
 )
@@ -628,7 +634,7 @@ for chunk in stream:
 ```python
 # 创意写作 - 高温度
 response = client.chat.completions.create(
-    model="gemini-2.5-pro",
+    model="gemini-1.5-pro",
     messages=[{"role": "user", "content": "写一首诗"}],
     temperature=0.9,
     max_tokens=2048
@@ -636,7 +642,7 @@ response = client.chat.completions.create(
 
 # 技术问答 - 低温度
 response = client.chat.completions.create(
-    model="gemini-2.5-pro",
+    model="gemini-1.5-pro",
     messages=[{"role": "user", "content": "什么是REST API?"}],
     temperature=0.3,
     max_tokens=1024
@@ -696,8 +702,5 @@ client = OpenAI(
 - [故障排除指南](troubleshooting.md) - 常见问题解决
 
 ---
-
-**最后更新**: 2024年11月  
-**当前版本**: v0.6.0
 
 如有问题或需要更多示例，请提交 Issue。

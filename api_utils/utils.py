@@ -520,4 +520,82 @@ async def maybe_execute_tools(messages: List[Message], tools: Optional[List[Dict
 
 def generate_sse_stop_chunk_with_usage(req_id: str, model: str, usage_stats: dict, reason: str = "stop") -> str:
     """生成带usage统计的SSE停止块"""
-    return generate_sse_stop_chunk(req_id, model, reason, usage_stats) 
+    return generate_sse_stop_chunk(req_id, model, reason, usage_stats)
+
+
+def collect_and_validate_attachments(request: Any, req_id: str, initial_image_list: List[str]) -> List[str]:
+    """
+    收集并验证请求中的附件（包括顶层和消息级），合并到 image_list 中。
+    """
+    from server import logger
+    from urllib.parse import urlparse, unquote
+    import os
+    
+    # 1. Validate initial list
+    valid_images = []
+    for p in initial_image_list:
+        if isinstance(p, str) and p and os.path.isabs(p) and os.path.exists(p):
+            valid_images.append(p)
+    
+    if len(valid_images) != len(initial_image_list):
+        logger.warning(f"[{req_id}] 过滤掉不存在的附件路径: {set(initial_image_list) - set(valid_images)}")
+    
+    image_list = valid_images
+
+    # 2. Collect from request
+    try:
+        # 顶层 attachments
+        top_level_atts = getattr(request, 'attachments', None)
+        if isinstance(top_level_atts, list) and len(top_level_atts) > 0:
+            for it in top_level_atts:
+                url_value = None
+                if isinstance(it, str):
+                    url_value = it
+                elif isinstance(it, dict):
+                    url_value = it.get('url') or it.get('path')
+                url_value = (url_value or '').strip()
+                if not url_value:
+                    continue
+                if url_value.startswith('data:'):
+                    fp = extract_data_url_to_local(url_value, req_id=req_id)
+                    if fp:
+                        image_list.append(fp)
+                elif url_value.startswith('file:'):
+                    parsed = urlparse(url_value)
+                    lp = unquote(parsed.path)
+                    if os.path.exists(lp):
+                        image_list.append(lp)
+                elif os.path.isabs(url_value) and os.path.exists(url_value):
+                    image_list.append(url_value)
+        
+        # 消息级 attachments/images/files/media
+        for msg in (request.messages or []):
+            for key in ('attachments', 'images', 'files', 'media'):
+                arr = getattr(msg, key, None)
+                if not isinstance(arr, list):
+                    continue
+                for it in arr:
+                    url_value = None
+                    if isinstance(it, str):
+                        url_value = it
+                    elif isinstance(it, dict):
+                        url_value = it.get('url') or it.get('path')
+                    url_value = (url_value or '').strip()
+                    if not url_value:
+                        continue
+                    if url_value.startswith('data:'):
+                        fp = extract_data_url_to_local(url_value, req_id=req_id)
+                        if fp:
+                            image_list.append(fp)
+                    elif url_value.startswith('file:'):
+                        parsed = urlparse(url_value)
+                        lp = unquote(parsed.path)
+                        if os.path.exists(lp):
+                            image_list.append(lp)
+                    elif os.path.isabs(url_value) and os.path.exists(url_value):
+                        image_list.append(url_value)
+    except Exception as e:
+        logger.warning(f"[{req_id}] 附件收集过程中出错: {e}")
+        pass
+
+    return image_list

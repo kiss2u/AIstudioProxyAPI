@@ -91,6 +91,8 @@ class ChatController(BaseController):
                 await enable_temporary_chat_mode(self.page)
 
         except Exception as e_clear:
+            if isinstance(e_clear, asyncio.CancelledError):
+                raise
             self.logger.error(f"[{self.req_id}] 清空聊天过程中发生错误: {e_clear}")
             if not (
                 isinstance(e_clear, ClientDisconnectedError)
@@ -230,6 +232,8 @@ class ChatController(BaseController):
                 self.logger.info(f"[{self.req_id}] 客户端在等待清空确认对话框消失时断开连接。")
                 raise
             except Exception as other_err:
+                if isinstance(other_err, asyncio.CancelledError):
+                    raise
                 self.logger.warning(f"[{self.req_id}] 等待清空确认对话框消失时发生其他错误: {other_err}")
                 if attempt_disappear < max_retries_disappear - 1:
                     continue

@@ -187,6 +187,8 @@ class ParameterController(BaseController):
                 from browser_utils.operations import save_error_snapshot
                 await save_error_snapshot(f"temperature_value_error_{self.req_id}")
             except Exception as pw_err:
+                if isinstance(pw_err, asyncio.CancelledError):
+                    raise
                 self.logger.error(f"[{self.req_id}] ❌ 操作温度输入框时发生错误: {pw_err}。清除缓存中的温度。")
                 page_params_cache.pop("temperature", None)
                 from browser_utils.operations import save_error_snapshot
@@ -308,6 +310,8 @@ class ParameterController(BaseController):
                 from browser_utils.operations import save_error_snapshot
                 await save_error_snapshot(f"max_tokens_value_error_{self.req_id}")
             except Exception as e:
+                if isinstance(e, asyncio.CancelledError):
+                    raise
                 self.logger.error(f"[{self.req_id}] ❌ 调整最大输出 Tokens 时出错: {e}。清除缓存。")
                 page_params_cache.pop("max_output_tokens", None)
                 from browser_utils.operations import save_error_snapshot
@@ -385,6 +389,8 @@ class ParameterController(BaseController):
                 self.logger.info(f"[{self.req_id}] ✅ 停止序列已成功设置。缓存已更新。")
 
             except Exception as e:
+                if isinstance(e, asyncio.CancelledError):
+                    raise
                 self.logger.error(f"[{self.req_id}] ❌ 设置停止序列时出错: {e}")
                 page_params_cache.pop("stop_sequences", None)
                 from browser_utils.operations import save_error_snapshot
@@ -444,6 +450,8 @@ class ParameterController(BaseController):
             from browser_utils.operations import save_error_snapshot
             await save_error_snapshot(f"top_p_value_error_{self.req_id}")
         except Exception as e:
+            if isinstance(e, asyncio.CancelledError):
+                raise
             self.logger.error(f"[{self.req_id}] ❌ 调整 Top P 时出错: {e}")
             from browser_utils.operations import save_error_snapshot
             await save_error_snapshot(f"top_p_error_{self.req_id}")
@@ -476,6 +484,8 @@ class ParameterController(BaseController):
             else:
                 self.logger.info(f"[{self.req_id}] 工具面板已处于展开状态。")
         except Exception as e:
+            if isinstance(e, asyncio.CancelledError):
+                raise
             self.logger.error(f"[{self.req_id}] ❌ 展开工具面板时发生错误: {e}")
             # 即使出错，也继续尝试执行后续操作，但记录错误
             if isinstance(e, ClientDisconnectedError):
@@ -497,6 +507,8 @@ class ParameterController(BaseController):
             else:
                 self.logger.info(f"[{self.req_id}] URL Context 开关已处于开启状态。")
         except Exception as e:
+            if isinstance(e, asyncio.CancelledError):
+                raise
             self.logger.error(
                 f"[{self.req_id}] ❌ 操作 USE_URL_CONTEXT_SELECTOR 时发生错误:{e}。"
             )
@@ -575,6 +587,8 @@ class ParameterController(BaseController):
                 self.logger.info(f"[{self.req_id}] Google Search 开关已处于期望状态，无需操作。")
 
         except Exception as e:
+            if isinstance(e, asyncio.CancelledError):
+                raise
             self.logger.error(
                 f"[{self.req_id}] ❌ 操作 'Google Search toggle' 开关时发生错误: {e}"
             )
