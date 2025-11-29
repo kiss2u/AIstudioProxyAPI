@@ -70,6 +70,11 @@ AIstudioProxyAPI/
 │   └── utils.py          # 流式处理工具
 ├── logging_utils/          # 日志管理模块
 │   └── setup.py          # 日志系统配置
+├── launcher/               # 启动器模块 (新)
+│   ├── runner.py          # 启动逻辑核心
+│   ├── checks.py          # 环境与依赖检查
+│   ├── config.py          # 启动配置处理
+│   └── process.py         # Camoufox 进程管理
 └── deprecated_javascript_version/ # Node流式处理模块 (已弃用)
 ```
 
@@ -112,6 +117,9 @@ AIstudioProxyAPI/
 - 并发控制和资源管理 (Processing Lock)
 - 客户端断开检测与自动跳过
 - 流式请求间的智能延迟控制
+- **分级错误恢复机制 (Tiered Recovery)**:
+  - **Tier 1**: 页面快速刷新 (处理临时性 DOM 错误)
+  - **Tier 2**: 认证配置文件切换 (处理配额耗尽或认证失效，无需重启浏览器)
 
 ### 2. browser_utils/ - 浏览器自动化
 

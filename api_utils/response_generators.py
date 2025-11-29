@@ -1,21 +1,19 @@
 import asyncio
 import json
-import time
 import random
-from typing import Any, AsyncGenerator, Callable
+import time
 from asyncio import Event
+from typing import Any, AsyncGenerator, Callable, Dict, Optional
 
 from playwright.async_api import Page as AsyncPage
 
-from models import ClientDisconnectedError, ChatCompletionRequest
 from config import CHAT_COMPLETION_ID_PREFIX
-from .utils import (
-    use_stream_response,
-    calculate_usage_stats,
-    generate_sse_chunk,
-    generate_sse_stop_chunk,
-)
+from models import ChatCompletionRequest, ClientDisconnectedError
+
 from .common_utils import random_id
+from .sse import generate_sse_chunk, generate_sse_stop_chunk
+from .utils_ext.stream import use_stream_response
+from .utils_ext.tokens import calculate_usage_stats
 
 
 async def gen_sse_from_aux_stream(
@@ -24,12 +22,19 @@ async def gen_sse_from_aux_stream(
     model_name_for_stream: str,
     check_client_disconnected: Callable,
     event_to_set: Event,
+    stream_state: Optional[Dict[str, Any]] = None,
 ) -> AsyncGenerator[str, None]:
     """辅助流队列 -> OpenAI 兼容 SSE 生成器。
 
     产出增量、tool_calls、最终 usage 与 [DONE]。
+
+    Args:
+        stream_state: 可选的状态字典，用于向调用者报告流状态。
+                      如果提供，将设置 'has_content' 键表示是否收到内容。
     """
-    from server import logger
+    import logging
+
+    logger = logging.getLogger("AIStudioProxyServer")
 
     logger.info(f"[{req_id}] 开始生成 SSE 响应流")
 
@@ -201,6 +206,11 @@ async def gen_sse_from_aux_stream(
         if data_receiving and not event_to_set.is_set():
             logger.info(f"[{req_id}] 客户端断开异常处理中立即设置done信号")
             event_to_set.set()
+    except asyncio.CancelledError:
+        logger.info(f"[{req_id}] 流式生成器被取消")
+        if not event_to_set.is_set():
+            event_to_set.set()
+        raise
     except Exception as e:
         logger.error(f"[{req_id}] 流式生成器处理过程中发生错误: {e}", exc_info=True)
         try:
@@ -222,6 +232,8 @@ async def gen_sse_from_aux_stream(
                 ],
             }
             yield f"data: {json.dumps(error_chunk, ensure_ascii=False, separators=(',', ':'))}\n\n"
+        except asyncio.CancelledError:
+            raise
         except Exception:
             pass
     finally:
@@ -260,6 +272,12 @@ async def gen_sse_from_aux_stream(
             event_to_set.set()
             logger.info(f"[{req_id}] 流式生成器完成事件已设置")
 
+        # 更新 stream_state 以报告是否收到内容
+        if stream_state is not None:
+            has_content = bool(full_body_content or full_reasoning_content)
+            stream_state["has_content"] = has_content
+            logger.info(f"[{req_id}] 流状态更新: has_content={has_content}")
+
 
 async def gen_sse_from_playwright(
     page: AsyncPage,
@@ -272,8 +290,8 @@ async def gen_sse_from_playwright(
 ) -> AsyncGenerator[str, None]:
     """Playwright 最终响应 -> OpenAI 兼容 SSE 生成器。"""
     # Reuse already-imported helpers from utils to avoid repeated imports
-    from models import ClientDisconnectedError
     from browser_utils.page_controller import PageController
+    from models import ClientDisconnectedError
 
     data_receiving = False
     try:
@@ -315,6 +333,11 @@ async def gen_sse_from_playwright(
         if data_receiving and not completion_event.is_set():
             logger.info(f"[{req_id}] Playwright客户端断开异常处理中立即设置done信号")
             completion_event.set()
+    except asyncio.CancelledError:
+        logger.info(f"[{req_id}] Playwright流式生成器被取消")
+        if not completion_event.is_set():
+            completion_event.set()
+        raise
     except Exception as e:
         logger.error(
             f"[{req_id}] Playwright流式生成器处理过程中发生错误: {e}", exc_info=True
@@ -324,6 +347,8 @@ async def gen_sse_from_playwright(
                 f"\n\n[错误: {str(e)}]", req_id, model_name_for_stream
             )
             yield generate_sse_stop_chunk(req_id, model_name_for_stream)
+        except asyncio.CancelledError:
+            raise
         except Exception:
             pass
     finally:

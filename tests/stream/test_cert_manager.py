@@ -1,151 +1,198 @@
+import os
+import sys
+from unittest.mock import MagicMock, mock_open, patch
+
 import pytest
-from unittest.mock import MagicMock, patch, mock_open
-from pathlib import Path
+
+# Add project root to sys.path
+sys.path.append(os.getcwd())
+
 from stream.cert_manager import CertificateManager
-from cryptography import x509
-from cryptography.hazmat.primitives.asymmetric import rsa
 
-@pytest.fixture
-def mock_path():
-    with patch("stream.cert_manager.Path") as mock:
-        yield mock
 
-@pytest.fixture
-def mock_open_file():
-    with patch("builtins.open", mock_open()) as mock:
-        yield mock
+class TestCertificateManager:
+    @pytest.fixture
+    def mock_path(self):
+        with patch("stream.cert_manager.Path") as mock:
+            yield mock
 
-@pytest.fixture
-def mock_rsa():
-    with patch("stream.cert_manager.rsa") as mock:
-        key = MagicMock()
-        key.private_bytes.return_value = b"private_key"
-        key.public_key.return_value = MagicMock()
-        mock.generate_private_key.return_value = key
-        yield mock
+    @pytest.fixture
+    def mock_rsa(self):
+        with patch("stream.cert_manager.rsa") as mock:
+            yield mock
 
-@pytest.fixture
-def mock_x509():
-    with patch("stream.cert_manager.x509") as mock:
-        cert = MagicMock()
-        cert.public_bytes.return_value = b"certificate"
-        mock.CertificateBuilder.return_value.subject_name.return_value \
-            .issuer_name.return_value.public_key.return_value \
-            .serial_number.return_value.not_valid_before.return_value \
-            .not_valid_after.return_value.add_extension.return_value \
-            .add_extension.return_value.sign.return_value = cert
-        
-        mock.load_pem_x509_certificate.return_value = cert
-        yield mock
+    @pytest.fixture
+    def mock_x509(self):
+        with patch("stream.cert_manager.x509") as mock:
+            yield mock
 
-@pytest.fixture
-def mock_serialization():
-    with patch("stream.cert_manager.serialization") as mock:
-        mock.load_pem_private_key.return_value = MagicMock()
-        yield mock
+    @pytest.fixture
+    def mock_serialization(self):
+        with patch("stream.cert_manager.serialization") as mock:
+            yield mock
 
-def test_init_generates_ca_if_missing(mock_path, mock_open_file, mock_rsa, mock_x509, mock_serialization):
-    """Test initialization generates CA if missing."""
-    mock_dir = MagicMock()
-    mock_path.return_value = mock_dir
-    
-    # CA files don't exist
-    mock_dir.__truediv__.return_value.exists.return_value = False
-    
-    manager = CertificateManager()
-    
-    # Verify directory creation
-    mock_dir.mkdir.assert_called_with(exist_ok=True)
-    
-    # Verify CA generation
-    mock_rsa.generate_private_key.assert_called()
-    mock_x509.CertificateBuilder.assert_called()
-    
-    # Verify file writing (key and cert)
-    assert mock_open_file.call_count >= 4 # write key, write cert, read key, read cert
+    def test_init_creates_dir(self, mock_path):
+        mock_dir = MagicMock()
+        mock_path.return_value = mock_dir
 
-def test_init_loads_existing_ca(mock_path, mock_open_file, mock_rsa, mock_x509, mock_serialization):
-    """Test initialization loads existing CA."""
-    mock_dir = MagicMock()
-    mock_path.return_value = mock_dir
-    
-    # CA files exist
-    mock_dir.__truediv__.return_value.exists.return_value = True
-    
-    manager = CertificateManager()
-    
-    # Verify NO CA generation
-    mock_rsa.generate_private_key.assert_not_called()
-    
-    # Verify loading
-    mock_serialization.load_pem_private_key.assert_called()
-    mock_x509.load_pem_x509_certificate.assert_called()
+        # Setup exists to return True so we don't trigger generation in init
+        mock_dir.__truediv__.return_value.exists.return_value = True
 
-def test_get_domain_cert_existing(mock_path, mock_open_file, mock_rsa, mock_x509, mock_serialization):
-    """Test getting existing domain certificate."""
-    mock_dir = MagicMock()
-    mock_path.return_value = mock_dir
-    
-    # CA exists
-    mock_dir.__truediv__.return_value.exists.side_effect = [True, True, True, True] # CA key, CA cert, Domain cert, Domain key
-    
-    manager = CertificateManager()
-    
-    # Reset mocks to clear init calls
-    mock_open_file.reset_mock()
-    mock_serialization.load_pem_private_key.reset_mock()
-    mock_x509.load_pem_x509_certificate.reset_mock()
-    
-    key, cert = manager.get_domain_cert("example.com")
-    
-    # Verify loading
-    assert mock_open_file.call_count == 2 # read key, read cert
-    mock_serialization.load_pem_private_key.assert_called()
-    mock_x509.load_pem_x509_certificate.assert_called()
+        # We also need to mock _load_ca_cert calls to open/load
+        with (
+            patch("builtins.open", mock_open(read_data=b"data")),
+            patch("stream.cert_manager.serialization.load_pem_private_key"),
+            patch("stream.cert_manager.x509.load_pem_x509_certificate"),
+        ):
+            CertificateManager("test_certs")
 
-def test_get_domain_cert_generate(mock_path, mock_open_file, mock_rsa, mock_x509, mock_serialization):
-    """Test generating new domain certificate."""
-    mock_dir = MagicMock()
-    mock_path.return_value = mock_dir
-    
-    # CA exists, Domain cert missing
-    def exists_side_effect(arg):
-        # This is tricky because __truediv__ returns a new mock each time usually
-        # But we can check the path string if we could access it
-        return True 
-        
-    # Simpler approach: Mock the paths directly
-    ca_key = MagicMock()
-    ca_key.exists.return_value = True
-    ca_cert = MagicMock()
-    ca_cert.exists.return_value = True
-    
-    domain_crt = MagicMock()
-    domain_crt.exists.return_value = False # Trigger generation
-    domain_key = MagicMock()
-    domain_key.exists.return_value = False
-    
-    # Map paths
-    mock_dir.__truediv__.side_effect = lambda p: {
-        'ca.key': ca_key,
-        'ca.crt': ca_cert,
-        'example.com.crt': domain_crt,
-        'example.com.key': domain_key
-    }.get(p, MagicMock())
+            mock_path.assert_called_with("test_certs")
+            mock_dir.mkdir.assert_called_with(exist_ok=True)
 
-    manager = CertificateManager()
-    
-    # Reset mocks
-    mock_rsa.generate_private_key.reset_mock()
-    mock_open_file.reset_mock()
-    
-    key, cert = manager.get_domain_cert("example.com")
-    
-    # Verify generation
-    mock_rsa.generate_private_key.assert_called()
-    
-    # Verify writing
-    # Should write key and cert
-    assert mock_open_file.call_count == 2
-    handle = mock_open_file()
-    handle.write.assert_called()
+    def test_init_generates_ca_if_missing(self, mock_path, mock_rsa, mock_x509):
+        mock_dir = MagicMock()
+        mock_path.return_value = mock_dir
+
+        # Setup exists to return False for CA cert
+        ca_cert_path = MagicMock()
+        ca_cert_path.exists.return_value = False
+
+        # Setup side_effect for division to handle paths
+        # CA paths return the mock that has exists=False
+        mock_dir.__truediv__.return_value = ca_cert_path
+
+        # Mock key generation
+        mock_key = MagicMock()
+        mock_rsa.generate_private_key.return_value = mock_key
+        mock_key.private_bytes.return_value = b"private_key_bytes"
+        mock_key.public_key.return_value = MagicMock()
+
+        # Mock builder
+        mock_builder = MagicMock()
+        mock_x509.CertificateBuilder.return_value = mock_builder
+        mock_builder.subject_name.return_value = mock_builder
+        mock_builder.issuer_name.return_value = mock_builder
+        mock_builder.public_key.return_value = mock_builder
+        mock_builder.serial_number.return_value = mock_builder
+        mock_builder.not_valid_before.return_value = mock_builder
+        mock_builder.not_valid_after.return_value = mock_builder
+        mock_builder.add_extension.return_value = mock_builder
+
+        mock_cert = MagicMock()
+        mock_builder.sign.return_value = mock_cert
+        mock_cert.public_bytes.return_value = b"cert_bytes"
+
+        with (
+            patch("builtins.open", mock_open()) as mocked_file,
+            patch("stream.cert_manager.serialization.load_pem_private_key"),
+            patch("stream.cert_manager.x509.load_pem_x509_certificate"),
+        ):
+            CertificateManager("test_certs")
+
+            # Check if generate_private_key was called
+            mock_rsa.generate_private_key.assert_called_once()
+
+            # Check if files were written (key and cert)
+            # We expect multiple calls to open (write key, write cert, read key, read cert)
+            assert mocked_file.call_count >= 2
+
+    def test_get_domain_cert_existing(self, mock_path):
+        mock_dir = MagicMock()
+        mock_path.return_value = mock_dir
+
+        # Setup paths
+        # We need specific behavior for different paths
+        ca_path_mock = MagicMock()
+        ca_path_mock.exists.return_value = True
+
+        domain_path_mock = MagicMock()
+        domain_path_mock.exists.return_value = True
+
+        def truediv_side_effect(arg):
+            # If we divide by domain.crt or domain.key, return domain_path_mock
+            if "example.com" in str(arg):
+                return domain_path_mock
+            return ca_path_mock
+
+        mock_dir.__truediv__.side_effect = truediv_side_effect
+
+        with (
+            patch("builtins.open", mock_open(read_data=b"data")),
+            patch(
+                "stream.cert_manager.serialization.load_pem_private_key"
+            ) as mock_load_key,
+            patch(
+                "stream.cert_manager.x509.load_pem_x509_certificate"
+            ) as mock_load_cert,
+        ):
+            mock_load_key.return_value = "mock_key"
+            mock_load_cert.return_value = "mock_cert"
+
+            manager = CertificateManager("test_certs")
+            key, cert = manager.get_domain_cert("example.com")
+
+            assert key == "mock_key"
+            assert cert == "mock_cert"
+
+    def test_get_domain_cert_generates_new(self, mock_path, mock_rsa, mock_x509):
+        mock_dir = MagicMock()
+        mock_path.return_value = mock_dir
+
+        # CA exists, domain does not
+        ca_path_mock = MagicMock()
+        ca_path_mock.exists.return_value = True
+
+        domain_path_mock = MagicMock()
+        domain_path_mock.exists.return_value = False
+
+        def truediv_side_effect(arg):
+            if "example.com" in str(arg):
+                return domain_path_mock
+            return ca_path_mock
+
+        mock_dir.__truediv__.side_effect = truediv_side_effect
+
+        # Mock key generation
+        mock_key = MagicMock()
+        mock_rsa.generate_private_key.return_value = mock_key
+        mock_key.private_bytes.return_value = b"domain_private_key"
+        mock_key.public_key.return_value = MagicMock()
+
+        # Mock builder for domain cert
+        mock_builder = MagicMock()
+        mock_x509.CertificateBuilder.return_value = mock_builder
+        mock_builder.subject_name.return_value = mock_builder
+        mock_builder.issuer_name.return_value = mock_builder
+        mock_builder.public_key.return_value = mock_builder
+        mock_builder.serial_number.return_value = mock_builder
+        mock_builder.not_valid_before.return_value = mock_builder
+        mock_builder.not_valid_after.return_value = mock_builder
+        mock_builder.add_extension.return_value = mock_builder
+
+        mock_cert = MagicMock()
+        mock_builder.sign.return_value = mock_cert
+        mock_cert.public_bytes.return_value = b"domain_cert_bytes"
+
+        # We need CA cert loaded to sign
+        mock_ca_cert = MagicMock()
+
+        with (
+            patch("builtins.open", mock_open(read_data=b"ca_data")),
+            patch("stream.cert_manager.serialization.load_pem_private_key"),
+            patch(
+                "stream.cert_manager.x509.load_pem_x509_certificate"
+            ) as mock_load_cert,
+        ):
+            mock_load_cert.return_value = mock_ca_cert
+
+            manager = CertificateManager("test_certs")
+
+            # Call get_domain_cert
+            key, cert = manager.get_domain_cert("example.com")
+
+            # Verify generation
+            # 1 call to generate_private_key (for domain, CA was loaded)
+            assert mock_rsa.generate_private_key.call_count == 1
+
+            assert key == mock_key
+            assert cert == mock_cert

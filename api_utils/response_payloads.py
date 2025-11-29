@@ -21,12 +21,14 @@ def build_chat_completion_response_json(
         "object": "chat.completion",
         "created": created_ts,
         "model": model_name,
-        "choices": [{
-            "index": 0,
-            "message": message_payload,
-            "finish_reason": finish_reason,
-            "native_finish_reason": finish_reason,
-        }],
+        "choices": [
+            {
+                "index": 0,
+                "message": message_payload,
+                "finish_reason": finish_reason,
+                "native_finish_reason": finish_reason,
+            }
+        ],
         "usage": usage_stats,
         "system_fingerprint": system_fingerprint,
     }

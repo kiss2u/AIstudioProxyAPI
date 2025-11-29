@@ -1,7 +1,10 @@
-import pytest
 import unittest.mock
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
+
+import pytest
+
 from browser_utils.page_controller_modules.thinking import ThinkingController
+
 
 @pytest.fixture
 def mock_controller(mock_page):
@@ -9,117 +12,710 @@ def mock_controller(mock_page):
     controller = ThinkingController(mock_page, logger, "req_123")
     return controller
 
+
+# --- Helper Logic Tests ---
+
+
+def test_uses_thinking_level(mock_controller):
+    assert mock_controller._uses_thinking_level("gemini-3-pro") is True
+    assert mock_controller._uses_thinking_level("gemini-3-pro-something") is True
+    assert mock_controller._uses_thinking_level("gemini-2.0-flash") is False
+    assert mock_controller._uses_thinking_level(None) is False
+    assert mock_controller._uses_thinking_level(123) is False  # Exception handling
+
+
+def test_model_has_main_thinking_toggle(mock_controller):
+    assert mock_controller._model_has_main_thinking_toggle("gemini-2.0-flash") is True
+    assert mock_controller._model_has_main_thinking_toggle("flash-lite") is True
+    assert mock_controller._model_has_main_thinking_toggle("gemini-1.5-pro") is False
+    assert mock_controller._model_has_main_thinking_toggle(None) is False
+    assert mock_controller._model_has_main_thinking_toggle(123) is False
+
+
+@pytest.mark.asyncio
+async def test_has_thinking_dropdown(mock_controller, mock_page):
+    # Case 1: Exists and visible
+    mock_page.locator.return_value.count = AsyncMock(return_value=1)
+    mock_expect = MagicMock()
+    mock_expect.return_value.to_be_visible = AsyncMock()
+
+    with patch(
+        "browser_utils.page_controller_modules.thinking.expect_async", mock_expect
+    ):
+        assert await mock_controller._has_thinking_dropdown() is True
+
+    # Case 2: Does not exist
+    mock_page.locator.return_value.count = AsyncMock(return_value=0)
+    assert await mock_controller._has_thinking_dropdown() is False
+
+    # Case 3: Exception during check (e.g. timeout on visibility, returns True as fallback logic says "return True" on exception inside inner try)
+    mock_page.locator.return_value.count = AsyncMock(return_value=1)
+    with patch(
+        "browser_utils.page_controller_modules.thinking.expect_async",
+        side_effect=Exception("Timeout"),
+    ):
+        # The code catches exception in inner try and returns True?
+        # Lines 170-174: try expect... except: return True.
+        assert await mock_controller._has_thinking_dropdown() is True
+
+    # Case 4: Exception during locator creation (outer try)
+    mock_page.locator.side_effect = Exception("Fatal")
+    assert await mock_controller._has_thinking_dropdown() is False
+
+
+# --- _handle_thinking_budget Logic Tests ---
+
+
 @pytest.mark.asyncio
 async def test_handle_thinking_budget_disabled(mock_controller):
-    # Mock helper methods
+    # Mock helpers
     mock_controller._uses_thinking_level = MagicMock(return_value=False)
     mock_controller._model_has_main_thinking_toggle = MagicMock(return_value=True)
     mock_controller._control_thinking_mode_toggle = AsyncMock(return_value=True)
     mock_controller._control_thinking_budget_toggle = AsyncMock()
-    
-    # Use 0 to disable thinking mode
-    request_params = {"reasoning_effort": 0}
-    await mock_controller._handle_thinking_budget(request_params, "gemini-2.0-flash", AsyncMock())
-    
-    mock_controller._control_thinking_mode_toggle.assert_called_with(
-        should_be_enabled=False,
-        check_client_disconnected=unittest.mock.ANY
-    )
-    # If thinking is disabled, we also ensure budget toggle is off (for compatibility)
-    mock_controller._control_thinking_budget_toggle.assert_called_with(
-        should_be_checked=False,
-        check_client_disconnected=unittest.mock.ANY
+
+    # reasoning_effort=0 -> disabled
+    await mock_controller._handle_thinking_budget(
+        {"reasoning_effort": 0}, "model", MagicMock(return_value=False)
     )
 
+    mock_controller._control_thinking_mode_toggle.assert_called_with(
+        should_be_enabled=False, check_client_disconnected=unittest.mock.ANY
+    )
+    mock_controller._control_thinking_budget_toggle.assert_not_called()  # Flash model behavior (toggle hidden)
+
+
 @pytest.mark.asyncio
-async def test_handle_thinking_budget_enabled_with_budget(mock_controller):
-    # Mock helper methods
+async def test_handle_thinking_budget_disabled_non_flash(mock_controller):
+    # Non-flash model (no main toggle), disable thinking
     mock_controller._uses_thinking_level = MagicMock(return_value=False)
-    mock_controller._model_has_main_thinking_toggle = MagicMock(return_value=True)
+    mock_controller._model_has_main_thinking_toggle = MagicMock(return_value=False)
     mock_controller._control_thinking_mode_toggle = AsyncMock(return_value=True)
     mock_controller._control_thinking_budget_toggle = AsyncMock()
-    mock_controller._set_thinking_budget_value = AsyncMock()
-    
-    request_params = {"reasoning_effort": 1000}
-    await mock_controller._handle_thinking_budget(request_params, "gemini-2.0-flash", AsyncMock())
-    
-    mock_controller._control_thinking_mode_toggle.assert_called_with(
-        should_be_enabled=True,
-        check_client_disconnected=unittest.mock.ANY
-    )
-    mock_controller._control_thinking_budget_toggle.assert_called_with(
-        should_be_checked=True,
-        check_client_disconnected=unittest.mock.ANY
-    )
-    # The code calls _set_thinking_budget_value(value_to_set, check_client_disconnected)
-    # The assertion failed because it expected keyword arg check_client_disconnected but got positional or vice versa?
-    # The error message said: Expected: mock(1000, check_client_disconnected=<ANY>), Actual: mock(1000, <AsyncMock ...>)
-    # This means it was called with positional arguments.
-    mock_controller._set_thinking_budget_value.assert_called_with(
-        1000,
-        unittest.mock.ANY
+
+    await mock_controller._handle_thinking_budget(
+        {"reasoning_effort": 0}, "model", MagicMock(return_value=False)
     )
 
+    mock_controller._control_thinking_mode_toggle.assert_not_called()  # No main toggle
+    mock_controller._control_thinking_budget_toggle.assert_called_with(
+        should_be_checked=False, check_client_disconnected=unittest.mock.ANY
+    )
+
+
 @pytest.mark.asyncio
-async def test_handle_thinking_budget_gemini_3_pro(mock_controller):
-    # Mock helper methods
+async def test_handle_thinking_budget_enabled_level(mock_controller):
+    # Gemini 3 Pro with level
     mock_controller._uses_thinking_level = MagicMock(return_value=True)
     mock_controller._has_thinking_dropdown = AsyncMock(return_value=True)
     mock_controller._model_has_main_thinking_toggle = MagicMock(return_value=True)
     mock_controller._control_thinking_mode_toggle = AsyncMock(return_value=True)
     mock_controller._set_thinking_level = AsyncMock()
-    
-    request_params = {"reasoning_effort": "high"}
-    await mock_controller._handle_thinking_budget(request_params, "gemini-3-pro", AsyncMock())
-    
+
+    # High
+    await mock_controller._handle_thinking_budget(
+        {"reasoning_effort": "high"}, "gemini-3-pro", MagicMock(return_value=False)
+    )
+    mock_controller._set_thinking_level.assert_called_with("high", unittest.mock.ANY)
+
+    # Low
+    await mock_controller._handle_thinking_budget(
+        {"reasoning_effort": "low"}, "gemini-3-pro", MagicMock(return_value=False)
+    )
+    mock_controller._set_thinking_level.assert_called_with("low", unittest.mock.ANY)
+
+    # Int >= 8000 -> High
+    await mock_controller._handle_thinking_budget(
+        {"reasoning_effort": 8000}, "gemini-3-pro", MagicMock(return_value=False)
+    )
+    mock_controller._set_thinking_level.assert_called_with("high", unittest.mock.ANY)
+
+    # Int < 8000 -> Low
+    await mock_controller._handle_thinking_budget(
+        {"reasoning_effort": 100}, "gemini-3-pro", MagicMock(return_value=False)
+    )
+    mock_controller._set_thinking_level.assert_called_with("low", unittest.mock.ANY)
+
+    # Invalid -> Keep current (None)
+    mock_controller._set_thinking_level.reset_mock()
+    await mock_controller._handle_thinking_budget(
+        {"reasoning_effort": "invalid"}, "gemini-3-pro", MagicMock(return_value=False)
+    )
+    mock_controller._set_thinking_level.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_handle_thinking_budget_enabled_budget_caps(mock_controller):
+    # Flash models with budget caps
+    mock_controller._uses_thinking_level = MagicMock(return_value=False)
+    mock_controller._model_has_main_thinking_toggle = MagicMock(return_value=True)
+    mock_controller._control_thinking_mode_toggle = AsyncMock(return_value=True)
+    mock_controller._control_thinking_budget_toggle = AsyncMock()
+    mock_controller._set_thinking_budget_value = AsyncMock()
+
+    # Flash Lite (cap 32k or 24k? Code says 24576 for flash-lite)
+    await mock_controller._handle_thinking_budget(
+        {"reasoning_effort": 100000},
+        "gemini-2.0-flash-lite",
+        MagicMock(return_value=False),
+    )
+    mock_controller._set_thinking_budget_value.assert_called_with(
+        24576, unittest.mock.ANY
+    )
+
+
+@pytest.mark.asyncio
+async def test_handle_thinking_budget_no_limit(mock_controller):
+    # Budget enabled but set to 0/None -> disable manual budget
+    mock_controller._uses_thinking_level = MagicMock(return_value=False)
+    mock_controller._model_has_main_thinking_toggle = MagicMock(return_value=True)
+    mock_controller._control_thinking_mode_toggle = AsyncMock(return_value=True)
+    mock_controller._control_thinking_budget_toggle = AsyncMock()
+
+    # normalize_reasoning_effort returns budget_enabled=False for -1 or 'none' if configured so?
+    # Actually normalize_reasoning_effort behavior: 'none' -> thinking_enabled=True, budget_enabled=False
+    # Let's rely on _handle_thinking_budget logic for "budget_enabled"
+
+    # If reasoning_effort is None -> thinking disabled by default if normalize returns disabled
+    # If reasoning_effort is "none" (string) -> Thinking enabled (default), Budget disabled (unlimited)
+
+    await mock_controller._handle_thinking_budget(
+        {"reasoning_effort": "none"}, "model", MagicMock(return_value=False)
+    )
     mock_controller._control_thinking_mode_toggle.assert_called_with(
-        should_be_enabled=True,
-        check_client_disconnected=unittest.mock.ANY
+        should_be_enabled=True, check_client_disconnected=unittest.mock.ANY
     )
-    mock_controller._set_thinking_level.assert_called_with(
-        "high",
-        unittest.mock.ANY
+    mock_controller._control_thinking_budget_toggle.assert_called_with(
+        should_be_checked=False, check_client_disconnected=unittest.mock.ANY
     )
 
+
+# --- Interaction Methods Tests ---
+
+
 @pytest.mark.asyncio
-async def test_control_thinking_mode_toggle(mock_controller, mock_page):
-    toggle = AsyncMock()
-    # First call returns "false" (current state), second call returns "true" (after click)
-    toggle.get_attribute.side_effect = ["false", "true"]
-    mock_page.locator.return_value = toggle
-    
-    # expect_async must be a MagicMock returning an object with AsyncMock methods
+async def test_set_thinking_level(mock_controller, mock_page):
+    trigger = AsyncMock()
+    option = AsyncMock()
+    mock_page.locator.side_effect = [
+        trigger,
+        option,
+        AsyncMock(),
+    ]  # trigger, option, listbox check
+
     mock_expect = MagicMock()
-    assertion_wrapper = MagicMock()
-    assertion_wrapper.to_be_visible = AsyncMock()
-    mock_expect.return_value = assertion_wrapper
+    mock_expect.return_value.to_be_visible = AsyncMock()
+    mock_expect.return_value.to_be_hidden = AsyncMock()
 
-    with patch("browser_utils.page_controller_modules.thinking.expect_async", mock_expect):
-        # Mock _check_disconnect to avoid errors
+    trigger.locator.return_value.inner_text = AsyncMock(return_value="High")
+
+    with patch(
+        "browser_utils.page_controller_modules.thinking.expect_async", mock_expect
+    ):
         mock_controller._check_disconnect = AsyncMock()
-        
-        result = await mock_controller._control_thinking_mode_toggle(True, AsyncMock())
-    
-    assert result is True
-    toggle.click.assert_called()
+
+        await mock_controller._set_thinking_level("High", MagicMock(return_value=False))
+
+        trigger.click.assert_called()
+        option.click.assert_called()
+
 
 @pytest.mark.asyncio
-async def test_set_thinking_budget_value(mock_controller, mock_page):
+async def test_control_thinking_budget_toggle(mock_controller, mock_page):
+    toggle = AsyncMock()
+    mock_page.locator.return_value = toggle
+
+    # Initial state: false. Desired: true.
+    toggle.get_attribute.side_effect = ["false", "true"]  # Before click, after click
+
+    mock_expect = MagicMock()
+    mock_expect.return_value.to_be_visible = AsyncMock()
+
+    with patch(
+        "browser_utils.page_controller_modules.thinking.expect_async", mock_expect
+    ):
+        mock_controller._check_disconnect = AsyncMock()
+
+        await mock_controller._control_thinking_budget_toggle(
+            True, MagicMock(return_value=False)
+        )
+
+        toggle.click.assert_called()
+
+    # Test verify failure
+    toggle.get_attribute.side_effect = ["false", "false"]  # Fails to change
+    with patch(
+        "browser_utils.page_controller_modules.thinking.expect_async", mock_expect
+    ):
+        await mock_controller._control_thinking_budget_toggle(
+            True, MagicMock(return_value=False)
+        )
+        # Should log warning but not raise (unless strict check implemented? Code just warns)
+        mock_controller.logger.warning.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_set_thinking_budget_value_complex(mock_controller, mock_page):
     input_el = AsyncMock()
     mock_page.locator.return_value = input_el
-    
-    # expect_async must be a MagicMock returning an object with AsyncMock methods
-    mock_expect = MagicMock()
-    assertion_wrapper = MagicMock()
-    assertion_wrapper.to_be_visible = AsyncMock()
-    assertion_wrapper.to_have_value = AsyncMock()
-    mock_expect.return_value = assertion_wrapper
 
-    with patch("browser_utils.page_controller_modules.thinking.expect_async", mock_expect):
-        # Mock _check_disconnect to avoid errors
+    mock_expect = MagicMock()
+    mock_expect.return_value.to_be_visible = AsyncMock()
+    # Simulate to_have_value failing initially, triggering fallback verification
+    mock_expect.return_value.to_have_value.side_effect = [Exception("Mismatch"), None]
+
+    # Fallback verification reads input_value
+    input_el.input_value.return_value = "5000"
+
+    with patch(
+        "browser_utils.page_controller_modules.thinking.expect_async", mock_expect
+    ):
         mock_controller._check_disconnect = AsyncMock()
-        
-        await mock_controller._set_thinking_budget_value(5000, AsyncMock())
-        
+
+        await mock_controller._set_thinking_budget_value(
+            5000, MagicMock(return_value=False)
+        )
+
         input_el.fill.assert_called_with("5000", timeout=5000)
-        mock_page.evaluate.assert_called()
+        # Should log success after reading value
+        mock_controller.logger.info.assert_any_call(unittest.mock.ANY)
+
+
+@pytest.mark.asyncio
+async def test_set_thinking_budget_value_max_fallback(mock_controller, mock_page):
+    input_el = AsyncMock()
+    mock_page.locator.return_value = input_el
+
+    mock_expect = MagicMock()
+    mock_expect.return_value.to_be_visible = AsyncMock()
+    mock_expect.return_value.to_have_value.side_effect = Exception("Mismatch")
+
+    input_el.input_value.return_value = "8000"  # Less than desired 10000
+    input_el.get_attribute.return_value = "8000"  # Max is 8000
+
+    with patch(
+        "browser_utils.page_controller_modules.thinking.expect_async", mock_expect
+    ):
+        mock_controller._check_disconnect = AsyncMock()
+
+        await mock_controller._set_thinking_budget_value(
+            10000, MagicMock(return_value=False)
+        )
+
+        # Should warn and try to set to max
+        mock_controller.logger.warning.assert_called()
+        # Should verify it called fill with 8000 eventually
+        assert call("8000", timeout=5000) in input_el.fill.call_args_list
+
+
+@pytest.mark.asyncio
+async def test_control_thinking_mode_toggle_click_failure_fallback(
+    mock_controller, mock_page
+):
+    # Test fallback to label click if toggle click fails
+    toggle = AsyncMock()
+    toggle.click.side_effect = Exception("Not clickable")
+
+    label = AsyncMock()
+
+    def locator_side_effect(selector):
+        if "button" in selector and "switch" in selector:
+            return toggle
+        if "mat-slide-toggle" in selector:  # Root for fallback
+            root = MagicMock()
+            root.locator.return_value = label
+            return root
+        return toggle  # Default for first locator call
+
+    mock_page.locator.side_effect = locator_side_effect
+    toggle.get_attribute.return_value = "false"
+
+    mock_expect = MagicMock()
+    mock_expect.return_value.to_be_visible = AsyncMock()
+
+    with patch(
+        "browser_utils.page_controller_modules.thinking.expect_async", mock_expect
+    ):
+        mock_controller._check_disconnect = AsyncMock()
+
+        await mock_controller._control_thinking_mode_toggle(
+            True, MagicMock(return_value=False)
+        )
+
+        label.click.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_handle_thinking_budget_various_inputs(mock_controller):
+    # Test various inputs for reasoning_effort triggering enable/disable
+    mock_controller._uses_thinking_level = MagicMock(return_value=False)
+    mock_controller._model_has_main_thinking_toggle = MagicMock(return_value=True)
+    mock_controller._control_thinking_mode_toggle = AsyncMock(return_value=True)
+    mock_controller._control_thinking_budget_toggle = AsyncMock()
+    mock_controller._set_thinking_budget_value = AsyncMock()
+
+    # String "none" -> enabled (No budget limit implies enabled)
+    await mock_controller._handle_thinking_budget(
+        {"reasoning_effort": "none"}, "model", MagicMock(return_value=False)
+    )
+    mock_controller._control_thinking_mode_toggle.assert_called_with(
+        should_be_enabled=True, check_client_disconnected=unittest.mock.ANY
+    )
+
+    # String "100" -> enabled
+    await mock_controller._handle_thinking_budget(
+        {"reasoning_effort": "100"}, "model", MagicMock(return_value=False)
+    )
+    mock_controller._control_thinking_mode_toggle.assert_called_with(
+        should_be_enabled=True, check_client_disconnected=unittest.mock.ANY
+    )
+
+    # String "0" -> disabled
+    await mock_controller._handle_thinking_budget(
+        {"reasoning_effort": "0"}, "model", MagicMock(return_value=False)
+    )
+    mock_controller._control_thinking_mode_toggle.assert_called_with(
+        should_be_enabled=False, check_client_disconnected=unittest.mock.ANY
+    )
+
+    # String "-1" -> enabled
+    await mock_controller._handle_thinking_budget(
+        {"reasoning_effort": "-1"}, "model", MagicMock(return_value=False)
+    )
+    mock_controller._control_thinking_mode_toggle.assert_called_with(
+        should_be_enabled=True, check_client_disconnected=unittest.mock.ANY
+    )
+
+    # Int -1 -> enabled
+    await mock_controller._handle_thinking_budget(
+        {"reasoning_effort": -1}, "model", MagicMock(return_value=False)
+    )
+    mock_controller._control_thinking_mode_toggle.assert_called_with(
+        should_be_enabled=True, check_client_disconnected=unittest.mock.ANY
+    )
+
+
+@pytest.mark.asyncio
+async def test_handle_thinking_budget_disabled_uses_level(mock_controller):
+    # If uses_level is True and desired_enabled is False, should just return after disabling main toggle
+    mock_controller._uses_thinking_level = MagicMock(return_value=True)
+    mock_controller._model_has_main_thinking_toggle = MagicMock(return_value=True)
+    mock_controller._control_thinking_mode_toggle = AsyncMock(return_value=True)
+    mock_controller._control_thinking_budget_toggle = AsyncMock()
+
+    await mock_controller._handle_thinking_budget(
+        {"reasoning_effort": 0}, "model", MagicMock(return_value=False)
+    )
+
+    # Should disable main toggle
+    mock_controller._control_thinking_mode_toggle.assert_called_with(
+        should_be_enabled=False, check_client_disconnected=unittest.mock.ANY
+    )
+
+    # Then returns at line 73 (skipping budget toggle logic)
+    mock_controller._control_thinking_budget_toggle.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_handle_thinking_budget_downgrade_logic(mock_controller):
+    # Test the path where directive says disabled but raw says enabled, and we fail to disable?
+    # Actually lines 113-127: if not directive.thinking_enabled (but desired_enabled=True)
+
+    mock_directive = MagicMock()
+    mock_directive.thinking_enabled = False
+
+    with patch(
+        "browser_utils.page_controller_modules.thinking.normalize_reasoning_effort",
+        return_value=mock_directive,
+    ):
+        mock_controller._uses_thinking_level = MagicMock(return_value=False)
+        mock_controller._model_has_main_thinking_toggle = MagicMock(return_value=True)
+
+        # _control_thinking_mode_toggle fails (returns False)
+        mock_controller._control_thinking_mode_toggle = AsyncMock(return_value=False)
+        mock_controller._control_thinking_budget_toggle = AsyncMock()
+        mock_controller._set_thinking_budget_value = AsyncMock()
+
+        # Pass "high" -> _should_enable_from_raw returns True -> desired_enabled=True
+        # But mock directive says False
+        await mock_controller._handle_thinking_budget(
+            {"reasoning_effort": "high"}, "model", MagicMock(return_value=False)
+        )
+
+        # Should attempt to disable toggle
+        mock_controller._control_thinking_mode_toggle.assert_called_with(
+            should_be_enabled=False, check_client_disconnected=unittest.mock.ANY
+        )
+
+        # Upon failure (since we mocked return_value=False), should set budget to 0
+        mock_controller._control_thinking_budget_toggle.assert_called_with(
+            should_be_checked=True, check_client_disconnected=unittest.mock.ANY
+        )
+        mock_controller._set_thinking_budget_value.assert_called_with(
+            0, unittest.mock.ANY
+        )
+
+
+@pytest.mark.asyncio
+async def test_handle_thinking_budget_cap_gemini_2_5(mock_controller):
+    mock_controller._uses_thinking_level = MagicMock(return_value=False)
+    mock_controller._model_has_main_thinking_toggle = MagicMock(return_value=True)
+    mock_controller._control_thinking_mode_toggle = AsyncMock(return_value=True)
+    mock_controller._control_thinking_budget_toggle = AsyncMock()
+    mock_controller._set_thinking_budget_value = AsyncMock()
+
+    await mock_controller._handle_thinking_budget(
+        {"reasoning_effort": 40000}, "gemini-2.5-pro", MagicMock(return_value=False)
+    )
+
+    mock_controller._set_thinking_budget_value.assert_called_with(
+        32768, unittest.mock.ANY
+    )
+
+
+@pytest.mark.asyncio
+async def test_handle_thinking_budget_should_enable_variations(mock_controller):
+    # Test _should_enable_from_raw logic via _handle_thinking_budget
+    mock_controller._uses_thinking_level = MagicMock(return_value=False)
+    mock_controller._model_has_main_thinking_toggle = MagicMock(return_value=True)
+    mock_controller._control_thinking_mode_toggle = AsyncMock(return_value=True)
+    mock_controller._control_thinking_budget_toggle = AsyncMock()
+    mock_controller._set_thinking_budget_value = AsyncMock()
+
+    check_disconnect_mock = MagicMock(return_value=False)
+
+    # "high" -> Enable
+    print("DEBUG: Testing high")
+    await mock_controller._handle_thinking_budget(
+        {"reasoning_effort": "high"}, "model", check_disconnect_mock
+    )
+    assert mock_controller._control_thinking_mode_toggle.call_count == 1
+    _, kwargs = mock_controller._control_thinking_mode_toggle.call_args
+    assert kwargs["should_be_enabled"] is True
+    mock_controller._control_thinking_mode_toggle.reset_mock()
+
+    # "low" -> Enable
+    print("DEBUG: Testing low")
+    await mock_controller._handle_thinking_budget(
+        {"reasoning_effort": "low"}, "model", check_disconnect_mock
+    )
+    assert mock_controller._control_thinking_mode_toggle.call_count == 1
+    _, kwargs = mock_controller._control_thinking_mode_toggle.call_args
+    assert kwargs["should_be_enabled"] is True
+    mock_controller._control_thinking_mode_toggle.reset_mock()
+
+    # "-1" -> Enable
+    print("DEBUG: Testing -1 string")
+    await mock_controller._handle_thinking_budget(
+        {"reasoning_effort": "-1"}, "model", check_disconnect_mock
+    )
+    assert mock_controller._control_thinking_mode_toggle.call_count == 1
+    _, kwargs = mock_controller._control_thinking_mode_toggle.call_args
+    assert kwargs["should_be_enabled"] is True
+    mock_controller._control_thinking_mode_toggle.reset_mock()
+
+    # -1 (int) -> Enable
+    print("DEBUG: Testing -1 int")
+    await mock_controller._handle_thinking_budget(
+        {"reasoning_effort": -1}, "model", check_disconnect_mock
+    )
+    assert mock_controller._control_thinking_mode_toggle.call_count == 1
+    _, kwargs = mock_controller._control_thinking_mode_toggle.call_args
+    assert kwargs["should_be_enabled"] is True
+    mock_controller._control_thinking_mode_toggle.reset_mock()
+
+    # "none" -> Enable (unlimited budget)
+    # normalize_reasoning_effort("none") -> thinking_enabled=True
+    print("DEBUG: Testing none")
+    await mock_controller._handle_thinking_budget(
+        {"reasoning_effort": "none"}, "model", check_disconnect_mock
+    )
+    assert mock_controller._control_thinking_mode_toggle.call_count == 1
+    _, kwargs = mock_controller._control_thinking_mode_toggle.call_args
+    assert kwargs["should_be_enabled"] is True
+    mock_controller._control_thinking_mode_toggle.reset_mock()
+
+    # "invalid" -> Disable
+    print("DEBUG: Testing invalid")
+    await mock_controller._handle_thinking_budget(
+        {"reasoning_effort": "invalid"}, "model", check_disconnect_mock
+    )
+    assert mock_controller._control_thinking_mode_toggle.call_count == 1
+    _, kwargs = mock_controller._control_thinking_mode_toggle.call_args
+    assert kwargs["should_be_enabled"] is False
+    mock_controller._control_thinking_mode_toggle.reset_mock()
+
+
+@pytest.mark.asyncio
+async def test_handle_thinking_budget_skip_level_disabled(mock_controller):
+    # Skip logic: uses_level=True, desired_enabled=False
+    mock_controller._uses_thinking_level = MagicMock(return_value=True)
+    mock_controller._has_thinking_dropdown = AsyncMock(return_value=True)
+    mock_controller._model_has_main_thinking_toggle = MagicMock(return_value=True)
+    mock_controller._control_thinking_mode_toggle = AsyncMock(return_value=True)
+    mock_controller._control_thinking_budget_toggle = AsyncMock()
+
+    check_disconnect_mock = MagicMock(return_value=False)
+
+    await mock_controller._handle_thinking_budget(
+        {"reasoning_effort": 0}, "gemini-3-pro", check_disconnect_mock
+    )
+
+    mock_controller._control_thinking_mode_toggle.assert_called_with(
+        should_be_enabled=False, check_client_disconnected=unittest.mock.ANY
+    )
+    mock_controller._control_thinking_budget_toggle.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_handle_thinking_budget_caps(mock_controller):
+    mock_controller._uses_thinking_level = MagicMock(return_value=False)
+    mock_controller._model_has_main_thinking_toggle = MagicMock(return_value=True)
+    mock_controller._control_thinking_mode_toggle = AsyncMock(return_value=True)
+    mock_controller._control_thinking_budget_toggle = AsyncMock()
+    mock_controller._set_thinking_budget_value = AsyncMock()
+
+    check_disconnect_mock = MagicMock(return_value=False)
+
+    # flash -> 24576
+    await mock_controller._handle_thinking_budget(
+        {"reasoning_effort": 40000}, "gemini-flash", check_disconnect_mock
+    )
+    mock_controller._set_thinking_budget_value.assert_called_with(
+        24576, unittest.mock.ANY
+    )
+
+    # flash-lite -> 24576
+    await mock_controller._handle_thinking_budget(
+        {"reasoning_effort": 40000}, "flash-lite", check_disconnect_mock
+    )
+    mock_controller._set_thinking_budget_value.assert_called_with(
+        24576, unittest.mock.ANY
+    )
+
+
+@pytest.mark.asyncio
+async def test_set_thinking_level_errors(mock_controller):
+    # Test error handling in _set_thinking_level
+    # Simulate success path but verification mismatch
+    trigger = MagicMock()
+    trigger.click = AsyncMock()
+    trigger.scroll_into_view_if_needed = AsyncMock()
+    trigger.locator.return_value.inner_text = AsyncMock(return_value="Low")
+
+    mock_controller.page.locator.return_value = trigger
+
+    mock_expect = MagicMock()
+    mock_expect.return_value.to_be_visible = AsyncMock()
+    mock_expect.return_value.to_be_hidden = AsyncMock()
+
+    check_disconnect_mock = MagicMock(return_value=False)
+
+    with patch(
+        "browser_utils.page_controller_modules.thinking.expect_async", mock_expect
+    ):
+        await mock_controller._set_thinking_level("High", check_disconnect_mock)
+        # Should verify warning log
+        mock_controller.logger.warning.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_control_thinking_mode_toggle_fallback(mock_controller):
+    # Test fallback to label click
+    toggle = MagicMock()
+    toggle.get_attribute = AsyncMock(return_value="false")
+    toggle.click = AsyncMock(side_effect=Exception("Click failed"))
+
+    label = MagicMock()
+    label.click = AsyncMock()
+    root = MagicMock()
+    root.locator.return_value = label
+
+    def locator_side_effect(selector):
+        if "button" in selector and 'data-test-toggle="enable-thinking"' in selector:
+            return toggle
+        if 'data-test-toggle="enable-thinking"' in selector:
+            return root
+        return toggle
+
+    mock_controller.page.locator.side_effect = locator_side_effect
+
+    # Mock expect_async
+    mock_expect = MagicMock()
+    mock_expect.return_value.to_be_visible = AsyncMock()
+
+    check_disconnect_mock = MagicMock(return_value=False)
+
+    with patch(
+        "browser_utils.page_controller_modules.thinking.expect_async", mock_expect
+    ):
+        await mock_controller._control_thinking_mode_toggle(True, check_disconnect_mock)
+
+    label.click.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_control_thinking_budget_toggle_fallback(mock_controller):
+    # Test fallback to label click
+    toggle = MagicMock()
+    toggle.get_attribute = AsyncMock(return_value="false")
+    toggle.click = AsyncMock(side_effect=Exception("Click failed"))
+
+    label = MagicMock()
+    label.click = AsyncMock()
+    root = MagicMock()
+    root.locator.return_value = label
+
+    def locator_side_effect(selector):
+        if "button" in selector and 'data-test-toggle="manual-budget"' in selector:
+            return toggle
+        if 'data-test-toggle="manual-budget"' in selector:
+            return root
+        return toggle
+
+    mock_controller.page.locator.side_effect = locator_side_effect
+
+    # Mock expect_async
+    mock_expect = MagicMock()
+    mock_expect.return_value.to_be_visible = AsyncMock()
+
+    check_disconnect_mock = MagicMock(return_value=False)
+
+    with patch(
+        "browser_utils.page_controller_modules.thinking.expect_async", mock_expect
+    ):
+        await mock_controller._control_thinking_budget_toggle(
+            True, check_disconnect_mock
+        )
+
+    label.click.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_set_thinking_budget_value_fallback(mock_controller):
+    # Test fallback in _set_thinking_budget_value
+    budget_input = MagicMock()
+    budget_input.fill = AsyncMock()
+    # Verification raises exception
+    budget_input.input_value = AsyncMock(return_value="20000")  # Mismatch
+
+    mock_controller.page.locator.return_value = budget_input
+
+    # Mock expect_async to fail first verification
+    mock_expect = MagicMock()
+    mock_expect.return_value.to_be_visible = AsyncMock()
+    mock_expect.return_value.to_have_value = AsyncMock(
+        side_effect=Exception("Value mismatch")
+    )
+
+    check_disconnect_mock = MagicMock(return_value=False)
+
+    with patch(
+        "browser_utils.page_controller_modules.thinking.expect_async", mock_expect
+    ):
+        await mock_controller._set_thinking_budget_value(30000, check_disconnect_mock)
+
+        # Should check fallback path
+        # It tries to read input_value, sees 20000 != 30000
+        # Then tries max attribute
+        budget_input.get_attribute.assert_called_with("max")

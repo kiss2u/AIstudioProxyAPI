@@ -37,17 +37,23 @@ npm install -g pyright
 AIstudioProxyAPI/
 ├── api_utils/              # FastAPI 应用核心模块
 │   ├── app.py             # FastAPI 应用入口
-│   ├── routers/           # API 路由（按职责拆分）
+│   ├── routers/           # API 路由（按职责拆分: chat, health, models 等）
 │   ├── request_processor.py # 请求处理逻辑
-│   ├── queue_worker.py    # 队列工作器
+│   ├── queue_worker.py    # 队列工作器 (包含分级恢复逻辑)
 │   └── auth_utils.py      # 认证工具
 ├── browser_utils/          # 浏览器自动化模块
 │   ├── page_controller.py # 页面控制器
+│   ├── page_controller_modules/ # 页面控制子模块 (Mixin: chat, input, thinking 等)
 │   ├── model_management.py # 模型管理
 │   ├── script_manager.py  # 脚本注入管理
 │   ├── operations.py      # 浏览器操作入口
+│   ├── debug_utils.py     # 调试与快照工具
 │   ├── initialization/    # 初始化模块 (core, network, auth, scripts, debug)
 │   └── operations_modules/ # 操作子模块 (parsers, interactions, errors)
+├── launcher/               # 启动器模块
+│   ├── runner.py          # 启动逻辑核心
+│   ├── checks.py          # 环境与依赖检查
+│   └── process.py         # 进程管理
 ├── config/                 # 配置管理模块
 │   ├── settings.py        # 主要设置
 │   ├── constants.py       # 常量定义
@@ -64,6 +70,10 @@ AIstudioProxyAPI/
 ├── logging_utils/          # 日志工具
 ├── docs/                   # 文档目录
 ├── docker/                 # Docker 相关文件
+├── tests/                  # 测试目录
+│   ├── api_utils/         # API 单元测试
+│   ├── browser_utils/     # 浏览器模块测试
+│   └── stream/            # 代理服务测试
 ├── pyproject.toml         # Poetry 配置文件
 ├── pyrightconfig.json     # Pyright 类型检查配置
 ├── .env.example           # 环境变量模板

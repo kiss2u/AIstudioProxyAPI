@@ -1,21 +1,22 @@
-import pytest
 from models.chat import (
-    FunctionCall,
-    ToolCall,
-    ImageURL,
     AudioInput,
-    VideoInput,
-    URLRef,
-    MessageContentItem,
-    Message,
     ChatCompletionRequest,
+    FunctionCall,
+    ImageURL,
+    Message,
+    MessageContentItem,
+    ToolCall,
+    URLRef,
+    VideoInput,
 )
+
 
 def test_function_call_model():
     """Test FunctionCall model validation."""
     fc = FunctionCall(name="test_func", arguments='{"arg": 1}')
     assert fc.name == "test_func"
     assert fc.arguments == '{"arg": 1}'
+
 
 def test_tool_call_model():
     """Test ToolCall model validation."""
@@ -25,6 +26,7 @@ def test_tool_call_model():
     assert tc.type == "function"
     assert tc.function == fc
 
+
 def test_image_url_model():
     """Test ImageURL model validation."""
     img = ImageURL(url="http://example.com/image.png")
@@ -33,6 +35,7 @@ def test_image_url_model():
 
     img_detail = ImageURL(url="http://example.com/image.png", detail="high")
     assert img_detail.detail == "high"
+
 
 def test_audio_input_model():
     """Test AudioInput model validation."""
@@ -44,15 +47,18 @@ def test_audio_input_model():
     assert audio_data.data == "base64data"
     assert audio_data.format == "mp3"
 
+
 def test_video_input_model():
     """Test VideoInput model validation."""
     video = VideoInput(url="http://example.com/video.mp4")
     assert video.url == "http://example.com/video.mp4"
 
+
 def test_url_ref_model():
     """Test URLRef model validation."""
     ref = URLRef(url="http://example.com/file.pdf")
     assert ref.url == "http://example.com/file.pdf"
+
 
 def test_message_content_item_model():
     """Test MessageContentItem model validation."""
@@ -71,6 +77,7 @@ def test_message_content_item_model():
     input_img_item = MessageContentItem(type="input_image", input_image=img)
     assert input_img_item.type == "input_image"
     assert input_img_item.input_image == img
+
 
 def test_message_model():
     """Test Message model validation."""
@@ -91,6 +98,7 @@ def test_message_model():
     tc = ToolCall(id="1", function=fc)
     msg_tool = Message(role="assistant", tool_calls=[tc])
     assert msg_tool.tool_calls == [tc]
+
 
 def test_chat_completion_request_model():
     """Test ChatCompletionRequest model validation."""

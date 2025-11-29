@@ -11,7 +11,8 @@ let chatbox, userInput, sendButton, clearButton, sidebarPanel, toggleSidebarButt
     enableThinkingToggle, thinkingLevelSelector, enableManualBudgetToggle, thinkingBudgetSlider, thinkingBudgetValue,
     thinkingBudgetControlsContainer,
     thinkingModeGroup, thinkingLevelGroup, manualBudgetGroup, thinkingBudgetGroup,
-    enableGoogleSearchToggle;
+    enableGoogleSearchToggle,
+    leftSettingsSidebar, toggleLeftSidebarButton;
 
 function initializeDOMReferences() {
     chatbox = document.getElementById('chatbox');
@@ -60,7 +61,9 @@ function initializeDOMReferences() {
     thinkingBudgetGroup = document.getElementById('thinkingBudgetGroup');
 
     enableGoogleSearchToggle = document.getElementById('enableGoogleSearchToggle');
-    
+
+    leftSettingsSidebar = document.getElementById('leftSettingsSidebar');
+    toggleLeftSidebarButton = document.getElementById('toggleLeftSidebarButton');
 
     // API密钥管理元素
     apiKeyStatus = document.getElementById('apiKeyStatus');
@@ -239,6 +242,82 @@ async function loadModelList() {
     }
 }
 
+// --- New Function: updateThinkingControlsVisibility ---
+function updateThinkingControlsVisibility() {
+    try {
+        const id = String(SELECTED_MODEL || '').toLowerCase();
+        const isGemini3Pro = id.includes('gemini-3') && id.includes('pro');
+        const isGemini25Pro = id.includes('gemini-2.5-pro');
+        const isFlash = id.includes('flash');
+        // Read from BOTH sources to ensure we have the latest value
+        // Checkbox state takes precedence if the element exists
+        const checkboxState = enableThinkingToggle ? enableThinkingToggle.checked : null;
+        const settingsState = modelSettings.enableThinking;
+        const thinkingEnabled = checkboxState !== null ? !!checkboxState : !!settingsState;
+
+        // Gemini 3 Pro: always hide main toggle and budget controls, show level selector
+        if (isGemini3Pro) {
+            if (thinkingModeGroup) thinkingModeGroup.style.display = 'none';
+            if (thinkingLevelGroup) thinkingLevelGroup.style.display = '';
+            if (manualBudgetGroup) manualBudgetGroup.style.display = 'none';
+            if (thinkingBudgetGroup) thinkingBudgetGroup.style.display = 'none';
+            return;
+        }
+
+        // Gemini 2.5 Pro: hide main thinking toggle
+        if (isGemini25Pro) {
+            if (thinkingModeGroup) thinkingModeGroup.style.display = 'none';
+        } else {
+            if (thinkingModeGroup) thinkingModeGroup.style.display = '';
+        }
+
+        // Always hide level selector for non-Gemini 3 Pro models
+        if (thinkingLevelGroup) thinkingLevelGroup.style.display = 'none';
+
+        // Flash/Flash Lite models: hide budget controls when thinking mode is OFF
+        // Using CSS class with !important for robust hiding
+        if (isFlash) {
+            if (thinkingEnabled) {
+                if (manualBudgetGroup) {
+                    manualBudgetGroup.classList.remove('thinking-controls-hidden');
+                    manualBudgetGroup.style.display = '';
+                }
+                if (thinkingBudgetGroup) {
+                    thinkingBudgetGroup.classList.remove('thinking-controls-hidden');
+                    thinkingBudgetGroup.style.display = '';
+                }
+            } else {
+                if (manualBudgetGroup) {
+                    manualBudgetGroup.classList.add('thinking-controls-hidden');
+                    manualBudgetGroup.style.display = 'none';
+                }
+                if (thinkingBudgetGroup) {
+                    thinkingBudgetGroup.classList.add('thinking-controls-hidden');
+                    thinkingBudgetGroup.style.display = 'none';
+                }
+            }
+        } else {
+            // Non-flash models: always show budget controls
+            if (manualBudgetGroup) {
+                manualBudgetGroup.classList.remove('thinking-controls-hidden');
+                manualBudgetGroup.style.display = '';
+            }
+            if (thinkingBudgetGroup) {
+                thinkingBudgetGroup.classList.remove('thinking-controls-hidden');
+                thinkingBudgetGroup.style.display = '';
+            }
+        }
+
+        // Update thinking budget controls container visibility
+        if (thinkingBudgetControlsContainer) {
+            const shouldShowControls = !!(enableManualBudgetToggle && enableManualBudgetToggle.checked);
+            thinkingBudgetControlsContainer.style.display = shouldShowControls ? 'flex' : 'none';
+        }
+    } catch (e) {
+        console.error('Error updating thinking controls visibility:', e);
+    }
+}
+
 // --- New Function: updateControlsForSelectedModel ---
 function updateControlsForSelectedModel() {
     const selectedModelData = allModelsData.find(m => m.id === SELECTED_MODEL);
@@ -324,20 +403,8 @@ function updateControlsForSelectedModel() {
         if (thinkingBudgetSlider) thinkingBudgetSlider.max = String(budgetMax);
         if (thinkingBudgetValue) thinkingBudgetValue.max = String(budgetMax);
 
-        const isGemini3Pro = id.includes('gemini-3') && id.includes('pro');
-        const isGemini25Pro = id.includes('gemini-2.5-pro');
-        const isFlashLite = id.includes('flash-lite');
-        const isFlash = id.includes('flash');
-
-        if (thinkingModeGroup) thinkingModeGroup.style.display = (isGemini3Pro || isGemini25Pro) ? 'none' : '';
-        if (thinkingLevelGroup) thinkingLevelGroup.style.display = isGemini3Pro ? '' : 'none';
-        if (manualBudgetGroup) manualBudgetGroup.style.display = (isGemini3Pro) ? 'none' : '';
-        if (thinkingBudgetGroup) thinkingBudgetGroup.style.display = (isGemini3Pro) ? 'none' : '';
-
-        if (thinkingBudgetControlsContainer) {
-            const shouldShowControls = !!(enableManualBudgetToggle && enableManualBudgetToggle.checked);
-            thinkingBudgetControlsContainer.style.display = shouldShowControls ? 'flex' : 'none';
-        }
+        // Update thinking controls visibility based on model and thinking mode state
+        updateThinkingControlsVisibility();
     } catch (e) { /* ignore */ }
 }
 
@@ -397,42 +464,13 @@ function loadThemePreference() {
 }
 
 // --- Sidebar Toggle ---
-function updateToggleButton(isCollapsed) {
-    toggleSidebarButton.innerHTML = isCollapsed ? '>' : '<';
-    toggleSidebarButton.title = isCollapsed ? '展开侧边栏' : '收起侧边栏';
-    positionToggleButton();
-}
-
-function positionToggleButton() {
-    const isMobile = window.innerWidth <= 768;
-    if (isMobile) {
-        toggleSidebarButton.style.left = '';
-        toggleSidebarButton.style.right = '';
-    } else {
-        const isCollapsed = sidebarPanel.classList.contains('collapsed');
-        const buttonWidth = toggleSidebarButton.offsetWidth || 36;
-        const sidebarWidthString = getComputedStyle(document.documentElement).getPropertyValue('--sidebar-width');
-        const sidebarWidth = parseInt(sidebarWidthString, 10) || 380;
-        const offset = 10;
-        toggleSidebarButton.style.right = 'auto';
-        if (isCollapsed) {
-            toggleSidebarButton.style.left = `calc(100% - ${buttonWidth}px - ${offset}px)`;
-        } else {
-            toggleSidebarButton.style.left = `calc(100% - ${sidebarWidth}px - ${buttonWidth / 2}px)`;
-        }
-    }
-}
-
 function checkInitialSidebarState() {
     const isMobile = window.innerWidth <= 768;
+    // On mobile, collapse both sidebars by default
     if (isMobile) {
-        sidebarPanel.classList.add('collapsed');
-    } else {
-        // On desktop, you might want to load a saved preference or default to open
-        // For now, let's default to open on desktop if not previously collapsed by mobile view
-        // sidebarPanel.classList.remove('collapsed'); // Or load preference
+        if (sidebarPanel) sidebarPanel.classList.add('collapsed');
+        if (leftSettingsSidebar) leftSettingsSidebar.classList.add('collapsed');
     }
-    updateToggleButton(sidebarPanel.classList.contains('collapsed'));
 }
 
 // --- Log Handling ---
@@ -994,9 +1032,10 @@ function updateModelSettingsUI() {
     if (enableManualBudgetToggle) enableManualBudgetToggle.checked = !!modelSettings.enableManualBudget;
     if (thinkingBudgetSlider) thinkingBudgetSlider.value = modelSettings.thinkingBudget;
     if (thinkingBudgetValue) thinkingBudgetValue.value = modelSettings.thinkingBudget;
-    if (thinkingBudgetControlsContainer) thinkingBudgetControlsContainer.style.display = modelSettings.enableManualBudget ? 'flex' : 'none';
     if (enableGoogleSearchToggle) enableGoogleSearchToggle.checked = !!modelSettings.enableGoogleSearch;
-    
+
+    // Update thinking controls visibility based on model and thinking mode state
+    updateThinkingControlsVisibility();
 }
 
 function saveModelSettings() {
@@ -1097,10 +1136,33 @@ function autoResizeTextarea() {
 // --- Event Listeners Binding ---
 function bindEventListeners() {
     themeToggleButton.addEventListener('click', toggleTheme);
-    toggleSidebarButton.addEventListener('click', () => {
-        sidebarPanel.classList.toggle('collapsed');
-        updateToggleButton(sidebarPanel.classList.contains('collapsed'));
-    });
+
+    // Right sidebar (logs) toggle
+    if (toggleSidebarButton && sidebarPanel) {
+        toggleSidebarButton.addEventListener('click', () => {
+            sidebarPanel.classList.toggle('collapsed');
+            // Save state to localStorage
+            try {
+                localStorage.setItem('rightSidebarCollapsed', sidebarPanel.classList.contains('collapsed'));
+            } catch (e) {
+                console.error('Failed to save right sidebar state:', e);
+            }
+        });
+    }
+
+    // Left settings sidebar toggle
+    if (toggleLeftSidebarButton && leftSettingsSidebar) {
+        toggleLeftSidebarButton.addEventListener('click', () => {
+            leftSettingsSidebar.classList.toggle('collapsed');
+            // Save state to localStorage
+            try {
+                localStorage.setItem('leftSidebarCollapsed', leftSettingsSidebar.classList.contains('collapsed'));
+            } catch (e) {
+                console.error('Failed to save left sidebar state:', e);
+            }
+        });
+    }
+
     window.addEventListener('resize', () => {
         checkInitialSidebarState();
     });
@@ -1160,7 +1222,12 @@ function bindEventListeners() {
         thinkingBudgetSlider.addEventListener('input', () => thinkingBudgetValue.value = thinkingBudgetSlider.value);
         thinkingBudgetValue.addEventListener('input', () => { const v = parseInt(thinkingBudgetValue.value); if (!isNaN(v)) thinkingBudgetSlider.value = v; });
     }
-    if (enableThinkingToggle) enableThinkingToggle.addEventListener('change', () => showSettingsStatus("思考模式设置已更新", false));
+    if (enableThinkingToggle) enableThinkingToggle.addEventListener('change', () => {
+        // Update modelSettings immediately to ensure visibility function has correct value
+        modelSettings.enableThinking = !!enableThinkingToggle.checked;
+        updateThinkingControlsVisibility();
+        showSettingsStatus("思考模式设置已更新", false);
+    });
     if (thinkingLevelSelector) thinkingLevelSelector.addEventListener('change', () => showSettingsStatus("思考等级已更新", false));
     if (enableManualBudgetToggle) enableManualBudgetToggle.addEventListener('change', () => {
         const checked = !!enableManualBudgetToggle.checked;
@@ -1181,11 +1248,63 @@ function bindEventListeners() {
     );
 }
 
+function loadLeftSidebarState() {
+    try {
+        const savedState = localStorage.getItem('leftSidebarCollapsed');
+        const isMobile = window.innerWidth <= 768;
+
+        // Default: collapsed on mobile, open on desktop
+        let isCollapsed = isMobile;
+
+        // Override with saved state if it exists
+        if (savedState !== null) {
+            isCollapsed = savedState === 'true';
+        }
+
+        if (leftSettingsSidebar) {
+            if (isCollapsed) {
+                leftSettingsSidebar.classList.add('collapsed');
+            } else {
+                leftSettingsSidebar.classList.remove('collapsed');
+            }
+        }
+    } catch (e) {
+        console.error('Failed to load left sidebar state:', e);
+    }
+}
+
+function loadRightSidebarState() {
+    try {
+        const savedState = localStorage.getItem('rightSidebarCollapsed');
+        const isMobile = window.innerWidth <= 768;
+
+        // Default: collapsed (logs hidden by default)
+        let isCollapsed = true;
+
+        // Override with saved state if it exists
+        if (savedState !== null) {
+            isCollapsed = savedState === 'true';
+        }
+
+        if (sidebarPanel) {
+            if (isCollapsed) {
+                sidebarPanel.classList.add('collapsed');
+            } else {
+                sidebarPanel.classList.remove('collapsed');
+            }
+        }
+    } catch (e) {
+        console.error('Failed to load right sidebar state:', e);
+    }
+}
+
 // --- Initialization on DOMContentLoaded ---
 document.addEventListener('DOMContentLoaded', async () => {
     initializeDOMReferences();
     bindEventListeners();
     loadThemePreference();
+    loadLeftSidebarState();
+    loadRightSidebarState();
 
     // 步骤 1: 加载模型列表。这将调用 updateControlsForSelectedModel(),
     // 它会用模型默认值更新 modelSettings 的相关字段，并设置UI控件的范围和默认显示。

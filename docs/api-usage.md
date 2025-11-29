@@ -264,7 +264,7 @@ curl -X POST http://127.0.0.1:2048/v1/chat/completions \
 curl -X POST http://127.0.0.1:2048/v1/chat/completions \
 -H "Content-Type: application/json" \
 -d '{
-  "model": "gemini-flash-latest",
+  "model": "gemini-1.5-pro",
   "messages": [
     {"role": "user", "content": "解释量子纠缠的原理，并思考其在量子计算中的应用"}
   ],
@@ -299,7 +299,7 @@ import json
 API_URL = "http://127.0.0.1:2048/v1/chat/completions"
 headers = {"Content-Type": "application/json"}
 data = {
-    "model": "gemini-1.5-flash",
+    "model": "gemini-1.5-pro",
     "messages": [
         {"role": "user", "content": "Translate 'hello' to Spanish."}
     ],

@@ -140,7 +140,7 @@ DEFAULT_STOP_SEQUENCES=["用户:"]
 
 # 是否在处理请求时自动打开并使用 "URL Context" 功能
 # 参考: https://ai.google.dev/gemini-api/docs/url-context
-ENABLE_URL_CONTEXT=true
+ENABLE_URL_CONTEXT=false
 
 # 是否默认启用 "指定思考预算" 功能 (true/false)
 # 不启用时模型一般将自行决定思考预算
@@ -213,7 +213,7 @@ ENABLE_SCRIPT_INJECTION=true
 
 # 油猴脚本文件路径（相对于项目根目录）
 # 模型数据直接从此脚本文件中解析，无需额外配置文件
-USERSCRIPT_PATH=browser_utils/more_modles.js
+USERSCRIPT_PATH=browser_utils/more_models.js
 ```
 
 **功能特点**：

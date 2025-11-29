@@ -98,9 +98,9 @@ Windows 使用反斜杠 `\`，但 Python 代码中使用 `/` 或 `os.path.join()
 **配置文件路径**:
 ```env
 # .env 文件中使用正斜杠或双反斜杠
-USERSCRIPT_PATH=browser_utils/more_modles.js
+USERSCRIPT_PATH=browser_utils/more_models.js
 # 或
-USERSCRIPT_PATH=browser_utils\\more_modles.js
+USERSCRIPT_PATH=browser_utils\\more_models.js
 ```
 
 #### 3. uvloop 不可用

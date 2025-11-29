@@ -3,6 +3,11 @@ from typing import Callable
 
 from playwright.async_api import expect as expect_async
 
+from browser_utils.operations import (
+    _get_final_response_content,
+    _wait_for_response_completion,
+    save_error_snapshot,
+)
 from config import (
     EDIT_MESSAGE_BUTTON_SELECTOR,
     PROMPT_TEXTAREA_SELECTOR,
@@ -11,7 +16,7 @@ from config import (
     SUBMIT_BUTTON_SELECTOR,
 )
 from models import ClientDisconnectedError
-from browser_utils.operations import _wait_for_response_completion, _get_final_response_content, save_error_snapshot
+
 from .base import BaseController
 
 
@@ -33,7 +38,9 @@ class ResponseController(BaseController):
 
             self.logger.info(f"[{self.req_id}] 等待响应元素附加到DOM...")
             await expect_async(response_element_locator).to_be_attached(timeout=90000)
-            await self._check_disconnect(check_client_disconnected, "获取响应 - 响应元素已附加")
+            await self._check_disconnect(
+                check_client_disconnected, "获取响应 - 响应元素已附加"
+            )
 
             # 等待响应完成
             submit_button_locator = self.page.locator(SUBMIT_BUTTON_SELECTOR)
@@ -52,9 +59,11 @@ class ResponseController(BaseController):
             )
 
             if not completion_detected:
-                self.logger.warning(f"[{self.req_id}] 响应完成检测失败，尝试获取当前内容")
+                self.logger.warning(
+                    f"[{self.req_id}] 响应完成检测失败，尝试获取当前内容"
+                )
             else:
-                self.logger.info(f"[{self.req_id}] ✅ 响应完成检测成功")
+                self.logger.info(f"[{self.req_id}] 响应完成检测成功")
 
             # 获取最终响应内容
             final_content = await _get_final_response_content(
@@ -62,31 +71,35 @@ class ResponseController(BaseController):
             )
 
             if not final_content or not final_content.strip():
-                self.logger.warning(f"[{self.req_id}] ⚠️ 获取到的响应内容为空")
+                self.logger.warning(f"[{self.req_id}] 获取到的响应内容为空")
                 await save_error_snapshot(f"empty_response_{self.req_id}")
                 # 不抛出异常，返回空内容让上层处理
                 return ""
 
-            self.logger.info(f"[{self.req_id}] ✅ 成功获取响应内容 ({len(final_content)} chars)")
+            self.logger.info(
+                f"[{self.req_id}] 成功获取响应内容 ({len(final_content)} chars)"
+            )
             return final_content
 
         except Exception as e:
             if isinstance(e, asyncio.CancelledError):
                 self.logger.info(f"[{self.req_id}] 获取响应任务被取消")
                 raise
-            self.logger.error(f"[{self.req_id}] ❌ 获取响应时出错: {e}")
+            self.logger.error(f"[{self.req_id}] 获取响应时出错: {e}")
             if not isinstance(e, ClientDisconnectedError):
                 await save_error_snapshot(f"get_response_error_{self.req_id}")
             raise
 
-    async def ensure_generation_stopped(self, check_client_disconnected: Callable) -> None:
+    async def ensure_generation_stopped(
+        self, check_client_disconnected: Callable
+    ) -> None:
         """
         确保生成已停止。
         如果提交按钮仍处于启用状态，则点击它以停止生成。
         等待直到提交按钮变为禁用状态。
         """
         submit_button_locator = self.page.locator(SUBMIT_BUTTON_SELECTOR)
-        
+
         # 检查客户端连接状态
         check_client_disconnected("确保生成停止 - 前置检查")
         await asyncio.sleep(0.5)  # 给UI一点时间更新
@@ -101,7 +114,7 @@ class ResponseController(BaseController):
                 # 流式响应完成后按钮仍启用，直接点击停止
                 self.logger.info(f"[{self.req_id}] 按钮仍启用，主动点击按钮停止生成...")
                 await submit_button_locator.click(timeout=5000, force=True)
-                self.logger.info(f"[{self.req_id}] ✅ 发送按钮点击完成。")
+                self.logger.info(f"[{self.req_id}] 发送按钮点击完成。")
             else:
                 self.logger.info(f"[{self.req_id}] 发送按钮已禁用，无需点击。")
         except Exception as button_check_err:
@@ -113,9 +126,9 @@ class ResponseController(BaseController):
         self.logger.info(f"[{self.req_id}] 等待发送按钮最终禁用...")
         try:
             await expect_async(submit_button_locator).to_be_disabled(timeout=30000)
-            self.logger.info(f"[{self.req_id}] ✅ 发送按钮已禁用。")
+            self.logger.info(f"[{self.req_id}] 发送按钮已禁用。")
         except Exception as e:
             if isinstance(e, asyncio.CancelledError):
                 raise
-            self.logger.warning(f"[{self.req_id}] ⚠️ 确保生成停止时超时或错误: {e}")
+            self.logger.warning(f"[{self.req_id}] 确保生成停止时超时或错误: {e}")
             # 即使超时也不抛出异常，因为这只是清理步骤

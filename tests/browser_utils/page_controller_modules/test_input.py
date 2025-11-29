@@ -1,191 +1,1101 @@
+import asyncio
+from unittest.mock import AsyncMock, MagicMock, PropertyMock, mock_open, patch
+
 import pytest
-from unittest.mock import MagicMock, AsyncMock, patch
+from playwright.async_api import TimeoutError
+
 from browser_utils.page_controller_modules.input import InputController
-from models import ClientDisconnectedError
-from config import PROMPT_TEXTAREA_SELECTOR, SUBMIT_BUTTON_SELECTOR
+
+# Mock constants - patch them in the config module where they're defined
+CONSTANTS = {
+    "PROMPT_TEXTAREA_SELECTOR": "textarea.prompt",
+    "SUBMIT_BUTTON_SELECTOR": "button.submit",
+    "RESPONSE_CONTAINER_SELECTOR": "div.response",
+}
+
+
+# Patch constants in the config module (where they're imported from)
+@pytest.fixture(autouse=True)
+def mock_constants():
+    """Patch constants where they are used in the input module."""
+    with patch.multiple("browser_utils.page_controller_modules.input", **CONSTANTS):
+        yield
+
+
+@pytest.fixture(autouse=True)
+def mock_timeouts():
+    """Patch timeouts to be short for testing."""
+    with patch("config.timeouts.SUBMIT_BUTTON_ENABLE_TIMEOUT_MS", 100):
+        yield
+
 
 @pytest.fixture
-def input_controller(mock_page):
-    logger = MagicMock()
-    req_id = "test_req_id"
-    return InputController(mock_page, logger, req_id)
+def mock_page_controller():
+    controller = MagicMock()
+    controller.page = MagicMock()
+    controller.logger = MagicMock()
+    controller.req_id = "test-req-id"
+    # Setup page methods
+    controller.page.locator = MagicMock()
+    controller.page.evaluate = AsyncMock()
+    controller.page.keyboard = MagicMock()
+    controller.page.keyboard.press = AsyncMock()
+    controller._check_disconnect = AsyncMock()
+    return controller
+
+
+@pytest.fixture
+def input_controller(mock_page_controller):
+    return InputController(
+        mock_page_controller.page,
+        mock_page_controller.logger,
+        mock_page_controller.req_id,
+    )
+
+
+@pytest.fixture
+def mock_expect_async():
+    with patch("browser_utils.page_controller_modules.input.expect_async") as mock:
+        assertion_mock = MagicMock()
+        assertion_mock.to_be_visible = AsyncMock()
+        assertion_mock.to_be_hidden = AsyncMock()
+        assertion_mock.to_be_enabled = AsyncMock()
+        mock.return_value = assertion_mock
+        yield mock
+
+
+@pytest.fixture
+def mock_save_snapshot():
+    with patch(
+        "browser_utils.page_controller_modules.input.save_error_snapshot",
+        new_callable=AsyncMock,
+    ) as mock:
+        yield mock
+
 
 @pytest.mark.asyncio
-async def test_submit_prompt_success(input_controller, mock_page):
+@pytest.mark.timeout(5)
+async def test_submit_prompt_success(
+    input_controller, mock_page_controller, mock_expect_async
+):
     """Test successful prompt submission."""
-    prompt = "test prompt"
-    image_list = []
-    check_client_disconnected = MagicMock(return_value=False)
-    
-    # Mock locators
-    prompt_textarea = AsyncMock()
-    autosize_wrapper = AsyncMock()
-    submit_button = AsyncMock()
-    
-    # Setup locator returns
+    mock_check_disconnect = MagicMock(return_value=False)
+
+    # Locators
+    prompt_area = MagicMock()
+    prompt_area.evaluate = AsyncMock()
+    autosize = MagicMock()
+    autosize.evaluate = AsyncMock()
+    submit_btn = MagicMock()
+    submit_btn.is_enabled = AsyncMock(return_value=True)
+    submit_btn.click = AsyncMock()
+
     def locator_side_effect(selector):
-        if selector == PROMPT_TEXTAREA_SELECTOR:
-            return prompt_textarea
-        elif selector == "ms-prompt-input-wrapper ms-autosize-textarea":
-            return autosize_wrapper
-        elif selector == SUBMIT_BUTTON_SELECTOR:
-            return submit_button
-        return AsyncMock()
-        
-    mock_page.locator.side_effect = locator_side_effect
-    
-    # Mock expect calls
-    with patch('browser_utils.page_controller_modules.input.expect_async', new_callable=MagicMock) as mock_expect:
-        # Setup successful expectations
-        mock_expect.return_value.to_be_visible = AsyncMock()
-        
-        # Mock is_enabled for polling loop
-        submit_button.is_enabled = AsyncMock(return_value=True)
-        
-        # Mock handle_post_upload_dialog
-        input_controller._handle_post_upload_dialog = AsyncMock()
-        
-        await input_controller.submit_prompt(prompt, image_list, check_client_disconnected)
-        
-        # Verify interactions
-        prompt_textarea.evaluate.assert_called()
-        autosize_wrapper.evaluate.assert_called()
-        submit_button.click.assert_called()
-        input_controller._handle_post_upload_dialog.assert_called()
+        if selector == CONSTANTS["PROMPT_TEXTAREA_SELECTOR"]:
+            return prompt_area
+        elif selector == CONSTANTS["SUBMIT_BUTTON_SELECTOR"]:
+            return submit_btn
+        elif "autosize" in selector:
+            return autosize
+        return MagicMock()
+
+    mock_page_controller.page.locator.side_effect = locator_side_effect
+
+    # Mock upload logic (skip it for this test)
+    with (
+        patch.object(
+            input_controller,
+            "_open_upload_menu_and_choose_file",
+            new_callable=AsyncMock,
+        ),
+        patch.object(
+            input_controller, "_handle_post_upload_dialog", new_callable=AsyncMock
+        ) as mock_dialog,
+    ):
+        await input_controller.submit_prompt("Hello World", [], mock_check_disconnect)
+
+        # Verify text filled
+        assert prompt_area.evaluate.called
+        assert autosize.evaluate.called
+        # Verify submit button wait
+        assert submit_btn.is_enabled.called
+        # Verify click
+        assert submit_btn.click.called
+        mock_dialog.assert_awaited()
+
 
 @pytest.mark.asyncio
-async def test_submit_prompt_client_disconnected(input_controller, mock_page):
-    """Test prompt submission with client disconnection."""
-    prompt = "test prompt"
-    image_list = []
-    
-    # Simulate disconnection at first check
-    check_client_disconnected = MagicMock(side_effect=lambda x: True if "After Input Visible" in x else False)
-    
-    # Mock locators
-    prompt_textarea = AsyncMock()
-    mock_page.locator.return_value = prompt_textarea
-    
-    with patch('browser_utils.page_controller_modules.input.expect_async', new_callable=MagicMock) as mock_expect:
-        mock_expect.return_value.to_be_visible = AsyncMock()
-        
-        with pytest.raises(ClientDisconnectedError):
-            await input_controller.submit_prompt(prompt, image_list, check_client_disconnected)
+@pytest.mark.timeout(5)
+async def test_submit_prompt_with_files(
+    input_controller, mock_page_controller, mock_expect_async
+):
+    """Test submit prompt with file upload."""
+    mock_check_disconnect = MagicMock(return_value=False)
+
+    # Shared locator mock that handles all locator calls
+    shared_locator = MagicMock()
+    shared_locator.is_enabled = AsyncMock(return_value=True)
+    shared_locator.click = AsyncMock()
+    shared_locator.evaluate = AsyncMock()  # For prompt filling
+
+    mock_page_controller.page.locator.return_value = shared_locator
+
+    with (
+        patch.object(
+            input_controller,
+            "_open_upload_menu_and_choose_file",
+            new_callable=AsyncMock,
+        ) as mock_upload,
+        patch.object(
+            input_controller, "_handle_post_upload_dialog", new_callable=AsyncMock
+        ),
+    ):
+        mock_upload.return_value = True
+
+        await input_controller.submit_prompt(
+            "With files", ["file1.png"], mock_check_disconnect
+        )
+
+        mock_upload.assert_awaited_with(["file1.png"])
+
 
 @pytest.mark.asyncio
-async def test_submit_prompt_fallback_enter(input_controller, mock_page):
-    """Test fallback to Enter key when button click fails."""
-    prompt = "test prompt"
-    image_list = []
-    check_client_disconnected = MagicMock(return_value=False)
-    
-    # Mock locators
-    prompt_textarea = AsyncMock()
-    submit_button = AsyncMock()
-    
-    def locator_side_effect(selector):
-        if selector == PROMPT_TEXTAREA_SELECTOR:
-            return prompt_textarea
-        elif selector == SUBMIT_BUTTON_SELECTOR:
-            return submit_button
-        return AsyncMock()
-        
-    mock_page.locator.side_effect = locator_side_effect
-    
-    # Mock methods
-    input_controller._handle_post_upload_dialog = AsyncMock()
-    input_controller._try_enter_submit = AsyncMock(return_value=True)
-    
-    with patch('browser_utils.page_controller_modules.input.expect_async', new_callable=MagicMock) as mock_expect:
-        mock_expect.return_value.to_be_visible = AsyncMock()
-        
-        # Mock is_enabled for polling loop
-        submit_button.is_enabled = AsyncMock(return_value=True)
-        
-        # Simulate button click failure
-        submit_button.click.side_effect = Exception("Click failed")
-        
-        await input_controller.submit_prompt(prompt, image_list, check_client_disconnected)
-        
-        # Verify fallback was called
-        input_controller._try_enter_submit.assert_called_once()
+@pytest.mark.timeout(5)
+async def test_open_upload_menu_success_input(
+    input_controller, mock_page_controller, mock_expect_async
+):
+    """Test upload menu via hidden input."""
+    trigger = MagicMock()
+    trigger.click = AsyncMock()
+    menu_container = MagicMock()
 
-@pytest.mark.asyncio
-async def test_submit_prompt_fallback_combo(input_controller, mock_page):
-    """Test fallback to Combo key when Enter key fails."""
-    prompt = "test prompt"
-    image_list = []
-    check_client_disconnected = MagicMock(return_value=False)
-    
-    # Mock locators
-    prompt_textarea = AsyncMock()
-    submit_button = AsyncMock()
-    
-    def locator_side_effect(selector):
-        if selector == PROMPT_TEXTAREA_SELECTOR:
-            return prompt_textarea
-        elif selector == SUBMIT_BUTTON_SELECTOR:
-            return submit_button
-        return AsyncMock()
-        
-    mock_page.locator.side_effect = locator_side_effect
-    
-    # Mock methods
-    input_controller._handle_post_upload_dialog = AsyncMock()
-    input_controller._try_enter_submit = AsyncMock(return_value=False)
-    input_controller._try_combo_submit = AsyncMock(return_value=True)
-    
-    with patch('browser_utils.page_controller_modules.input.expect_async', new_callable=MagicMock) as mock_expect:
-        mock_expect.return_value.to_be_visible = AsyncMock()
-        
-        # Mock is_enabled for polling loop
-        submit_button.is_enabled = AsyncMock(return_value=True)
-        
-        # Simulate button click failure
-        submit_button.click.side_effect = Exception("Click failed")
-        
-        await input_controller.submit_prompt(prompt, image_list, check_client_disconnected)
-        
-        # Verify fallbacks
-        input_controller._try_enter_submit.assert_called_once()
-        input_controller._try_combo_submit.assert_called_once()
+    upload_btn = MagicMock()  # Element
+    upload_btn.is_visible = AsyncMock(return_value=True)
 
-@pytest.mark.asyncio
-async def test_open_upload_menu_success(input_controller, mock_page):
-    """Test successful file upload menu interaction."""
-    files_list = ["test.jpg"]
-    
-    # Mock locators
-    trigger = AsyncMock()
-    menu_container = AsyncMock()
-    upload_btn = AsyncMock()
-    input_loc = AsyncMock()
-    
+    menu_item = MagicMock()  # Locator
+    menu_item.first = upload_btn
+    menu_item.count = AsyncMock(return_value=1)  # Fix: Mock count on the locator
+
+    input_loc = MagicMock()
+    input_loc.count = AsyncMock(return_value=1)
+    input_loc.set_input_files = AsyncMock()
+
+    upload_btn.locator.return_value = input_loc
+
     def locator_side_effect(selector):
-        if "Insert assets" in selector:
+        if 'aria-label="Insert assets' in selector:
             return trigger
         elif "cdk-overlay-container" in selector:
             return menu_container
-        return AsyncMock()
-        
-    mock_page.locator.side_effect = locator_side_effect
-    
-    # Setup menu container chain
-    menu_container.locator.return_value = upload_btn
-    upload_btn.first = upload_btn
-    upload_btn.count.return_value = 1
-    
-    # Setup input locator
+        return MagicMock()
+
+    mock_page_controller.page.locator.side_effect = locator_side_effect
+
+    # Mock finding the upload button inside menu container
+    menu_container.locator.return_value = menu_item
+
+    result = await input_controller._open_upload_menu_and_choose_file(["file1.png"])
+
+    assert result is True
+    assert trigger.click.called
+    assert input_loc.set_input_files.called
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(5)
+async def test_open_upload_menu_success_file_chooser(
+    input_controller, mock_page_controller, mock_expect_async
+):
+    """Test upload menu via file chooser (fallback)."""
+    trigger = MagicMock()
+    trigger.click = AsyncMock()
+
+    menu_container = MagicMock()
+
+    upload_btn = MagicMock()  # Element
+    upload_btn.click = AsyncMock()
+    upload_btn.is_visible = AsyncMock(return_value=True)
+
+    upload_btn_list = MagicMock()  # Locator
+    upload_btn_list.count = AsyncMock(return_value=1)
+    upload_btn_list.first = upload_btn
+
+    input_loc = MagicMock()
+    input_loc.count = AsyncMock(return_value=0)  # No hidden input, trigger fallback
+
+    # Locator setup
     upload_btn.locator.return_value = input_loc
-    input_loc.count.return_value = 1
-    
-    with patch('browser_utils.page_controller_modules.input.expect_async', new_callable=MagicMock) as mock_expect:
+    menu_container.locator.return_value = upload_btn_list
+
+    def locator_side_effect(selector):
+        if 'aria-label="Insert assets' in selector:
+            return trigger
+        elif "cdk-overlay-container" in selector:
+            return menu_container
+        return MagicMock()
+
+    mock_page_controller.page.locator.side_effect = locator_side_effect
+
+    # Mock expect_file_chooser
+    file_chooser = MagicMock()
+    file_chooser.set_files = AsyncMock()
+    fc_info = MagicMock()
+    fc_info.value = file_chooser
+
+    # expect_file_chooser context manager
+    # We need to ensure __aenter__ returns fc_info
+    # And fc_info.value must be awaitable and return file_chooser
+
+    # Create a Future for fc_info.value
+    f = asyncio.Future()
+    f.set_result(file_chooser)
+
+    fc_info = MagicMock()
+    # Mock the value property to return the future
+    type(fc_info).value = PropertyMock(return_value=f)
+
+    cm = MagicMock()
+    cm.__aenter__ = AsyncMock(return_value=fc_info)
+    cm.__aexit__ = AsyncMock(return_value=None)
+    mock_page_controller.page.expect_file_chooser.return_value = cm
+
+    result = await input_controller._open_upload_menu_and_choose_file(["file1.png"])
+
+    assert result is True
+    assert trigger.click.called
+    assert upload_btn.click.called
+    assert file_chooser.set_files.called
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(5)
+async def test_simulate_drag_drop_files(
+    input_controller, mock_page_controller, mock_expect_async
+):
+    """Test _simulate_drag_drop_files."""
+    target = MagicMock()
+    target.evaluate = AsyncMock()
+
+    with (
+        patch("builtins.open", mock_open(read_data=b"file_content")),
+        patch("os.path.exists", return_value=True),
+    ):
+        await input_controller._simulate_drag_drop_files(target, ["/tmp/test.png"])
+
+        assert target.evaluate.called
+        # Check that evaluate was called with script containing "DataTransfer"
+        args = target.evaluate.call_args[0]
+        assert "DataTransfer" in args[0]
+        assert args[1][0]["name"] == "test.png"
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(5)
+async def test_try_enter_submit(input_controller, mock_page_controller):
+    """Test _try_enter_submit."""
+    mock_check_disconnect = MagicMock(return_value=False)
+    prompt_area = MagicMock()
+    prompt_area.press = AsyncMock()
+    prompt_area.focus = AsyncMock()
+    prompt_area.input_value = AsyncMock(
+        side_effect=["test content", ""]
+    )  # Method 1: cleared
+
+    with (
+        patch(
+            "browser_utils.page_controller_modules.input.expect_async"
+        ) as mock_expect,
+        patch("os.environ.get", return_value="Windows"),
+    ):
         mock_expect.return_value.to_be_visible = AsyncMock()
-        
-        input_controller._handle_post_upload_dialog = AsyncMock()
-        
-        # Mock the entire method to avoid complex locator chaining issues in test
-        with patch.object(input_controller, '_open_upload_menu_and_choose_file', new_callable=AsyncMock) as mock_method:
-            mock_method.return_value = True
-            result = await input_controller._open_upload_menu_and_choose_file(files_list)
-            assert result is True
+
+        result = await input_controller._try_enter_submit(
+            prompt_area, mock_check_disconnect
+        )
+
+        assert result is True
+        # It tries page.keyboard.press("Enter") first
+        assert (
+            mock_page_controller.page.keyboard.press.called or prompt_area.press.called
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(5)
+async def test_try_combo_submit(input_controller, mock_page_controller):
+    """Test _try_combo_submit."""
+    mock_check_disconnect = MagicMock(return_value=False)
+    prompt_area = MagicMock()
+    prompt_area.focus = AsyncMock()
+    prompt_area.input_value = AsyncMock(side_effect=["test", ""])  # Method 1: cleared
+
+    # Mock user agent for non-Mac
+    mock_page_controller.page.evaluate.return_value = "Windows"
+
+    with patch("os.environ.get", return_value="Windows"):
+        result = await input_controller._try_combo_submit(
+            prompt_area, mock_check_disconnect
+        )
+
+        assert result is True
+        # Check Control+Enter for Windows
+        assert mock_page_controller.page.keyboard.press.call_count >= 1
+        args = mock_page_controller.page.keyboard.press.call_args[0]
+        assert "Control+Enter" in args[0]
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(5)
+async def test_ensure_files_attached(input_controller, mock_page_controller):
+    """Test _ensure_files_attached."""
+    wrapper = MagicMock()
+    # Return count > 0 to simulate success
+    wrapper.evaluate = AsyncMock(return_value={"inputs": 1, "chips": 0, "blobs": 0})
+
+    result = await input_controller._ensure_files_attached(wrapper, expected_min=1)
+
+    assert result is True
+    assert wrapper.evaluate.called
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(5)
+async def test_submit_prompt_timeout(
+    input_controller, mock_page_controller, mock_expect_async
+):
+    """Test submit prompt timeout waiting for button enabled."""
+    mock_check_disconnect = MagicMock(return_value=False)
+
+    # Locators
+    prompt_area = MagicMock()
+    prompt_area.evaluate = AsyncMock()
+
+    autosize = MagicMock()
+    autosize.evaluate = AsyncMock()
+
+    submit_btn = MagicMock()
+    # is_enabled always returns False or raises
+    submit_btn.is_enabled = AsyncMock(return_value=False)
+
+    def locator_side_effect(selector):
+        if selector == CONSTANTS["PROMPT_TEXTAREA_SELECTOR"]:
+            return prompt_area
+        elif selector == CONSTANTS["SUBMIT_BUTTON_SELECTOR"]:
+            return submit_btn
+        elif "autosize" in selector:
+            return autosize
+        return MagicMock()
+
+    mock_page_controller.page.locator.side_effect = locator_side_effect
+
+    # Mock config timeout to be very short for test
+    with (
+        patch("config.timeouts.SUBMIT_BUTTON_ENABLE_TIMEOUT_MS", 100),
+        patch.object(
+            input_controller,
+            "_open_upload_menu_and_choose_file",
+            new_callable=AsyncMock,
+        ),
+        patch.object(
+            input_controller, "_handle_post_upload_dialog", new_callable=AsyncMock
+        ),
+    ):
+        with pytest.raises(TimeoutError, match="Submit button not enabled"):
+            await input_controller.submit_prompt("test", [], mock_check_disconnect)
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(5)
+async def test_submit_retry_logic(
+    input_controller, mock_page_controller, mock_expect_async
+):
+    """Test retry logic: Button Click Fail -> Enter Submit Success."""
+    mock_check_disconnect = MagicMock(return_value=False)
+
+    prompt_area = MagicMock()
+    prompt_area.evaluate = AsyncMock()
+
+    autosize = MagicMock()
+    autosize.evaluate = AsyncMock()
+
+    submit_btn = MagicMock()
+    submit_btn.is_enabled = AsyncMock(return_value=True)
+    # Click raises exception
+    submit_btn.click = AsyncMock(side_effect=Exception("Click failed"))
+
+    def locator_side_effect(selector):
+        if selector == CONSTANTS["PROMPT_TEXTAREA_SELECTOR"]:
+            return prompt_area
+        elif selector == CONSTANTS["SUBMIT_BUTTON_SELECTOR"]:
+            return submit_btn
+        elif "autosize" in selector:
+            return autosize
+        return MagicMock()
+
+    mock_page_controller.page.locator.side_effect = locator_side_effect
+
+    # Mock _try_enter_submit to succeed
+    # Use explicit AsyncMock assignment instead of patch.object new_callable if causing issues
+    with (
+        patch.object(
+            input_controller, "_try_enter_submit", new_callable=AsyncMock
+        ) as mock_enter,
+        patch.object(
+            input_controller, "_try_combo_submit", new_callable=AsyncMock
+        ) as mock_combo,
+        patch.object(
+            input_controller, "_handle_post_upload_dialog", new_callable=AsyncMock
+        ),
+    ):
+        mock_enter.return_value = True
+
+        await input_controller.submit_prompt("test", [], mock_check_disconnect)
+
+        assert submit_btn.click.called
+        assert mock_enter.called
+        assert not mock_combo.called
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(5)
+async def test_submit_all_fail(
+    input_controller, mock_page_controller, mock_expect_async
+):
+    """Test retry logic: All fail."""
+    mock_check_disconnect = MagicMock(return_value=False)
+
+    prompt_area = MagicMock()
+    prompt_area.evaluate = AsyncMock()
+
+    autosize = MagicMock()
+    autosize.evaluate = AsyncMock()
+
+    submit_btn = MagicMock()
+    submit_btn.is_enabled = AsyncMock(return_value=True)
+    submit_btn.click = AsyncMock(side_effect=Exception("Click failed"))
+
+    def locator_side_effect(selector):
+        if selector == CONSTANTS["PROMPT_TEXTAREA_SELECTOR"]:
+            return prompt_area
+        elif selector == CONSTANTS["SUBMIT_BUTTON_SELECTOR"]:
+            return submit_btn
+        elif "autosize" in selector:
+            return autosize
+        return MagicMock()
+
+    mock_page_controller.page.locator.side_effect = locator_side_effect
+
+    with (
+        patch.object(
+            input_controller, "_try_enter_submit", new_callable=AsyncMock
+        ) as mock_enter,
+        patch.object(
+            input_controller, "_try_combo_submit", new_callable=AsyncMock
+        ) as mock_combo,
+        patch.object(
+            input_controller, "_handle_post_upload_dialog", new_callable=AsyncMock
+        ),
+    ):
+        mock_enter.return_value = False
+        mock_combo.return_value = False
+
+        # Relax regex to match whatever exception is raised
+        with pytest.raises(Exception) as excinfo:
+            await input_controller.submit_prompt("test", [], mock_check_disconnect)
+
+        assert "Submit failed" in str(excinfo.value)
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(5)
+async def test_handle_post_upload_dialog(
+    input_controller, mock_page_controller, mock_expect_async
+):
+    """Test _handle_post_upload_dialog."""
+    overlay = MagicMock()
+    overlay.count = AsyncMock(return_value=1)
+
+    agree_btn = MagicMock()
+    agree_btn.count = AsyncMock(return_value=1)
+    agree_btn.first.is_visible = AsyncMock(return_value=True)
+    agree_btn.first.click = AsyncMock()
+
+    overlay.locator.return_value = agree_btn
+
+    mock_page_controller.page.locator.side_effect = (
+        lambda s: overlay if "cdk-overlay-container" in s else MagicMock()
+    )
+
+    await input_controller._handle_post_upload_dialog()
+
+    assert agree_btn.first.click.called
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(5)
+async def test_browser_os_detection(input_controller, mock_page_controller):
+    """Test OS detection via userAgent."""
+    mock_check_disconnect = MagicMock(return_value=False)
+    prompt_area = MagicMock()
+    prompt_area.focus = AsyncMock()
+
+    # Mock OS environ to None to trigger browser detection
+    with patch("os.environ.get", return_value=None):
+        # Mock userAgentData to fail
+        mock_page_controller.page.evaluate.side_effect = [
+            Exception("No userAgentData"),  # First call fails
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)...",  # Second call returns string
+        ]
+
+        # We expect Meta+Enter for Mac
+        result = await input_controller._try_combo_submit(
+            prompt_area, mock_check_disconnect
+        )
+
+        assert (
+            result is True
+        )  # verification defaults to True on error if original content check fails/skipped
+
+        # Verify key press
+        assert mock_page_controller.page.keyboard.press.call_count >= 1
+        args = mock_page_controller.page.keyboard.press.call_args[0]
+        assert "Meta+Enter" in args[0]
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(5)
+async def test_simulate_drag_drop_files_read_error(
+    input_controller, mock_page_controller, mock_expect_async
+):
+    """Test _simulate_drag_drop_files with file read error."""
+    target = MagicMock()
+
+    with (
+        patch("builtins.open", side_effect=OSError("Read error")),
+        patch("os.path.exists", return_value=True),
+    ):
+        # Should raise exception because no files could be read -> payloads empty
+        with pytest.raises(Exception, match="无可用文件用于拖放"):
+            await input_controller._simulate_drag_drop_files(target, ["/tmp/bad.png"])
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(5)
+async def test_simulate_drag_drop_files_fallback(
+    input_controller, mock_page_controller, mock_expect_async
+):
+    """Test _simulate_drag_drop_files fallback to secondary candidates."""
+    target = MagicMock()
+    # First candidate (target) raises error on visibility check
+    mock_expect_async.return_value.to_be_visible.side_effect = [
+        Exception("Not visible"),  # Target
+        None,  # Second candidate (textarea) - visible
+    ]
+
+    # Second candidate
+    textarea = MagicMock()
+    textarea.evaluate = AsyncMock()
+
+    # Locator side effect for candidates
+    def locator_side_effect(selector):
+        if "textarea" in selector:
+            return textarea
+        return MagicMock()
+
+    mock_page_controller.page.locator.side_effect = locator_side_effect
+
+    with (
+        patch("builtins.open", mock_open(read_data=b"data")),
+        patch("os.path.exists", return_value=True),
+    ):
+        await input_controller._simulate_drag_drop_files(target, ["/tmp/test.png"])
+
+        # Target should have been checked
+        # Textarea should have been evaluated
+        assert textarea.evaluate.called
+        assert "DataTransfer" in textarea.evaluate.call_args[0][0]
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(5)
+async def test_simulate_drag_drop_files_body_fallback(
+    input_controller, mock_page_controller, mock_expect_async
+):
+    """Test _simulate_drag_drop_files fallback to document.body."""
+    target = MagicMock()
+
+    # All candidates fail visibility
+    mock_expect_async.return_value.to_be_visible.side_effect = Exception("Not visible")
+
+    with (
+        patch("builtins.open", mock_open(read_data=b"data")),
+        patch("os.path.exists", return_value=True),
+    ):
+        await input_controller._simulate_drag_drop_files(target, ["/tmp/test.png"])
+
+        # page.evaluate (body fallback) should be called
+        assert mock_page_controller.page.evaluate.called
+        args = mock_page_controller.page.evaluate.call_args[0]
+        assert "document.body" in args[0]
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(5)
+async def test_open_upload_menu_retry_logic(
+    input_controller, mock_page_controller, mock_expect_async
+):
+    """Test upload menu retry logic (first click fails)."""
+    trigger = MagicMock()
+    trigger.click = AsyncMock()
+
+    menu_container = MagicMock()
+
+    # Expectation side effects:
+    # 1. to_be_visible (first attempt) -> raises Exception
+    # 2. to_be_visible (second attempt) -> returns None (success)
+    # 3. to_be_visible (upload button) -> returns None
+    mock_expect_async.return_value.to_be_visible.side_effect = [
+        Exception("Menu not visible"),
+        None,
+        None,
+    ]
+
+    upload_btn = MagicMock()
+    upload_btn.count = AsyncMock(return_value=1)
+    upload_btn.first = MagicMock()  # The button element
+    upload_btn.first.locator.return_value.count = AsyncMock(return_value=1)  # Has input
+    upload_btn.first.locator.return_value.set_input_files = AsyncMock()
+
+    menu_container.locator.return_value = upload_btn
+
+    def locator_side_effect(selector):
+        if 'aria-label="Insert assets' in selector:
+            return trigger
+        elif "cdk-overlay-container" in selector:
+            return menu_container
+        return MagicMock()
+
+    mock_page_controller.page.locator.side_effect = locator_side_effect
+
+    result = await input_controller._open_upload_menu_and_choose_file(["file.png"])
+
+    assert result is True
+    assert trigger.click.call_count == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(5)
+async def test_ensure_files_attached_timeout(input_controller, mock_page_controller):
+    """Test _ensure_files_attached timeout."""
+    wrapper = MagicMock()
+    # Always return 0 files
+    wrapper.evaluate = AsyncMock(return_value={"inputs": 0, "chips": 0, "blobs": 0})
+
+    # Short timeout
+    result = await input_controller._ensure_files_attached(
+        wrapper, expected_min=1, timeout_ms=100
+    )
+
+    assert result is False
+    assert wrapper.evaluate.called
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(5)
+async def test_handle_post_upload_dialog_click_agree(
+    input_controller, mock_page_controller
+):
+    """Test _handle_post_upload_dialog clicks an agree button."""
+    overlay_container = MagicMock()
+    overlay_container.count = AsyncMock(return_value=1)
+
+    # Mock finding 'Agree' button
+    agree_btn = MagicMock()
+    agree_btn.count = AsyncMock(return_value=1)
+    agree_btn.first.is_visible = AsyncMock(return_value=True)
+    agree_btn.first.click = AsyncMock()
+
+    def locator_side_effect(selector):
+        if "cdk-overlay-container" in selector:
+            return overlay_container
+        # The code iterates through agree_texts and calls overlay_container.locator(...)
+        # We assume the first one 'Agree' will match our mock
+        if "button:has-text('Agree')" in selector:
+            return agree_btn
+        return MagicMock()
+
+    overlay_container.locator.side_effect = locator_side_effect
+    mock_page_controller.page.locator.side_effect = (
+        lambda s: overlay_container if "cdk-overlay-container" in s else MagicMock()
+    )
+
+    await input_controller._handle_post_upload_dialog()
+
+    # Verify click
+    assert agree_btn.first.click.called
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(5)
+async def test_handle_post_upload_dialog_click_copyright(
+    input_controller, mock_page_controller
+):
+    """Test _handle_post_upload_dialog clicks copyright button when no agree button found."""
+    overlay_container = MagicMock()
+    overlay_container.count = AsyncMock(return_value=1)
+
+    # No agree buttons found - create a mock that returns count 0 for everything by default
+    empty_locator = MagicMock()
+    empty_locator.count = AsyncMock(return_value=0)
+    overlay_container.locator.return_value = empty_locator
+
+    # Mock finding copyright button
+    copyright_btn = MagicMock()
+    copyright_btn.count = AsyncMock(return_value=1)
+    copyright_btn.first.is_visible = AsyncMock(return_value=True)
+    copyright_btn.first.click = AsyncMock()
+
+    def page_locator_side_effect(selector):
+        if "cdk-overlay-container" in selector:
+            return overlay_container
+        if "copyright" in selector:
+            return copyright_btn
+        return MagicMock()
+
+    mock_page_controller.page.locator.side_effect = page_locator_side_effect
+
+    await input_controller._handle_post_upload_dialog()
+
+    assert copyright_btn.first.click.called
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(5)
+async def test_try_enter_submit_mac_detection(input_controller, mock_page_controller):
+    """Test _try_enter_submit detects Mac OS via userAgentData."""
+    prompt_area = MagicMock()
+    prompt_area.input_value = AsyncMock(return_value="test")
+    prompt_area.press = AsyncMock()
+
+    # Mock userAgentData.platform
+    mock_page_controller.page.evaluate.side_effect = (
+        lambda script, *args: "macOS" if "userAgentData" in script else None
+    )
+
+    with patch("os.environ.get", return_value="Unknown"):
+        await input_controller._try_enter_submit(prompt_area, lambda x: None)
+
+    # Should use Meta+Enter logic if it were combo, but for Enter submit it just logs or prepares
+    # This test mainly covers the OS detection block
+    assert mock_page_controller.page.evaluate.called
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(5)
+async def test_try_enter_submit_validation_fallback(
+    input_controller, mock_page_controller
+):
+    """Test _try_enter_submit validation fallback (Method 2 and 3)."""
+    prompt_area = MagicMock()
+    prompt_area.focus = AsyncMock()
+    prompt_area.press = AsyncMock()
+    # Method 1 fails: content still same
+    prompt_area.input_value = AsyncMock(return_value="test")
+
+    submit_btn = MagicMock()
+    # Method 2 fails: button not disabled
+    submit_btn.is_disabled = AsyncMock(return_value=False)
+
+    response_container = MagicMock()
+    # Method 3 succeeds: new container visible
+    response_container.count = AsyncMock(return_value=1)
+
+    # Configure last container
+    last_container = MagicMock()
+    last_container.is_visible = AsyncMock(return_value=True)
+    response_container.last = last_container
+
+    def locator_side_effect(selector):
+        if "submit" in selector:
+            return submit_btn
+        if "div.response" in selector:
+            return response_container
+        return MagicMock()
+
+    mock_page_controller.page.locator.side_effect = locator_side_effect
+    mock_page_controller.page.keyboard.press = AsyncMock()
+
+    with patch("os.environ.get", return_value="Windows"):
+        result = await input_controller._try_enter_submit(prompt_area, lambda x: None)
+
+    assert result is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(5)
+async def test_try_combo_submit_fallback_keypress(
+    input_controller, mock_page_controller
+):
+    """Test _try_combo_submit fallback to down/press/up when press fails."""
+    prompt_area = MagicMock()
+    prompt_area.focus = AsyncMock()
+
+    # AsyncMock with side_effect for multiple calls
+    # Provide enough values for potential extra calls
+    input_value_mock = AsyncMock(side_effect=["test", "", "", ""])
+    prompt_area.input_value = input_value_mock
+
+    # Mock press failure for the first call (combo), succeed for second (single key in fallback)
+    mock_page_controller.page.keyboard.press.side_effect = [
+        Exception("Press failed"),
+        None,
+    ]
+    mock_page_controller.page.keyboard.down = AsyncMock()
+    mock_page_controller.page.keyboard.up = AsyncMock()
+
+    with patch("os.environ.get", return_value="Windows"):
+        result = await input_controller._try_combo_submit(prompt_area, lambda x: None)
+
+    assert result is True
+    assert mock_page_controller.page.keyboard.down.called
+    assert mock_page_controller.page.keyboard.up.called
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(5)
+async def test_open_upload_menu_failure(
+    input_controller, mock_page_controller, mock_expect_async
+):
+    """Test _open_upload_menu_and_choose_file failures (not visible, item not found)."""
+    trigger = MagicMock()
+    trigger.click = AsyncMock()
+    menu_container = MagicMock()
+
+    # Case 1: Menu never becomes visible
+    mock_expect_async.return_value.to_be_visible.side_effect = Exception("Not visible")
+
+    def locator_side_effect(selector):
+        if 'aria-label="Insert assets' in selector:
+            return trigger
+        elif "cdk-overlay-container" in selector:
+            return menu_container
+        return MagicMock()
+
+    mock_page_controller.page.locator.side_effect = locator_side_effect
+
+    result = await input_controller._open_upload_menu_and_choose_file(["file.png"])
+    assert result is False
+
+    # Case 2: Menu visible, but 'Upload File' not found
+    mock_expect_async.return_value.to_be_visible.side_effect = None  # Visible now
+
+    # Mock upload button count to 0 (both aria-label and text fallback)
+    upload_btn = MagicMock()
+    upload_btn.count = AsyncMock(return_value=0)
+
+    menu_container.locator.return_value = upload_btn
+
+    result = await input_controller._open_upload_menu_and_choose_file(["file.png"])
+    assert result is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(5)
+async def test_open_upload_menu_exception(input_controller, mock_page_controller):
+    """Test _open_upload_menu_and_choose_file generic exception handling."""
+    # Force exception at the start
+    mock_page_controller.page.locator.side_effect = Exception("Unexpected error")
+
+    result = await input_controller._open_upload_menu_and_choose_file(["file.png"])
+    assert result is False
+    assert input_controller.logger.error.called
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(5)
+async def test_submit_prompt_is_enabled_exception(
+    input_controller, mock_page_controller, mock_expect_async
+):
+    """Test submit_prompt handling exception during button enabled check."""
+    mock_check_disconnect = MagicMock(return_value=False)
+
+    prompt_area = MagicMock()
+    prompt_area.evaluate = AsyncMock()
+    autosize = MagicMock()
+    autosize.evaluate = AsyncMock()
+
+    submit_btn = MagicMock()
+    # first call raises exception (ignored), second returns True
+    submit_btn.is_enabled = AsyncMock(side_effect=[Exception("Not ready"), True])
+    submit_btn.click = AsyncMock()
+
+    def locator_side_effect(selector):
+        if selector == CONSTANTS["PROMPT_TEXTAREA_SELECTOR"]:
+            return prompt_area
+        elif selector == CONSTANTS["SUBMIT_BUTTON_SELECTOR"]:
+            return submit_btn
+        elif "autosize" in selector:
+            return autosize
+        return MagicMock()
+
+    mock_page_controller.page.locator.side_effect = locator_side_effect
+
+    with (
+        patch.object(
+            input_controller,
+            "_open_upload_menu_and_choose_file",
+            new_callable=AsyncMock,
+        ),
+        patch.object(
+            input_controller, "_handle_post_upload_dialog", new_callable=AsyncMock
+        ),
+    ):
+        await input_controller.submit_prompt("test", [], mock_check_disconnect)
+
+        assert submit_btn.is_enabled.call_count == 2
+        assert submit_btn.click.called
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(5)
+async def test_submit_prompt_cancellation(input_controller, mock_page_controller):
+    """Test submit_prompt handling CancelledError."""
+    # Simulate cancellation during locator lookup
+    mock_page_controller.page.locator.side_effect = asyncio.CancelledError()
+
+    with pytest.raises(asyncio.CancelledError):
+        await input_controller.submit_prompt("test", [], lambda x: None)
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(5)
+async def test_submit_prompt_exceptions_snapshots(
+    input_controller, mock_page_controller, mock_expect_async
+):
+    """Test submit_prompt taking snapshots on errors."""
+    mock_check_disconnect = MagicMock(return_value=False)
+
+    prompt_area = MagicMock()
+    prompt_area.evaluate = AsyncMock()
+    autosize = MagicMock()
+    autosize.evaluate = AsyncMock()
+    submit_btn = MagicMock()
+    submit_btn.is_enabled = AsyncMock(return_value=True)
+
+    # Case 1: Click error
+    submit_btn.click = AsyncMock(side_effect=Exception("Click fail"))
+
+    def locator_side_effect(selector):
+        if selector == CONSTANTS["PROMPT_TEXTAREA_SELECTOR"]:
+            return prompt_area
+        elif selector == CONSTANTS["SUBMIT_BUTTON_SELECTOR"]:
+            return submit_btn
+        elif "autosize" in selector:
+            return autosize
+        return MagicMock()
+
+    mock_page_controller.page.locator.side_effect = locator_side_effect
+
+    # We need _try_enter_submit to fail too to trigger full failure logic
+    with (
+        patch(
+            "browser_utils.page_controller_modules.input.save_error_snapshot",
+            new_callable=AsyncMock,
+        ) as mock_snapshot,
+        patch.object(input_controller, "_try_enter_submit", return_value=False),
+        patch.object(input_controller, "_try_combo_submit", return_value=False),
+        patch.object(
+            input_controller,
+            "_open_upload_menu_and_choose_file",
+            new_callable=AsyncMock,
+        ),
+        patch.object(
+            input_controller, "_handle_post_upload_dialog", new_callable=AsyncMock
+        ),
+    ):
+        with pytest.raises(Exception):
+            await input_controller.submit_prompt("test", [], mock_check_disconnect)
+
+        # Verify snapshots
+        # 1. submit_button_click_fail
+        # 2. input_submit_error
+        assert mock_snapshot.call_count >= 2
+        args_list = [args[0] for args, _ in mock_snapshot.call_args_list]
+        assert any("submit_button_click_fail" in a for a in args_list)
+        assert any("input_submit_error" in a for a in args_list)
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(5)
+async def test_try_enter_submit_validation_fail(input_controller, mock_page_controller):
+    """Test _try_enter_submit returns False when all validations fail."""
+    prompt_area = MagicMock()
+    prompt_area.focus = AsyncMock()
+    prompt_area.press = AsyncMock()
+    prompt_area.input_value = AsyncMock(return_value="test")  # Content same
+
+    submit_btn = MagicMock()
+    submit_btn.is_disabled = AsyncMock(return_value=False)  # Not disabled
+
+    response_container = MagicMock()
+    response_container.count = AsyncMock(return_value=0)  # No response
+
+    def locator_side_effect(selector):
+        if "submit" in selector:
+            return submit_btn
+        if "div.response" in selector:
+            return response_container
+        return MagicMock()
+
+    mock_page_controller.page.locator.side_effect = locator_side_effect
+
+    with patch("os.environ.get", return_value="Windows"):
+        result = await input_controller._try_enter_submit(prompt_area, lambda x: None)
+
+    assert result is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(5)
+async def test_try_enter_submit_press_exception(input_controller, mock_page_controller):
+    """Test _try_enter_submit handling exception during key press."""
+    prompt_area = MagicMock()
+    prompt_area.focus = AsyncMock()
+    prompt_area.press = AsyncMock(side_effect=Exception("Element press fail"))
+    prompt_area.input_value = AsyncMock(return_value="test")
+
+    mock_page_controller.page.keyboard.press.side_effect = Exception(
+        "Global press fail"
+    )
+
+    with patch("os.environ.get", return_value="Windows"):
+        # Should catch exceptions and proceed to validation (which fails here)
+        result = await input_controller._try_enter_submit(prompt_area, lambda x: None)
+
+    assert result is False
+    assert mock_page_controller.page.keyboard.press.called
+    assert prompt_area.press.called
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(5)
+async def test_try_combo_submit_exceptions(input_controller, mock_page_controller):
+    """Test _try_combo_submit exception handling."""
+    prompt_area = MagicMock()
+    prompt_area.focus = AsyncMock()
+    prompt_area.input_value = AsyncMock(return_value="test")
+
+    # 1. Inner exception (key press fails)
+    mock_page_controller.page.keyboard.press.side_effect = Exception("Press fail")
+    mock_page_controller.page.keyboard.down.side_effect = Exception(
+        "Down fail"
+    )  # Fallback also fails
+
+    with patch("os.environ.get", return_value="Windows"):
+        result = await input_controller._try_combo_submit(prompt_area, lambda x: None)
+        assert result is False  # Validation fails
+
+    # 2. Outer exception (e.g. focus fails)
+    prompt_area.focus.side_effect = Exception("Focus fail")
+    result = await input_controller._try_combo_submit(prompt_area, lambda x: None)
+    assert result is False

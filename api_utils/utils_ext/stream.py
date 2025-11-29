@@ -4,8 +4,9 @@ from typing import Any, AsyncGenerator
 
 
 async def use_stream_response(req_id: str) -> AsyncGenerator[Any, None]:
-    from server import STREAM_QUEUE, logger
     import queue
+
+    from server import STREAM_QUEUE, logger
 
     if STREAM_QUEUE is None:
         logger.warning(f"[{req_id}] STREAM_QUEUE is None, 无法使用流响应")
@@ -37,6 +38,41 @@ async def use_stream_response(req_id: str) -> AsyncGenerator[Any, None]:
                 if isinstance(data, str):
                     try:
                         parsed_data = json.loads(data)
+
+                        # FAIL-FAST: 检测来自 stream proxy 的错误信号
+                        if parsed_data.get("error") is True:
+                            error_status = parsed_data.get("status", 500)
+                            error_message = parsed_data.get(
+                                "message", "Unknown upstream error"
+                            )
+                            logger.error(
+                                f"[{req_id}] [UPSTREAM ERROR] Detected from stream proxy: {error_status} - {error_message}"
+                            )
+
+                            # 根据状态码抛出相应异常，立即中止并触发重试逻辑
+                            from models.exceptions import (
+                                QuotaExceededError,
+                                UpstreamError,
+                            )
+
+                            if error_status == 429 or "quota" in error_message.lower():
+                                logger.warning(
+                                    f"[{req_id}] [FAIL-FAST] Raising QuotaExceededError for tier switch"
+                                )
+                                raise QuotaExceededError(
+                                    message=f"AI Studio quota exceeded: {error_message}",
+                                    req_id=req_id,
+                                )
+                            else:
+                                logger.warning(
+                                    f"[{req_id}] [FAIL-FAST] Raising UpstreamError for tier switch"
+                                )
+                                raise UpstreamError(
+                                    message=f"AI Studio error: {error_message}",
+                                    req_id=req_id,
+                                    status_code=error_status,
+                                )
+
                         if parsed_data.get("done") is True:
                             body = parsed_data.get("body", "")
                             reason = parsed_data.get("reason", "")
@@ -51,7 +87,7 @@ async def use_stream_response(req_id: str) -> AsyncGenerator[Any, None]:
                                 and not stale_done_ignored
                             ):
                                 logger.warning(
-                                    f"[{req_id}] ⚠️ 收到done=True但没有任何内容，且这是第一个接收的项目！可能是队列残留的旧数据，尝试忽略并继续等待..."
+                                    f"[{req_id}] [STALE DATA] 收到done=True但没有任何内容，且这是第一个接收的项目！可能是队列残留的旧数据，尝试忽略并继续等待..."
                                 )
                                 stale_done_ignored = True
                                 continue
@@ -86,7 +122,7 @@ async def use_stream_response(req_id: str) -> AsyncGenerator[Any, None]:
                                 and not stale_done_ignored
                             ):
                                 logger.warning(
-                                    f"[{req_id}] ⚠️ 收到done=True但没有任何内容，且这是第一个接收的项目！可能是队列残留的旧数据，尝试忽略并继续等待..."
+                                    f"[{req_id}] [STALE DATA] 收到done=True但没有任何内容，且这是第一个接收的项目！可能是队列残留的旧数据，尝试忽略并继续等待..."
                                 )
                                 stale_done_ignored = True
                                 continue
@@ -128,8 +164,9 @@ async def use_stream_response(req_id: str) -> AsyncGenerator[Any, None]:
 
 
 async def clear_stream_queue():
-    from server import STREAM_QUEUE, logger
     import queue
+
+    from server import STREAM_QUEUE, logger
 
     if STREAM_QUEUE is None:
         logger.info("流队列未初始化或已被禁用，跳过清空操作。")
@@ -157,6 +194,8 @@ async def clear_stream_queue():
             break
 
     if cleared_count > 0:
-        logger.warning(f"⚠️ 流式队列缓存清空完毕，共清理了 {cleared_count} 个残留项目！")
+        logger.warning(
+            f"[CLEANUP] 流式队列缓存清空完毕，共清理了 {cleared_count} 个残留项目！"
+        )
     else:
         logger.info("流式队列缓存清空完毕（队列为空）。")

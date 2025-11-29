@@ -1,9 +1,14 @@
 import asyncio
 from typing import Any, Callable, Dict, Optional
 
-from playwright.async_api import expect as expect_async
 from playwright.async_api import TimeoutError
+from playwright.async_api import expect as expect_async
 
+from browser_utils.operations import save_error_snapshot
+from browser_utils.thinking_normalizer import (
+    format_directive_log,
+    normalize_reasoning_effort,
+)
 from config import (
     CLICK_TIMEOUT_MS,
     ENABLE_THINKING_MODE_TOGGLE_SELECTOR,
@@ -14,8 +19,7 @@ from config import (
     THINKING_LEVEL_SELECT_SELECTOR,
 )
 from models import ClientDisconnectedError
-from browser_utils.thinking_normalizer import format_directive_log, normalize_reasoning_effort
-from browser_utils.operations import save_error_snapshot
+
 from .base import BaseController
 
 
@@ -23,7 +27,10 @@ class ThinkingController(BaseController):
     """Handles thinking mode and budget logic."""
 
     async def _handle_thinking_budget(
-        self, request_params: Dict[str, Any], model_id_to_use: Optional[str], check_client_disconnected: Callable
+        self,
+        request_params: Dict[str, Any],
+        model_id_to_use: Optional[str],
+        check_client_disconnected: Callable,
     ):
         """处理思考模式和预算的调整逻辑。
 
@@ -35,9 +42,14 @@ class ThinkingController(BaseController):
         reasoning_effort = request_params.get("reasoning_effort")
 
         directive = normalize_reasoning_effort(reasoning_effort)
-        self.logger.info(f"[{self.req_id}] 思考模式指令: {format_directive_log(directive)}")
+        self.logger.info(
+            f"[{self.req_id}] 思考模式指令: {format_directive_log(directive)}"
+        )
 
-        uses_level = self._uses_thinking_level(model_id_to_use) and await self._has_thinking_dropdown()
+        uses_level = (
+            self._uses_thinking_level(model_id_to_use)
+            and await self._has_thinking_dropdown()
+        )
 
         def _should_enable_from_raw(rv: Any) -> bool:
             try:
@@ -55,11 +67,15 @@ class ThinkingController(BaseController):
                 return False
             return False
 
-        desired_enabled = directive.thinking_enabled or _should_enable_from_raw(reasoning_effort)
+        desired_enabled = directive.thinking_enabled or _should_enable_from_raw(
+            reasoning_effort
+        )
 
         has_main_toggle = self._model_has_main_thinking_toggle(model_id_to_use)
         if has_main_toggle:
-            self.logger.info(f"[{self.req_id}] 开始设置主思考开关到: {'开启' if desired_enabled else '关闭'}")
+            self.logger.info(
+                f"[{self.req_id}] 开始设置主思考开关到: {'开启' if desired_enabled else '关闭'}"
+            )
             await self._control_thinking_mode_toggle(
                 should_be_enabled=desired_enabled,
                 check_client_disconnected=check_client_disconnected,
@@ -68,10 +84,17 @@ class ThinkingController(BaseController):
             self.logger.info(f"[{self.req_id}] 该模型无主思考开关，跳过开关设置。")
 
         if not desired_enabled:
-            # 跳过无预算开关的模型
+            # 跳过无预算开关的模型 (gemini-3-pro-preview 系列使用思考等级而非预算)
             if self._uses_thinking_level(model_id_to_use):
-                 return
-            # 若关闭思考，则确保预算开关关闭（兼容旧UI）
+                return
+            # Flash/Flash Lite 模型：关闭主思考开关后，预算开关会被隐藏，无需再操作
+            # 这避免了尝试操作不可见元素导致的 5 秒超时
+            if has_main_toggle:
+                self.logger.info(
+                    f"[{self.req_id}] Flash 模型已关闭主思考开关，跳过预算开关操作（预算开关已隐藏）"
+                )
+                return
+            # 若关闭思考，则确保预算开关关闭（兼容旧UI）- 仅适用于非 Flash 模型（如 gemini-2.5-pro）
             await self._control_thinking_budget_toggle(
                 should_be_checked=False,
                 check_client_disconnected=check_client_disconnected,
@@ -103,7 +126,9 @@ class ThinkingController(BaseController):
                 await self._set_thinking_level(level_to_set, check_client_disconnected)
             return
 
-        if not directive.thinking_enabled:
+        # 降级路径：当 desired_enabled 和 directive 冲突时，信任 directive 并尝试关闭
+        # 场景：raw value 说开启（如 "high"），但 directive 说关闭（如无效配置）
+        if desired_enabled and not directive.thinking_enabled:
             self.logger.info(f"[{self.req_id}] 尝试关闭主思考开关...")
             success = await self._control_thinking_mode_toggle(
                 should_be_enabled=False,
@@ -111,7 +136,9 @@ class ThinkingController(BaseController):
             )
 
             if not success:
-                self.logger.warning(f"[{self.req_id}] 主思考开关不可用，使用降级方案：设置预算为 0")
+                self.logger.warning(
+                    f"[{self.req_id}] 主思考开关不可用，使用降级方案：设置预算为 0"
+                )
                 await self._control_thinking_budget_toggle(
                     should_be_checked=True,
                     check_client_disconnected=check_client_disconnected,
@@ -120,10 +147,13 @@ class ThinkingController(BaseController):
             return
 
         # 场景2和3: 开启思考模式
-        self.logger.info(f"[{self.req_id}] 开启主思考开关...")
-        await self._control_thinking_mode_toggle(
-            should_be_enabled=True, check_client_disconnected=check_client_disconnected
-        )
+        # 仅在模型无主思考开关时才需要在此设置（有主思考开关的模型已在前面设置）
+        if not has_main_toggle:
+            self.logger.info(f"[{self.req_id}] 开启主思考开关...")
+            await self._control_thinking_mode_toggle(
+                should_be_enabled=True,
+                check_client_disconnected=check_client_disconnected,
+            )
 
         # 场景2: 开启思考，不限制预算
         if not directive.budget_enabled:
@@ -249,7 +279,9 @@ class ThinkingController(BaseController):
 
         try:
             await expect_async(budget_input_locator).to_be_visible(timeout=5000)
-            await self._check_disconnect(check_client_disconnected, "思考预算调整 - 输入框可见后")
+            await self._check_disconnect(
+                check_client_disconnected, "思考预算调整 - 输入框可见后"
+            )
 
             adjusted_budget = token_budget
 
@@ -306,12 +338,18 @@ class ThinkingController(BaseController):
 
             self.logger.info(f"[{self.req_id}] 设置思考预算为: {adjusted_budget}")
             await budget_input_locator.fill(str(adjusted_budget), timeout=5000)
-            await self._check_disconnect(check_client_disconnected, "思考预算调整 - 填充输入框后")
+            await self._check_disconnect(
+                check_client_disconnected, "思考预算调整 - 填充输入框后"
+            )
 
             # 验证
             try:
-                await expect_async(budget_input_locator).to_have_value(str(adjusted_budget), timeout=3000)
-                self.logger.info(f"[{self.req_id}] ✅ 思考预算已成功更新为: {adjusted_budget}")
+                await expect_async(budget_input_locator).to_have_value(
+                    str(adjusted_budget), timeout=3000
+                )
+                self.logger.info(
+                    f"[{self.req_id}] 思考预算已成功更新为: {adjusted_budget}"
+                )
             except Exception:
                 new_value_str = await budget_input_locator.input_value(timeout=3000)
                 try:
@@ -319,12 +357,16 @@ class ThinkingController(BaseController):
                 except Exception:
                     new_value_int = -1
                 if new_value_int == adjusted_budget:
-                    self.logger.info(f"[{self.req_id}] ✅ 思考预算已成功更新为: {new_value_str}")
+                    self.logger.info(
+                        f"[{self.req_id}] 思考预算已成功更新为: {new_value_str}"
+                    )
                 else:
                     # 最后回退：如果页面仍然小于请求值，尝试按页面 max 进行填充
                     try:
                         page_max_str = await budget_input_locator.get_attribute("max")
-                        page_max_val = int(page_max_str) if page_max_str is not None else None
+                        page_max_val = (
+                            int(page_max_str) if page_max_str is not None else None
+                        )
                     except Exception:
                         page_max_val = None
                     if page_max_val is not None and page_max_val < adjusted_budget:
@@ -350,18 +392,20 @@ class ThinkingController(BaseController):
                             pass
                         await budget_input_locator.fill(str(page_max_val), timeout=5000)
                         try:
-                            await expect_async(budget_input_locator).to_have_value(str(page_max_val), timeout=2000)
+                            await expect_async(budget_input_locator).to_have_value(
+                                str(page_max_val), timeout=2000
+                            )
                         except Exception:
                             pass
                     else:
                         self.logger.warning(
-                            f"[{self.req_id}] ⚠️ 思考预算更新后验证失败。页面显示: {new_value_str}, 期望: {adjusted_budget}"
+                            f"[{self.req_id}] 思考预算更新后验证失败。页面显示: {new_value_str}, 期望: {adjusted_budget}"
                         )
 
         except Exception as e:
             if isinstance(e, asyncio.CancelledError):
                 raise
-            self.logger.error(f"[{self.req_id}] ❌ 调整思考预算时出错: {e}")
+            self.logger.error(f"[{self.req_id}] 调整思考预算时出错: {e}")
             if isinstance(e, ClientDisconnectedError):
                 raise
 
@@ -390,7 +434,9 @@ class ThinkingController(BaseController):
                 await toggle_locator.scroll_into_view_if_needed()
             except Exception:
                 pass
-            await self._check_disconnect(check_client_disconnected, "主思考开关 - 元素可见后")
+            await self._check_disconnect(
+                check_client_disconnected, "主思考开关 - 元素可见后"
+            )
 
             is_checked_str = await toggle_locator.get_attribute("aria-checked")
             current_state_is_enabled = is_checked_str == "true"
@@ -400,14 +446,18 @@ class ThinkingController(BaseController):
 
             if current_state_is_enabled != should_be_enabled:
                 action = "开启" if should_be_enabled else "关闭"
-                self.logger.info(f"[{self.req_id}] 主思考开关需要切换，正在点击以{action}思考模式...")
+                self.logger.info(
+                    f"[{self.req_id}] 主思考开关需要切换，正在点击以{action}思考模式..."
+                )
 
                 try:
                     await toggle_locator.click(timeout=CLICK_TIMEOUT_MS)
                 except Exception:
                     try:
-                        root = self.page.locator('mat-slide-toggle[data-test-toggle="enable-thinking"]')
-                        label = root.locator('label.mdc-label')
+                        root = self.page.locator(
+                            'mat-slide-toggle[data-test-toggle="enable-thinking"]'
+                        )
+                        label = root.locator("label.mdc-label")
                         await expect_async(label).to_be_visible(timeout=2000)
                         await label.click(timeout=CLICK_TIMEOUT_MS)
                     except Exception:
@@ -422,25 +472,29 @@ class ThinkingController(BaseController):
 
                 if new_state_is_enabled == should_be_enabled:
                     self.logger.info(
-                        f"[{self.req_id}] ✅ 主思考开关已成功{action}。新状态: {new_state_str}"
+                        f"[{self.req_id}] 主思考开关已成功{action}。新状态: {new_state_str}"
                     )
                     return True
                 else:
                     self.logger.warning(
-                        f"[{self.req_id}] ⚠️ 主思考开关{action}后验证失败。期望: {should_be_enabled}, 实际: {new_state_str}"
+                        f"[{self.req_id}] 主思考开关{action}后验证失败。期望: {should_be_enabled}, 实际: {new_state_str}"
                     )
                     return False
             else:
-                self.logger.info(f"[{self.req_id}] 主思考开关已处于期望状态，无需操作。")
+                self.logger.info(
+                    f"[{self.req_id}] 主思考开关已处于期望状态，无需操作。"
+                )
                 return True
 
         except TimeoutError:
-            self.logger.warning(f"[{self.req_id}] ⚠️ 主思考开关元素未找到或不可见（当前模型可能不支持思考模式）")
+            self.logger.warning(
+                f"[{self.req_id}] 主思考开关元素未找到或不可见（当前模型可能不支持思考模式）"
+            )
             return False
         except Exception as e:
             if isinstance(e, asyncio.CancelledError):
                 raise
-            self.logger.error(f"[{self.req_id}] ❌ 操作主思考开关时发生错误: {e}")
+            self.logger.error(f"[{self.req_id}] 操作主思考开关时发生错误: {e}")
             await save_error_snapshot(f"thinking_mode_toggle_error_{self.req_id}")
             if isinstance(e, ClientDisconnectedError):
                 raise
@@ -465,7 +519,9 @@ class ThinkingController(BaseController):
                 await toggle_locator.scroll_into_view_if_needed()
             except Exception:
                 pass
-            await self._check_disconnect(check_client_disconnected, "思考预算开关 - 元素可见后")
+            await self._check_disconnect(
+                check_client_disconnected, "思考预算开关 - 元素可见后"
+            )
 
             is_checked_str = await toggle_locator.get_attribute("aria-checked")
             current_state_is_checked = is_checked_str == "true"
@@ -475,13 +531,17 @@ class ThinkingController(BaseController):
 
             if current_state_is_checked != should_be_checked:
                 action = "启用" if should_be_checked else "禁用"
-                self.logger.info(f"[{self.req_id}] 思考预算开关当前状态与期望不符，正在点击以{action}...")
+                self.logger.info(
+                    f"[{self.req_id}] 思考预算开关当前状态与期望不符，正在点击以{action}..."
+                )
                 try:
                     await toggle_locator.click(timeout=CLICK_TIMEOUT_MS)
                 except Exception:
                     try:
-                        root = self.page.locator('mat-slide-toggle[data-test-toggle="manual-budget"]')
-                        label = root.locator('label.mdc-label')
+                        root = self.page.locator(
+                            'mat-slide-toggle[data-test-toggle="manual-budget"]'
+                        )
+                        label = root.locator("label.mdc-label")
                         await expect_async(label).to_be_visible(timeout=2000)
                         await label.click(timeout=CLICK_TIMEOUT_MS)
                     except Exception:
@@ -496,20 +556,22 @@ class ThinkingController(BaseController):
 
                 if new_state_is_checked == should_be_checked:
                     self.logger.info(
-                        f"[{self.req_id}] ✅ 'Thinking Budget' 开关已成功{action}。新状态: {new_state_str}"
+                        f"[{self.req_id}] 'Thinking Budget' 开关已成功{action}。新状态: {new_state_str}"
                     )
                 else:
                     self.logger.warning(
-                        f"[{self.req_id}] ⚠️ 'Thinking Budget' 开关{action}后验证失败。期望状态: '{should_be_checked}', 实际状态: '{new_state_str}'"
+                        f"[{self.req_id}] 'Thinking Budget' 开关{action}后验证失败。期望状态: '{should_be_checked}', 实际状态: '{new_state_str}'"
                     )
             else:
-                self.logger.info(f"[{self.req_id}] 'Thinking Budget' 开关已处于期望状态，无需操作。")
+                self.logger.info(
+                    f"[{self.req_id}] 'Thinking Budget' 开关已处于期望状态，无需操作。"
+                )
 
         except Exception as e:
             if isinstance(e, asyncio.CancelledError):
                 raise
             self.logger.error(
-                f"[{self.req_id}] ❌ 操作 'Thinking Budget toggle' 开关时发生错误: {e}"
+                f"[{self.req_id}] 操作 'Thinking Budget toggle' 开关时发生错误: {e}"
             )
             if isinstance(e, ClientDisconnectedError):
                 raise

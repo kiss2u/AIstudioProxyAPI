@@ -304,87 +304,96 @@ body {
 /* --- 工作区布局 --- */
 .workspace-container {
     display: flex;
+    flex-direction: row;
     width: 100%;
     height: 100%;
     position: relative;
-    /* MODIFIED: For #toggleSidebarButton desktop positioning */
+    overflow: hidden;
 }
 
 .chat-panel {
-    /* flex-grow: 1; Removed, no longer a direct flex child competing for space with sidebar */
-    width: 100%; /* Takes full width as sidebar is overlay */
+    flex: 1 1 auto;
     display: flex;
     flex-direction: column;
     height: 100%;
     overflow: hidden;
     background-color: var(--container-bg);
     transition: background-color var(--transition-speed);
+    min-width: 300px;
+    position: relative;
 }
 
 /* --- 侧边栏样式改进 --- */
 .sidebar-panel {
-    width: var(--sidebar-width); /* Retain for content & transition */
+    width: var(--sidebar-width);
+    min-width: var(--sidebar-width);
+    max-width: var(--sidebar-width);
     height: 100%;
-    display: flex; /* Retain for internal flex layout of its children (log-area) */
-    flex-direction: column; /* Retain */
-    overflow: hidden; /* Retain */
-    background-color: var(--sidebar-bg); /* Retain */
-    /* border-left removed here, added to :not(.collapsed) */
-    transition: var(--sidebar-transition), background-color var(--transition-speed); /* Retain */
-
-    /* New global styles, moved from @media (max-width: 768px) */
-    position: fixed;
-    right: 0;
-    top: 0;
-    z-index: 100;
-    box-shadow: -2px 0 8px rgba(0, 0, 0, 0.15); /* New shadow */
-    transform: translateX(100%); /* Default to collapsed/off-screen */
-}
-
-.sidebar-panel:not(.collapsed) { /* When open */
-    transform: translateX(0%);
-    border-left: 1px solid var(--sidebar-border); /* Show border when open */
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background-color: var(--sidebar-bg);
+    border-left: 1px solid var(--sidebar-border);
+    transition: width 0.3s var(--transition-curve), min-width 0.3s var(--transition-curve), max-width 0.3s var(--transition-curve), padding 0.3s var(--transition-curve), background-color var(--transition-speed);
+    flex-shrink: 0;
 }
 
 .sidebar-panel.collapsed {
-    /* transform: translateX(100%); */ /* Base .sidebar-panel already has this. */
-    /* width: var(--sidebar-width); */   /* Base .sidebar-panel already has this. */
-    padding: 0; /* Consistent with no content shown */
-    border-left: none; /* No border when slid away */
-    overflow: hidden; /* Keep from original global .collapsed */
+    width: 0;
+    min-width: 0;
+    max-width: 0;
+    padding: 0;
+    border-left: none;
 }
 
-/* --- 侧边栏切换按钮 --- */
+/* --- Sidebar Toggle Buttons (Unified Style) --- */
 #toggleSidebarButton {
-    /* New global styles, moved from @media (max-width: 768px) */
-    position: fixed;
+    position: absolute;
+    right: 12px;
     top: 12px;
-    /* right: 12px; */ /* Default for floating style - This will be conditional based on sidebar state */
-    /* left: auto !important; */ /* Crucial to override JS if it tries to set left for old desktop style - Let JS handle this or set based on state */
-    z-index: 101; /* Higher than sidebar */
-    /* transform: none; */ /* Reset any desktop transforms if JS applied them - This might be okay, or handled by JS */
-
-    /* Retain appearance from original global */
+    z-index: 20;
     width: 36px;
     height: 36px;
     border-radius: 50%;
-    border: 1px solid rgba(var(--outline-rgb), 0.3);
-    background-color: var(--container-bg);
-    color: var(--icon-button-color);
+    background-color: var(--primary-color);
+    color: white;
+    border: none;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 0;
-    font-size: 1em;
-    transition: background-color var(--transition-speed), color var(--transition-speed), transform 0.3s ease, box-shadow var(--transition-speed), left 0.3s ease, right 0.3s ease;
-    box-shadow: var(--shadow-sm);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    transition: all 0.3s var(--transition-curve);
+    opacity: 0.9;
 }
 
 #toggleSidebarButton:hover {
-    border-color: var(--primary-color);
-    color: var(--primary-color);
-    box-shadow: var(--shadow-md);
+    opacity: 1;
+    transform: scale(1.05);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+#toggleSidebarButton:active {
+    transform: scale(0.95);
+}
+
+#toggleSidebarButton svg {
+    width: 18px;
+    height: 18px;
+    transition: transform 0.3s var(--transition-curve);
+}
+
+/* Rotate icon when right sidebar is open */
+.sidebar-panel:not(.collapsed) ~ #toggleSidebarButton svg {
+    transform: rotate(180deg);
+}
+
+#toggleSidebarButton:hover svg {
+    transform: scale(1.1);
+}
+
+.sidebar-panel:not(.collapsed) ~ #toggleSidebarButton:hover svg {
+    transform: rotate(180deg) scale(1.1);
 }
 
 /* --- 标题样式 --- */
@@ -550,6 +559,8 @@ a:hover {
     gap: 16px;
     background-color: var(--bg-color);
     transition: background-color var(--transition-speed);
+    width: 100%;
+    box-sizing: border-box;
 }
 
 .message {
@@ -624,6 +635,8 @@ a:hover {
     flex-wrap: wrap;
     box-shadow: 0 -1px 2px rgba(0, 0, 0, 0.02);
     transition: background-color var(--transition-speed);
+    width: 100%;
+    box-sizing: border-box;
 }
 
 /* 模型选择器样式 */
@@ -1088,10 +1101,139 @@ html.dark-mode #lightModeIcon {
 
 #chat-view {
     display: flex;
-    /* Default visible view */
+    /* Changed to row to accommodate left sidebar */
+    flex-direction: row;
+    height: 100%;
+    overflow: hidden;
+    position: relative;
+}
+
+/* --- Left Settings Sidebar --- */
+.left-settings-sidebar {
+    width: 320px;
+    min-width: 320px;
+    max-width: 320px;
+    height: 100%;
+    background-color: var(--surface-color);
+    border-right: 1px solid rgba(var(--outline-rgb), 0.2);
+    display: flex;
+    flex-direction: column;
+    transition: width 0.3s var(--transition-curve), min-width 0.3s var(--transition-curve), max-width 0.3s var(--transition-curve), padding 0.3s var(--transition-curve);
+    overflow: hidden;
+    flex-shrink: 0;
+}
+
+.left-settings-sidebar.collapsed {
+    width: 0;
+    min-width: 0;
+    max-width: 0;
+    padding: 0;
+    border-right: none;
+}
+
+.settings-sidebar-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid rgba(var(--outline-rgb), 0.2);
+    background-color: var(--bg-color);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+}
+
+.settings-sidebar-header h3 {
+    margin: 0;
+    font-size: 1.1em;
+    color: var(--text-color);
+    font-weight: 600;
+}
+
+.settings-sidebar-content {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 16px;
+}
+
+.settings-sidebar-content .info-card {
+    margin-bottom: 16px;
+    background-color: var(--bg-color);
+    border-radius: var(--border-radius);
+    padding: 16px;
+    border: 1px solid rgba(var(--outline-rgb), 0.1);
+}
+
+.settings-sidebar-content .info-card h3 {
+    margin-top: 0;
+    margin-bottom: 12px;
+    font-size: 1em;
+    color: var(--text-color);
+    font-weight: 600;
+}
+
+.settings-sidebar-content .info-card:last-child {
+    margin-bottom: 0;
+}
+
+/* --- Chat Main Area --- */
+.chat-main-area {
+    flex: 1 1 auto;
+    display: flex;
     flex-direction: column;
     height: 100%;
     overflow: hidden;
+    min-width: 300px; /* Ensure minimum usable width */
+    position: relative;
+}
+
+/* --- Left Sidebar Toggle Button --- */
+.left-sidebar-toggle {
+    position: absolute;
+    left: 12px;
+    top: 12px;
+    z-index: 20;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background-color: var(--primary-color);
+    color: white;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    transition: all 0.3s var(--transition-curve);
+    opacity: 0.9;
+}
+
+.left-sidebar-toggle:hover {
+    opacity: 1;
+    transform: scale(1.05);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.left-sidebar-toggle:active {
+    transform: scale(0.95);
+}
+
+.left-sidebar-toggle svg {
+    width: 18px;
+    height: 18px;
+    transition: transform 0.3s var(--transition-curve);
+}
+
+/* Rotate icon when sidebar is open */
+.left-settings-sidebar:not(.collapsed) ~ .chat-main-area .left-sidebar-toggle svg {
+    transform: rotate(45deg);
+}
+
+.left-sidebar-toggle:hover svg {
+    transform: scale(1.1);
+}
+
+.left-settings-sidebar:not(.collapsed) ~ .chat-main-area .left-sidebar-toggle:hover svg {
+    transform: rotate(45deg) scale(1.1);
 }
 
 
@@ -1126,6 +1268,54 @@ html.dark-mode .message code:not(pre > code) {
 }
 
 /* --- 响应式增强 --- */
+/* When left sidebar is open, make buttons more compact */
+.left-settings-sidebar:not(.collapsed) ~ .chat-main-area #input-area {
+    gap: 8px;
+}
+
+.left-settings-sidebar:not(.collapsed) ~ .chat-main-area .action-button {
+    padding: 10px 18px;
+    font-size: 0.9em;
+}
+
+.left-settings-sidebar:not(.collapsed) ~ .chat-main-area #userInput {
+    flex-basis: 200px;
+    min-width: 150px;
+}
+
+/* When right sidebar is open, adjust chat panel */
+.chat-panel {
+    transition: all 0.3s var(--transition-curve);
+}
+
+/* Responsive adjustments for sidebar widths */
+@media (max-width: 1400px) {
+    .left-settings-sidebar {
+        width: 280px;
+        min-width: 280px;
+        max-width: 280px;
+    }
+
+    .sidebar-panel {
+        width: 320px;
+        min-width: 320px;
+        max-width: 320px;
+    }
+}
+
+@media (max-width: 1200px) {
+    /* When both sidebars are open on smaller screens, make controls even more compact */
+    .left-settings-sidebar:not(.collapsed) ~ .chat-main-area .action-button {
+        padding: 8px 14px;
+        font-size: 0.85em;
+    }
+
+    .left-settings-sidebar:not(.collapsed) ~ .chat-main-area #userInput {
+        flex-basis: 150px;
+        min-width: 120px;
+    }
+}
+
 @media (max-width: 768px) {
 
     #userInput {
@@ -1155,6 +1345,31 @@ html.dark-mode .message code:not(pre > code) {
 
     .info-card {
         padding: 16px;
+    }
+
+    /* On mobile, collapse both sidebars by default and make them narrower when open */
+    .left-settings-sidebar {
+        width: 0;
+        min-width: 0;
+        max-width: 0;
+    }
+
+    .left-settings-sidebar:not(.collapsed) {
+        width: 280px;
+        min-width: 280px;
+        max-width: 280px;
+    }
+
+    .sidebar-panel {
+        width: 0;
+        min-width: 0;
+        max-width: 0;
+    }
+
+    .sidebar-panel:not(.collapsed) {
+        width: 300px;
+        min-width: 300px;
+        max-width: 300px;
     }
 }
 
@@ -1455,6 +1670,17 @@ html.dark-mode code {
     height: 100%;
     background-color: var(--bg-color);
     transition: background-color var(--transition-speed);
+}
+
+/* Force hide class for thinking controls - used by JavaScript for flash models */
+.thinking-controls-hidden {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    overflow: hidden !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
 }
 
 .settings-group {

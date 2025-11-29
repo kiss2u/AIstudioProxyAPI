@@ -1,12 +1,13 @@
-import os
-from unittest.mock import patch, mock_open
+from unittest.mock import mock_open, patch
+
 from api_utils.auth_utils import (
-    load_api_keys,
-    initialize_keys,
-    verify_api_key,
     API_KEYS,
     KEY_FILE_PATH,
+    initialize_keys,
+    load_api_keys,
+    verify_api_key,
 )
+
 
 def test_load_api_keys():
     """Test loading API keys from file."""
@@ -19,12 +20,14 @@ def test_load_api_keys():
             assert "key3" in API_KEYS
             assert len(API_KEYS) == 3
 
+
 def test_initialize_keys_creates_file():
     """Test initialize_keys creates file if not exists."""
     with patch("os.path.exists", return_value=False):
         with patch("builtins.open", mock_open()) as mock_file:
             initialize_keys()
             mock_file.assert_called_with(KEY_FILE_PATH, "w")
+
 
 def test_verify_api_key():
     """Test API key verification."""

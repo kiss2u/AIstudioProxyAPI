@@ -5,18 +5,32 @@ import multiprocessing
 import sys
 from pathlib import Path
 
+from logging_utils.setup import ColoredFormatter
 from stream.proxy_server import ProxyServer
+
 
 def parse_args():
     """Parse command line arguments"""
-    parser = argparse.ArgumentParser(description='HTTPS Proxy Server with SSL Inspection')
-    
-    parser.add_argument('--host', default='127.0.0.1', help='Host to bind the proxy server')
-    parser.add_argument('--port', type=int, default=3120, help='Port to bind the proxy server')
-    parser.add_argument('--domains', nargs='+', default=['*.google.com'],
-                        help='List of domain patterns to intercept (regex)')
-    parser.add_argument('--proxy', help='Upstream proxy URL (e.g., http://user:pass@host:port)')
-    
+    parser = argparse.ArgumentParser(
+        description="HTTPS Proxy Server with SSL Inspection"
+    )
+
+    parser.add_argument(
+        "--host", default="127.0.0.1", help="Host to bind the proxy server"
+    )
+    parser.add_argument(
+        "--port", type=int, default=3120, help="Port to bind the proxy server"
+    )
+    parser.add_argument(
+        "--domains",
+        nargs="+",
+        default=["*.google.com"],
+        help="List of domain patterns to intercept (regex)",
+    )
+    parser.add_argument(
+        "--proxy", help="Upstream proxy URL (e.g., http://user:pass@host:port)"
+    )
+
     return parser.parse_args()
 
 
@@ -24,29 +38,34 @@ async def main():
     """Main entry point"""
     args = parse_args()
 
-    # Set up logging
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.StreamHandler()
-        ]
+    # Set up logging with colored output
+    console_handler = logging.StreamHandler(sys.stderr)
+    console_handler.setFormatter(
+        ColoredFormatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s", use_color=True
+        )
     )
-    logging.getLogger('asyncio').setLevel(logging.ERROR)
-    logging.getLogger('websockets').setLevel(logging.ERROR)
-    
-    logger = logging.getLogger('main')
+    console_handler.setLevel(logging.INFO)
+
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
+    root_logger.addHandler(console_handler)
+
+    logging.getLogger("asyncio").setLevel(logging.ERROR)
+    logging.getLogger("websockets").setLevel(logging.ERROR)
+
+    logger = logging.getLogger("main")
 
     # Create certs directory
-    cert_dir = Path('certs')
+    cert_dir = Path("certs")
     cert_dir.mkdir(exist_ok=True)
-    
+
     # Print startup information
     logger.info(f"Starting proxy server on {args.host}:{args.port}")
     logger.info(f"Intercepting domains: {args.domains}")
     if args.proxy:
         logger.info(f"Using upstream proxy: {args.proxy}")
-    
+
     # Create and start the proxy server
     proxy_server = ProxyServer(
         host=args.host,
@@ -66,19 +85,23 @@ async def main():
 
 
 async def builtin(queue: multiprocessing.Queue = None, port=None, proxy=None):
-    # Set up logging
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.StreamHandler()
-        ]
+    # Set up logging with colored output
+    console_handler = logging.StreamHandler(sys.stderr)
+    console_handler.setFormatter(
+        ColoredFormatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s", use_color=True
+        )
     )
+    console_handler.setLevel(logging.INFO)
 
-    logger = logging.getLogger('main')
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
+    root_logger.addHandler(console_handler)
+
+    logger = logging.getLogger("main")
 
     # Create certs directory
-    cert_dir = Path('certs')
+    cert_dir = Path("certs")
     cert_dir.mkdir(exist_ok=True)
 
     if port is None:
@@ -88,7 +111,7 @@ async def builtin(queue: multiprocessing.Queue = None, port=None, proxy=None):
     proxy_server = ProxyServer(
         host="127.0.0.1",
         port=port,
-        intercept_domains=['*.google.com'],
+        intercept_domains=["*.google.com"],
         upstream_proxy=proxy,
         queue=queue,
     )
@@ -101,5 +124,6 @@ async def builtin(queue: multiprocessing.Queue = None, port=None, proxy=None):
         logger.error(f"Error starting proxy server: {e}")
         sys.exit(1)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     asyncio.run(main())

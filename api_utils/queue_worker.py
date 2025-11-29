@@ -4,50 +4,52 @@ Handles tasks in the request queue.
 """
 
 import asyncio
-import time
 import logging
-from typing import Any, Dict, Optional, Tuple, List, Set
+import time
+from asyncio import Event, Future, Lock, Queue, Task
+from typing import Any, Dict, List, Optional, Set
+
 from fastapi import HTTPException
-from asyncio import Queue, Lock, Future, Event
 
 from .error_utils import (
-    client_disconnected,
     client_cancelled,
+    client_disconnected,
     processing_timeout,
     server_error,
 )
+
 
 class QueueManager:
     def __init__(self):
         self.logger = logging.getLogger("queue_worker")
         self.was_last_request_streaming = False
         self.last_request_completion_time = 0.0
-        
+
         # These will be initialized from server.py or created if missing
-        self.request_queue: Optional[Queue] = None
+        self.request_queue: Optional[Queue[Any]] = None
         self.processing_lock: Optional[Lock] = None
         self.model_switching_lock: Optional[Lock] = None
         self.params_cache_lock: Optional[Lock] = None
-        
+
         # Context for cleanup
-        self.current_submit_btn_loc = None
-        self.current_client_disco_checker = None
-        self.current_completion_event = None
-        self.current_req_id = None
+        self.current_submit_btn_loc: Any = None
+        self.current_client_disco_checker: Any = None
+        self.current_completion_event: Optional[Event] = None
+        self.current_req_id: Optional[str] = None
 
     def initialize_globals(self):
         """Initialize global variables from server module or create new ones."""
         import server
-        
+
         # Use server's logger if available, otherwise keep local one
-        if hasattr(server, 'logger'):
+        if hasattr(server, "logger"):
             self.logger = server.logger
-            
+
         self.logger.info("--- Queue Worker Initializing ---")
 
         if server.request_queue is None:
             self.logger.info("Initializing request_queue...")
-            server.request_queue = Queue()
+            server.request_queue = Queue()  # type: ignore
         self.request_queue = server.request_queue
 
         if server.processing_lock is None:
@@ -75,16 +77,16 @@ class QueueManager:
             return
 
         checked_count = 0
-        items_to_requeue = []
-        processed_ids = set()
+        items_to_requeue: List[Dict[str, Any]] = []
+        processed_ids: Set[str] = set()
 
         # Limit check to 10 items or queue size
         limit = min(queue_size, 10)
-        
+
         while checked_count < limit:
             try:
-                item = self.request_queue.get_nowait()
-                item_req_id = item.get("req_id", "unknown")
+                item: Dict[str, Any] = self.request_queue.get_nowait()
+                item_req_id = str(item.get("req_id", "unknown"))
 
                 if item_req_id in processed_ids:
                     items_to_requeue.append(item)
@@ -109,6 +111,8 @@ class QueueManager:
                                             "Client disconnected while queued.",
                                         )
                                     )
+                        except asyncio.CancelledError:
+                            raise
                         except Exception as check_err:
                             self.logger.error(
                                 f"[{item_req_id}] (Worker Queue Check) Error checking disconnect: {check_err}"
@@ -127,7 +131,7 @@ class QueueManager:
         if not self.request_queue:
             await asyncio.sleep(1)
             return None
-            
+
         try:
             return await asyncio.wait_for(self.request_queue.get(), timeout=5.0)
         except asyncio.TimeoutError:
@@ -141,40 +145,50 @@ class QueueManager:
             and is_streaming_request
             and (current_time - self.last_request_completion_time < 1.0)
         ):
-            delay_time = max(0.5, 1.0 - (current_time - self.last_request_completion_time))
+            delay_time = max(
+                0.5, 1.0 - (current_time - self.last_request_completion_time)
+            )
             self.logger.info(
                 f"[{req_id}] (Worker) Sequential streaming request, adding {delay_time:.2f}s delay..."
             )
             await asyncio.sleep(delay_time)
 
-    async def process_request(self, request_item: Dict[str, Any]):
+    async def process_request(self, request_item: Dict[str, Any]) -> None:
         """Process a single request item."""
-        req_id = request_item["req_id"]
+        req_id = str(request_item["req_id"])
         request_data = request_item["request_data"]
         http_request = request_item["http_request"]
-        result_future = request_item["result_future"]
+        result_future: Future[Any] = request_item["result_future"]
 
         # 1. Check cancellation
         if request_item.get("cancelled", False):
             self.logger.info(f"[{req_id}] (Worker) Request cancelled, skipping.")
             if not result_future.done():
-                result_future.set_exception(client_cancelled(req_id, "Request cancelled by user"))
+                result_future.set_exception(
+                    client_cancelled(req_id, "Request cancelled by user")
+                )
             if self.request_queue:
                 self.request_queue.task_done()
             return
 
-        is_streaming_request = request_data.stream
+        is_streaming_request = bool(request_data.stream)
         self.logger.info(
             f"[{req_id}] (Worker) Dequeued request. Mode: {'Streaming' if is_streaming_request else 'Non-streaming'}"
         )
 
         # 2. Initial Connection Check
         from api_utils.request_processor import _check_client_connection
+
         if not await _check_client_connection(req_id, http_request):
-            self.logger.info(f"[{req_id}] (Worker) ✅ Client disconnected before processing.")
+            self.logger.info(
+                f"[{req_id}] (Worker) Client disconnected before processing."
+            )
             if not result_future.done():
                 result_future.set_exception(
-                    HTTPException(status_code=499, detail=f"[{req_id}] Client disconnected before processing")
+                    HTTPException(
+                        status_code=499,
+                        detail=f"[{req_id}] Client disconnected before processing",
+                    )
                 )
             if self.request_queue:
                 self.request_queue.task_done()
@@ -185,39 +199,145 @@ class QueueManager:
 
         # 4. Connection Check before Lock
         if not await _check_client_connection(req_id, http_request):
-            self.logger.info(f"[{req_id}] (Worker) ✅ Client disconnected while waiting.")
+            self.logger.info(f"[{req_id}] (Worker) Client disconnected while waiting.")
             if not result_future.done():
                 result_future.set_exception(
-                    HTTPException(status_code=499, detail=f"[{req_id}] Client disconnected")
+                    HTTPException(
+                        status_code=499, detail=f"[{req_id}] Client disconnected"
+                    )
                 )
             if self.request_queue:
                 self.request_queue.task_done()
             return
 
         self.logger.info(f"[{req_id}] (Worker) Waiting for processing lock...")
-        
+
         if not self.processing_lock:
-             self.logger.error(f"[{req_id}] Processing lock is None!")
-             if not result_future.done():
-                 result_future.set_exception(server_error(req_id, "Internal error: Processing lock missing"))
-             if self.request_queue:
-                 self.request_queue.task_done()
-             return
+            self.logger.error(f"[{req_id}] Processing lock is None!")
+            if not result_future.done():
+                result_future.set_exception(
+                    server_error(req_id, "Internal error: Processing lock missing")
+                )
+            if self.request_queue:
+                self.request_queue.task_done()
+            return
 
         async with self.processing_lock:
             self.logger.info(f"[{req_id}] (Worker) Acquired processing lock.")
-            
+
             # 5. Final Connection Check inside Lock
             if not await _check_client_connection(req_id, http_request):
-                self.logger.info(f"[{req_id}] (Worker) ✅ Client disconnected inside lock.")
+                self.logger.info(
+                    f"[{req_id}] (Worker) Client disconnected inside lock."
+                )
                 if not result_future.done():
                     result_future.set_exception(
-                        HTTPException(status_code=499, detail=f"[{req_id}] Client disconnected")
+                        HTTPException(
+                            status_code=499, detail=f"[{req_id}] Client disconnected"
+                        )
                     )
             elif result_future.done():
                 self.logger.info(f"[{req_id}] (Worker) Future already done. Skipping.")
             else:
-                await self._execute_request_logic(req_id, request_data, http_request, result_future)
+                # --- Fast-Fail Tiered Error Recovery Logic ---
+                # 优化后的恢复策略 (目标: 10-15秒内切换失败配置文件)
+                # Tier 1: Page Refresh (快速，~2-3秒)
+                # Tier 2: Auth Profile Switch (跳过浏览器重启，直接切换配置文件)
+
+                max_attempts = 3  # Attempt 1 (Initial) -> Tier 1 (Refresh) -> Attempt 2 -> Tier 2 (Profile Switch) -> Attempt 3
+
+                for attempt in range(1, max_attempts + 1):
+                    try:
+                        # 检查 result_future 是否已完成 (可能在之前的尝试中已设置结果/异常)
+                        # asyncio.Future 无法重置，一旦完成就不能有意义地重试
+                        if result_future.done():
+                            self.logger.warning(
+                                f"[{req_id}] (Worker) [Attempt {attempt}] result_future already done, "
+                                f"cannot retry with same future. Breaking retry loop."
+                            )
+                            break
+
+                        self.logger.info(
+                            f"[{req_id}] (Worker) [Attempt {attempt}/{max_attempts}] Executing request logic..."
+                        )
+                        await self._execute_request_logic(
+                            req_id, request_data, http_request, result_future
+                        )
+                        # If successful (no exception raised), break the retry loop
+                        break
+                    except asyncio.CancelledError:
+                        self.logger.warning(
+                            f"[{req_id}] (Worker) Request cancelled during execution."
+                        )
+                        raise
+                    except Exception as e:
+                        error_str = str(e).lower()
+                        self.logger.error(
+                            f"[{req_id}] (Worker) [Attempt {attempt}/{max_attempts}] Error: {e}"
+                        )
+
+                        # 检查是否为配额错误 - 立即切换配置文件
+                        is_quota_error = any(
+                            keyword in error_str
+                            for keyword in [
+                                "quota",
+                                "429",
+                                "rate limit",
+                                "exceeded",
+                                "too many requests",
+                            ]
+                        )
+
+                        if is_quota_error:
+                            self.logger.warning(
+                                f"[{req_id}] (Worker) 检测到配额/限流错误，立即切换配置文件..."
+                            )
+                            await self._switch_auth_profile(req_id)
+                            continue
+
+                        # If it's the last attempt, re-raise to be handled by outer block
+                        if attempt == max_attempts:
+                            self.logger.critical(
+                                f"[{req_id}] (Worker) All {max_attempts} attempts failed."
+                            )
+                            raise
+
+                        # Tier 1: Page Refresh (快速恢复，~2-3秒)
+                        if attempt == 1:
+                            self.logger.info(
+                                f"[{req_id}] (Worker) Tier 1 Recovery: Page Refresh..."
+                            )
+                            try:
+                                await self._refresh_page(req_id)
+                            except asyncio.CancelledError:
+                                raise
+                            except Exception as refresh_err:
+                                self.logger.error(
+                                    f"[{req_id}] (Worker) Tier 1 Refresh failed: {refresh_err}"
+                                )
+                            continue
+
+                        # Tier 2: Auth Profile Switch (跳过浏览器重启，直接切换配置文件)
+                        if attempt == 2:
+                            self.logger.warning(
+                                f"[{req_id}] (Worker) Tier 2 Recovery: Switching Auth Profile..."
+                            )
+                            try:
+                                await self._switch_auth_profile(req_id)
+                            except asyncio.CancelledError:
+                                raise
+                            except Exception as switch_err:
+                                self.logger.error(
+                                    f"[{req_id}] (Worker) Tier 2 Profile Switch failed: {switch_err}"
+                                )
+                                if "exhausted" in str(switch_err).lower():
+                                    self.logger.critical(
+                                        f"[{req_id}] (Worker) Auth profiles exhausted."
+                                    )
+                                    raise
+                            continue
+
+                # --- End Fast-Fail Tiered Error Recovery Logic ---
 
             # 6. Cleanup / Post-processing (Clear Stream Queue & Chat History)
             await self._cleanup_after_processing(req_id)
@@ -230,11 +350,19 @@ class QueueManager:
         if self.request_queue:
             self.request_queue.task_done()
 
-    async def _execute_request_logic(self, req_id, request_data, http_request, result_future):
+    async def _execute_request_logic(
+        self,
+        req_id: str,
+        request_data: Any,
+        http_request: Any,
+        result_future: Future[Any],
+    ):
         """Execute the actual request processing logic."""
         try:
-            from api_utils import _process_request_refactored
-            
+            from api_utils import (
+                _process_request_refactored,  # pyright: ignore[reportPrivateUsage]
+            )
+
             # Store these for cleanup usage if needed
             self.current_submit_btn_loc = None
             self.current_client_disco_checker = None
@@ -245,22 +373,43 @@ class QueueManager:
                 req_id, request_data, http_request, result_future
             )
 
-            completion_event = None
-            submit_btn_loc = None
-            client_disco_checker = None
+            completion_event: Optional[Event] = None
+            submit_btn_loc: Any = None
+            client_disco_checker: Any = None
+            stream_state: Optional[Dict[str, Any]] = None
             current_request_was_streaming = False
 
-            if isinstance(returned_value, tuple) and len(returned_value) == 3:
-                completion_event, submit_btn_loc, client_disco_checker = returned_value
+            if isinstance(returned_value, tuple):
+                # 支持 3-tuple (旧版) 和 4-tuple (新版带 stream_state)
+                if len(returned_value) == 4:
+                    (
+                        completion_event,
+                        submit_btn_loc,
+                        client_disco_checker,
+                        stream_state,
+                    ) = returned_value
+                elif len(returned_value) == 3:
+                    completion_event, submit_btn_loc, client_disco_checker = (
+                        returned_value
+                    )
+                else:
+                    self.logger.warning(
+                        f"[{req_id}] (Worker) Unexpected tuple length: {len(returned_value)}"
+                    )
+
                 if completion_event is not None:
                     current_request_was_streaming = True
                     self.logger.info(f"[{req_id}] (Worker) Stream info received.")
                 else:
-                    self.logger.info(f"[{req_id}] (Worker) Tuple received but completion_event is None.")
+                    self.logger.info(
+                        f"[{req_id}] (Worker) Tuple received but completion_event is None."
+                    )
             elif returned_value is None:
                 self.logger.info(f"[{req_id}] (Worker) Non-stream completion (None).")
             else:
-                self.logger.warning(f"[{req_id}] (Worker) Unexpected return type: {type(returned_value)}")
+                self.logger.warning(
+                    f"[{req_id}] (Worker) Unexpected return type: {type(returned_value)}"
+                )
 
             # Store for cleanup
             self.current_submit_btn_loc = submit_btn_loc
@@ -268,42 +417,81 @@ class QueueManager:
             self.current_completion_event = completion_event
 
             await self._monitor_completion(
-                req_id, http_request, result_future, completion_event, 
-                submit_btn_loc, client_disco_checker, current_request_was_streaming
+                req_id,
+                http_request,
+                result_future,
+                completion_event,
+                submit_btn_loc,
+                client_disco_checker,
+                current_request_was_streaming,
+                stream_state,
             )
 
+        except asyncio.CancelledError:
+            self.logger.info(f"[{req_id}] (Worker) Execution cancelled.")
+            raise
         except Exception as process_err:
             self.logger.error(f"[{req_id}] (Worker) Execution error: {process_err}")
             if not result_future.done():
-                result_future.set_exception(server_error(req_id, f"Request processing error: {process_err}"))
+                result_future.set_exception(
+                    server_error(req_id, f"Request processing error: {process_err}")
+                )
+            # 重新抛出异常以触发重试机制
+            raise
 
-    async def _monitor_completion(self, req_id, http_request, result_future, completion_event, 
-                                submit_btn_loc, client_disco_checker, current_request_was_streaming):
-        """Monitor for completion and handle disconnects."""
+    async def _monitor_completion(
+        self,
+        req_id: str,
+        http_request: Any,
+        result_future: Future[Any],
+        completion_event: Optional[Event],
+        submit_btn_loc: Any,
+        client_disco_checker: Any,
+        current_request_was_streaming: bool,
+        stream_state: Optional[Dict[str, Any]] = None,
+    ):
+        """Monitor for completion and handle disconnects.
+
+        Args:
+            stream_state: 可选的流状态字典，包含 'has_content' 键表示是否收到内容。
+                          如果流完成但没有内容，将抛出异常触发重试机制。
+        """
         from api_utils.client_connection import (
             enhanced_disconnect_monitor,
             non_streaming_disconnect_monitor,
         )
-        from server import RESPONSE_COMPLETION_TIMEOUT
 
-        disconnect_monitor_task = None
+        try:
+            from server import RESPONSE_COMPLETION_TIMEOUT
+        except ImportError:
+            from config import RESPONSE_COMPLETION_TIMEOUT
+
+        disconnect_monitor_task: Optional[Task[bool]] = None
         try:
             if completion_event:
-                self.logger.info(f"[{req_id}] (Worker) Waiting for stream completion...")
-                disconnect_monitor_task = asyncio.create_task(
-                    enhanced_disconnect_monitor(req_id, http_request, completion_event, self.logger)
+                self.logger.info(
+                    f"[{req_id}] (Worker) Waiting for stream completion..."
                 )
-                
+                disconnect_monitor_task = asyncio.create_task(
+                    enhanced_disconnect_monitor(
+                        req_id, http_request, completion_event, self.logger
+                    )
+                )
+
                 await asyncio.wait_for(
                     completion_event.wait(),
                     timeout=RESPONSE_COMPLETION_TIMEOUT / 1000 + 60,
                 )
             else:
-                self.logger.info(f"[{req_id}] (Worker) Waiting for non-stream completion...")
-                disconnect_monitor_task = asyncio.create_task(
-                    non_streaming_disconnect_monitor(req_id, http_request, result_future, self.logger)
+                self.logger.info(
+                    f"[{req_id}] (Worker) Waiting for non-stream completion..."
                 )
-                
+                disconnect_monitor_task = asyncio.create_task(
+                    non_streaming_disconnect_monitor(
+                        req_id, http_request, result_future, self.logger
+                    )
+                )
+
                 await asyncio.wait_for(
                     asyncio.shield(result_future),
                     timeout=RESPONSE_COMPLETION_TIMEOUT / 1000 + 60,
@@ -314,24 +502,64 @@ class QueueManager:
             if disconnect_monitor_task.done():
                 try:
                     client_disconnected_early = disconnect_monitor_task.result()
+                except asyncio.CancelledError:
+                    raise
                 except Exception:
                     pass
-            
-            self.logger.info(f"[{req_id}] (Worker) Processing complete. Early disconnect: {client_disconnected_early}")
 
-            if not client_disconnected_early and submit_btn_loc and client_disco_checker and completion_event:
-                await self._handle_post_stream_button(req_id, submit_btn_loc, client_disco_checker, completion_event)
+            self.logger.info(
+                f"[{req_id}] (Worker) Processing complete. Early disconnect: {client_disconnected_early}"
+            )
+
+            # 检查流响应是否包含内容 - 如果为空响应则抛出异常触发重试
+            if (
+                stream_state is not None
+                and completion_event is not None
+                and not client_disconnected_early
+            ):
+                has_content = stream_state.get(
+                    "has_content", True
+                )  # 默认为 True 避免误报
+                if not has_content:
+                    self.logger.warning(
+                        f"[{req_id}] (Worker) 检测到空响应 (stream_state.has_content=False)，"
+                        f"可能是配额用尽或其他错误，抛出异常触发重试机制"
+                    )
+                    raise RuntimeError(
+                        f"[{req_id}] 流响应完成但未收到任何内容 (Empty response - possible quota exceeded)"
+                    )
+
+            if (
+                not client_disconnected_early
+                and submit_btn_loc
+                and client_disco_checker
+                and completion_event
+            ):
+                await self._handle_post_stream_button(
+                    req_id, submit_btn_loc, client_disco_checker, completion_event
+                )
 
         except asyncio.TimeoutError:
-            self.logger.warning(f"[{req_id}] (Worker) ⚠️ Processing timed out.")
+            self.logger.warning(f"[{req_id}] (Worker) Processing timed out.")
             if not result_future.done():
                 result_future.set_exception(
-                    processing_timeout(req_id, "Processing timed out waiting for completion.")
+                    processing_timeout(
+                        req_id, "Processing timed out waiting for completion."
+                    )
                 )
+        except asyncio.CancelledError:
+            self.logger.info(f"[{req_id}] (Worker) Completion monitoring cancelled.")
+            raise
         except Exception as ev_wait_err:
-            self.logger.error(f"[{req_id}] (Worker) ❌ Error waiting for completion: {ev_wait_err}")
+            self.logger.error(
+                f"[{req_id}] (Worker) Error waiting for completion: {ev_wait_err}"
+            )
             if not result_future.done():
-                result_future.set_exception(server_error(req_id, f"Error waiting for completion: {ev_wait_err}"))
+                result_future.set_exception(
+                    server_error(req_id, f"Error waiting for completion: {ev_wait_err}")
+                )
+            # 重新抛出异常以触发重试机制 (特别是空响应错误)
+            raise
         finally:
             if disconnect_monitor_task and not disconnect_monitor_task.done():
                 disconnect_monitor_task.cancel()
@@ -340,28 +568,44 @@ class QueueManager:
                 except asyncio.CancelledError:
                     pass
 
-    async def _handle_post_stream_button(self, req_id, submit_btn_loc, client_disco_checker, completion_event):
+    async def _handle_post_stream_button(
+        self,
+        req_id: str,
+        submit_btn_loc: Any,
+        client_disco_checker: Any,
+        completion_event: Event,
+    ):
         """Handle the submit button state after streaming."""
         self.logger.info(f"[{req_id}] (Worker) Handling post-stream button state...")
         try:
-            from server import page_instance
             from browser_utils.page_controller import PageController
+            from server import page_instance
 
             if page_instance:
                 page_controller = PageController(page_instance, self.logger, req_id)
                 await page_controller.ensure_generation_stopped(client_disco_checker)
             else:
-                self.logger.warning(f"[{req_id}] (Worker) page_instance is None during button handling")
+                self.logger.warning(
+                    f"[{req_id}] (Worker) page_instance is None during button handling"
+                )
 
+        except asyncio.CancelledError:
+            self.logger.info(
+                f"[{req_id}] (Worker) Post-stream button handling cancelled."
+            )
+            raise
         except Exception as e_ensure_stop:
-            self.logger.warning(f"[{req_id}] ⚠️ Post-stream button handling error: {e_ensure_stop}")
+            self.logger.warning(
+                f"[{req_id}] Post-stream button handling error: {e_ensure_stop}"
+            )
             # Use comprehensive snapshot for better debugging
+            import os
+
             from browser_utils.debug_utils import (
                 save_comprehensive_snapshot,
             )
-            from server import page_instance
             from config import PROMPT_TEXTAREA_SELECTOR
-            import os
+            from server import page_instance
 
             if page_instance:
                 await save_comprehensive_snapshot(
@@ -370,68 +614,169 @@ class QueueManager:
                     req_id=req_id,
                     error_stage="流式响应后按钮状态处理",
                     additional_context={
-                        "headless_mode": os.environ.get(
-                            "HEADLESS", "true"
-                        ).lower()
+                        "headless_mode": os.environ.get("HEADLESS", "true").lower()
                         == "true",
                         "completion_event_set": completion_event.is_set()
                         if completion_event
                         else None,
-                        "error_type": type(
-                            e_ensure_stop
-                        ).__name__,
+                        "error_type": type(e_ensure_stop).__name__,
                         "error_message": str(e_ensure_stop),
                     },
                     locators={
                         "submit_button": submit_btn_loc,
-                        "input_field": page_instance.locator(
-                            PROMPT_TEXTAREA_SELECTOR
-                        ),
+                        "input_field": page_instance.locator(PROMPT_TEXTAREA_SELECTOR),
                     },
                     error_exception=e_ensure_stop,
                 )
 
-    async def _cleanup_after_processing(self, req_id):
+    async def _cleanup_after_processing(self, req_id: str):
         """Clean up stream queue and chat history."""
         try:
             from api_utils import clear_stream_queue
+
             await clear_stream_queue()
 
             # Clear chat history if we have the necessary context
-            if getattr(self, 'current_submit_btn_loc', None) and getattr(self, 'current_client_disco_checker', None):
-                from server import page_instance, is_page_ready
-                
+            if getattr(self, "current_submit_btn_loc", None) and getattr(
+                self, "current_client_disco_checker", None
+            ):
+                from server import is_page_ready, page_instance
+
                 if page_instance and is_page_ready:
                     from browser_utils.page_controller import PageController
+
                     page_controller = PageController(page_instance, self.logger, req_id)
-                    
+
                     self.logger.info(f"[{req_id}] (Worker) Clearing chat history...")
-                    await page_controller.clear_chat_history(self.current_client_disco_checker)
-                    self.logger.info(f"[{req_id}] (Worker) ✅ Chat history cleared.")
+                    await page_controller.clear_chat_history(
+                        self.current_client_disco_checker
+                    )
+                    self.logger.info(f"[{req_id}] (Worker) Chat history cleared.")
+        except asyncio.CancelledError:
+            self.logger.info(f"[{req_id}] (Worker) Cleanup cancelled.")
+            raise
         except Exception as clear_err:
-            self.logger.error(f"[{req_id}] (Worker) Cleanup error: {clear_err}", exc_info=True)
+            self.logger.error(
+                f"[{req_id}] (Worker) Cleanup error: {clear_err}", exc_info=True
+            )
+
+    async def _refresh_page(self, req_id: str) -> None:
+        """Tier 1 Recovery: 快速页面刷新 (~2-3秒)。"""
+        import server
+
+        if not hasattr(server, "page_instance") or server.page_instance is None:
+            raise RuntimeError("server.page_instance is missing")
+
+        page = server.page_instance
+        self.logger.info(f"[{req_id}] (Recovery) 执行页面刷新...")
+
+        try:
+            # 快速刷新页面
+            await page.reload(wait_until="domcontentloaded", timeout=10000)
+
+            # 等待关键元素可用 (短超时)
+            from config.selectors import PROMPT_TEXTAREA_SELECTOR
+
+            await page.wait_for_selector(PROMPT_TEXTAREA_SELECTOR, timeout=5000)
+
+            self.logger.info(f"[{req_id}] (Recovery) 页面刷新完成")
+        except asyncio.CancelledError:
+            self.logger.info(f"[{req_id}] (Recovery) 页面刷新被取消")
+            raise
+        except Exception as e:
+            self.logger.error(f"[{req_id}] (Recovery) 页面刷新失败: {e}")
+            raise
+
+    async def _switch_auth_profile(self, req_id: str) -> None:
+        """Tier 2 Recovery: 完全重新初始化浏览器连接以避免状态保留。"""
+        import server
+        from api_utils.auth_manager import auth_manager
+        from browser_utils.initialization.core import (
+            close_page_logic,
+            enable_temporary_chat_mode,
+            initialize_page_logic,
+        )
+        from browser_utils.model_management import (
+            _handle_initial_model_state_and_storage,
+        )
+        from config import get_environment_variable
+
+        # 标记当前配置文件为失败
+        auth_manager.mark_profile_failed()
+
+        # 获取下一个配置文件
+        next_profile = await auth_manager.get_next_profile()
+        self.logger.info(f"[{req_id}] (Recovery) 切换到配置文件: {next_profile}")
+
+        # 1. 关闭现有页面
+        await close_page_logic()
+
+        # 2. 关闭浏览器连接以获取全新状态
+        if server.browser_instance and server.browser_instance.is_connected():
+            await server.browser_instance.close()
+            server.is_browser_connected = False
+            self.logger.info(f"[{req_id}] (Recovery) 浏览器连接已关闭")
+
+        # 3. 重新连接到 Camoufox
+        ws_endpoint = get_environment_variable("CAMOUFOX_WS_ENDPOINT")
+        if not ws_endpoint:
+            raise RuntimeError("CAMOUFOX_WS_ENDPOINT not available for reconnection")
+
+        if not server.playwright_manager:
+            raise RuntimeError("Playwright manager not available")
+
+        self.logger.info(f"[{req_id}] (Recovery) 重新连接到浏览器...")
+        server.browser_instance = await server.playwright_manager.firefox.connect(
+            ws_endpoint, timeout=30000
+        )
+        server.is_browser_connected = True
+        self.logger.info(
+            f"[{req_id}] (Recovery) 已连接: {server.browser_instance.version}"
+        )
+
+        # 4. 使用新配置文件初始化页面
+        server.page_instance, server.is_page_ready = await initialize_page_logic(
+            server.browser_instance,
+            storage_state_path=next_profile,
+        )
+
+        # 5. 处理初始模型状态和存储
+        if server.is_page_ready and server.page_instance:
+            await _handle_initial_model_state_and_storage(server.page_instance)
+
+            # 6. 启用临时聊天模式
+            await enable_temporary_chat_mode(server.page_instance)
+
+            self.logger.info(
+                f"[{req_id}] (Recovery) 配置文件切换完成 (浏览器已完全重新初始化)"
+            )
+        else:
+            raise RuntimeError(
+                f"[{req_id}] (Recovery) 页面初始化失败，无法完成配置文件切换"
+            )
+
 
 async def queue_worker() -> None:
     """Main queue worker entry point."""
     manager = QueueManager()
     manager.initialize_globals()
-    
+
     logger = manager.logger
     logger.info("--- Queue Worker Started ---")
 
     while True:
         try:
             await manager.check_queue_disconnects()
-            
+
             request_item = await manager.get_next_request()
             if request_item:
                 await manager.process_request(request_item)
-                
+
         except asyncio.CancelledError:
             logger.info("--- Queue Worker Cancelled ---")
             break
         except Exception as e:
-            logger.error(f"(Worker) ❌ Unexpected error in main loop: {e}", exc_info=True)
-            await asyncio.sleep(1) # Prevent tight loop on error
+            logger.error(f"(Worker) Unexpected error in main loop: {e}", exc_info=True)
+            await asyncio.sleep(1)  # Prevent tight loop on error
 
     logger.info("--- Queue Worker Stopped ---")

@@ -1,13 +1,18 @@
+import asyncio
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import MagicMock, AsyncMock, patch
 from fastapi import HTTPException
+
 from api_utils.routers.chat import chat_completions
 from models import ChatCompletionRequest
-import asyncio
+
 
 @pytest.mark.asyncio
 async def test_chat_completions_success():
-    request = ChatCompletionRequest(messages=[{"role": "user", "content": "hello"}], model="gpt-4")
+    request = ChatCompletionRequest(
+        messages=[{"role": "user", "content": "hello"}], model="gpt-4"
+    )
     http_request = MagicMock()
     logger = MagicMock()
     request_queue = asyncio.Queue()
@@ -15,7 +20,7 @@ async def test_chat_completions_success():
         "is_initializing": False,
         "is_playwright_ready": True,
         "is_page_ready": True,
-        "is_browser_connected": True
+        "is_browser_connected": True,
     }
     worker_task = MagicMock()
     worker_task.done.return_value = False
@@ -33,22 +38,25 @@ async def test_chat_completions_success():
         logger=logger,
         request_queue=request_queue,
         server_state=server_state,
-        worker_task=worker_task
+        worker_task=worker_task,
     )
 
     assert response == {"response": "ok"}
 
+
 @pytest.mark.asyncio
 async def test_chat_completions_service_unavailable():
-    request = ChatCompletionRequest(messages=[{"role": "user", "content": "hello"}], model="gpt-4")
+    request = ChatCompletionRequest(
+        messages=[{"role": "user", "content": "hello"}], model="gpt-4"
+    )
     http_request = MagicMock()
     logger = MagicMock()
     request_queue = asyncio.Queue()
     server_state = {
-        "is_initializing": True, # Service unavailable
+        "is_initializing": True,  # Service unavailable
         "is_playwright_ready": True,
         "is_page_ready": True,
-        "is_browser_connected": True
+        "is_browser_connected": True,
     }
     worker_task = MagicMock()
     worker_task.done.return_value = False
@@ -60,17 +68,20 @@ async def test_chat_completions_service_unavailable():
             logger=logger,
             request_queue=request_queue,
             server_state=server_state,
-            worker_task=worker_task
+            worker_task=worker_task,
         )
     assert excinfo.value.status_code == 503
+
 
 @pytest.mark.asyncio
 async def test_chat_completions_timeout():
     # Mock asyncio.wait_for to raise TimeoutError immediately
     async def mock_wait_for(fut, timeout):
         raise asyncio.TimeoutError()
-    
-    request = ChatCompletionRequest(messages=[{"role": "user", "content": "hello"}], model="gpt-4")
+
+    request = ChatCompletionRequest(
+        messages=[{"role": "user", "content": "hello"}], model="gpt-4"
+    )
     http_request = MagicMock()
     logger = MagicMock()
     request_queue = asyncio.Queue()
@@ -78,7 +89,7 @@ async def test_chat_completions_timeout():
         "is_initializing": False,
         "is_playwright_ready": True,
         "is_page_ready": True,
-        "is_browser_connected": True
+        "is_browser_connected": True,
     }
     worker_task = MagicMock()
     worker_task.done.return_value = False
@@ -91,13 +102,16 @@ async def test_chat_completions_timeout():
                 logger=logger,
                 request_queue=request_queue,
                 server_state=server_state,
-                worker_task=worker_task
+                worker_task=worker_task,
             )
     assert excinfo.value.status_code == 504
 
+
 @pytest.mark.asyncio
 async def test_chat_completions_cancelled():
-    request = ChatCompletionRequest(messages=[{"role": "user", "content": "hello"}], model="gpt-4")
+    request = ChatCompletionRequest(
+        messages=[{"role": "user", "content": "hello"}], model="gpt-4"
+    )
     http_request = MagicMock()
     logger = MagicMock()
     request_queue = asyncio.Queue()
@@ -105,7 +119,7 @@ async def test_chat_completions_cancelled():
         "is_initializing": False,
         "is_playwright_ready": True,
         "is_page_ready": True,
-        "is_browser_connected": True
+        "is_browser_connected": True,
     }
     worker_task = MagicMock()
     worker_task.done.return_value = False
@@ -124,6 +138,6 @@ async def test_chat_completions_cancelled():
             logger=logger,
             request_queue=request_queue,
             server_state=server_state,
-            worker_task=worker_task
+            worker_task=worker_task,
         )
     assert excinfo.value.status_code == 499

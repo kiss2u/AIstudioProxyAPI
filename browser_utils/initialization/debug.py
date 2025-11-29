@@ -1,8 +1,10 @@
 # --- browser_utils/initialization/debug.py ---
 import logging
+
 from playwright.async_api import Page as AsyncPage
 
 logger = logging.getLogger("AIStudioProxyServer")
+
 
 def setup_debug_listeners(page: AsyncPage) -> None:
     """
@@ -15,8 +17,9 @@ def setup_debug_listeners(page: AsyncPage) -> None:
     Args:
         page: Playwright page instance to attach listeners to
     """
-    import server
     from datetime import datetime, timezone
+
+    import server
 
     def handle_console(msg):
         """Handle console messages from the browser."""
@@ -29,12 +32,14 @@ def setup_debug_listeners(page: AsyncPage) -> None:
                 if url or line:
                     location_str = f"{url}:{line}"
 
-            server.console_logs.append({
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "type": msg.type,
-                "text": msg.text,
-                "location": location_str
-            })
+            server.console_logs.append(
+                {
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "type": msg.type,
+                    "text": msg.text,
+                    "location": location_str,
+                }
+            )
 
             # Log errors to our logger as well
             if msg.type == "error":
@@ -48,15 +53,20 @@ def setup_debug_listeners(page: AsyncPage) -> None:
         try:
             # Only log relevant requests (skip static assets, images, etc.)
             url_lower = request.url.lower()
-            if any(ext in url_lower for ext in ['.png', '.jpg', '.jpeg', '.gif', '.css', '.woff', '.woff2']):
+            if any(
+                ext in url_lower
+                for ext in [".png", ".jpg", ".jpeg", ".gif", ".css", ".woff", ".woff2"]
+            ):
                 return  # Skip static assets
 
-            server.network_log["requests"].append({
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "url": request.url,
-                "method": request.method,
-                "resource_type": request.resource_type,
-            })
+            server.network_log["requests"].append(
+                {
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "url": request.url,
+                    "method": request.method,
+                    "resource_type": request.resource_type,
+                }
+            )
         except Exception as e:
             logger.error(f"Failed to capture network request: {e}")
 
@@ -65,15 +75,20 @@ def setup_debug_listeners(page: AsyncPage) -> None:
         try:
             # Only log relevant responses
             url_lower = response.url.lower()
-            if any(ext in url_lower for ext in ['.png', '.jpg', '.jpeg', '.gif', '.css', '.woff', '.woff2']):
+            if any(
+                ext in url_lower
+                for ext in [".png", ".jpg", ".jpeg", ".gif", ".css", ".woff", ".woff2"]
+            ):
                 return  # Skip static assets
 
-            server.network_log["responses"].append({
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "url": response.url,
-                "status": response.status,
-                "status_text": response.status_text,
-            })
+            server.network_log["responses"].append(
+                {
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "url": response.url,
+                    "status": response.status,
+                    "status_text": response.status_text,
+                }
+            )
         except Exception as e:
             logger.error(f"Failed to capture network response: {e}")
 
@@ -82,4 +97,4 @@ def setup_debug_listeners(page: AsyncPage) -> None:
     page.on("request", handle_request)
     page.on("response", handle_response)
 
-    logger.info("   ✅ Debug listeners (console + network) attached to page")
+    logger.info("   Debug listeners (console + network) attached to page")

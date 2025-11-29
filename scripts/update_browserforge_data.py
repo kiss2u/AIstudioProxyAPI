@@ -1,4 +1,4 @@
-from browserforge.download import Download, Remove, REMOTE_PATHS
+from browserforge.download import REMOTE_PATHS, Download, Remove
 
 # Modify REMOTE_PATHS directly
 REMOTE_PATHS["headers"] = (

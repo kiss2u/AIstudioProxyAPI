@@ -11,16 +11,16 @@ Created: 2025-11-21
 Purpose: Fix headless mode debugging and client disconnect issues
 """
 
-import asyncio
 import json
 import logging
 import os
 import traceback
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
-from playwright.async_api import Page as AsyncPage, Locator
+from playwright.async_api import Locator
+from playwright.async_api import Page as AsyncPage
 
 logger = logging.getLogger("AIStudioProxyServer")
 
@@ -126,7 +126,7 @@ async def capture_dom_structure(page: AsyncPage) -> str:
             }
 
             return getTreeStructure(document.body);
-        }()""")
+        }""")
 
         return dom_tree
     except Exception as e:
@@ -152,9 +152,10 @@ async def capture_system_context(
         Dict containing comprehensive system context
     """
     # Import server locally to avoid circular dependency
-    import server
     import platform
     import sys
+
+    import server
 
     iso_time, texas_time = get_texas_timestamp()
 
@@ -166,8 +167,8 @@ async def capture_system_context(
             return -1  # Some queue types (like multiprocessing.Queue on macOS) might not support qsize
 
     # Helper to safely check lock state
-    def is_locked(l: Any) -> bool:
-        return l.locked() if l else False
+    def is_locked(lock: Any) -> bool:
+        return lock.locked() if lock else False
 
     # Helper to sanitize proxy settings
     def _sanitize_proxy(settings: Optional[Dict[str, str]]) -> Optional[Dict[str, str]]:
@@ -416,7 +417,9 @@ async def save_comprehensive_snapshot(
         )
         return ""
 
-    logger.info(f"{log_prefix} 💾 Saving comprehensive error snapshot ({error_name})...")
+    logger.info(
+        f"{log_prefix} Saving comprehensive error snapshot ({error_name})..."
+    )
 
     # Get timestamps
     iso_timestamp, human_timestamp = get_texas_timestamp()
@@ -432,15 +435,17 @@ async def save_comprehensive_snapshot(
     try:
         # Create directory structure
         snapshot_dir.mkdir(parents=True, exist_ok=True)
-        logger.info(f"{log_prefix}   📁 Created snapshot directory: {snapshot_dir}")
+        logger.info(f"{log_prefix}   Created snapshot directory: {snapshot_dir}")
 
         # === 1. Screenshot ===
         screenshot_path = snapshot_dir / "screenshot.png"
         try:
-            await page.screenshot(path=str(screenshot_path), full_page=True, timeout=15000)
-            logger.info(f"{log_prefix}   ✅ Screenshot saved")
+            await page.screenshot(
+                path=str(screenshot_path), full_page=True, timeout=15000
+            )
+            logger.info(f"{log_prefix}   Screenshot saved")
         except Exception as ss_err:
-            logger.error(f"{log_prefix}   ❌ Screenshot failed: {ss_err}")
+            logger.error(f"{log_prefix}   Screenshot failed: {ss_err}")
 
         # === 2. HTML Dump ===
         html_path = snapshot_dir / "dom_dump.html"
@@ -448,9 +453,9 @@ async def save_comprehensive_snapshot(
             content = await page.content()
             with open(html_path, "w", encoding="utf-8") as f:
                 f.write(content)
-            logger.info(f"{log_prefix}   ✅ HTML dump saved")
+            logger.info(f"{log_prefix}   HTML dump saved")
         except Exception as html_err:
-            logger.error(f"{log_prefix}   ❌ HTML dump failed: {html_err}")
+            logger.error(f"{log_prefix}   HTML dump failed: {html_err}")
 
         # === 3. DOM Structure (Human-Readable) ===
         dom_structure_path = snapshot_dir / "dom_structure.txt"
@@ -458,9 +463,9 @@ async def save_comprehensive_snapshot(
             dom_tree = await capture_dom_structure(page)
             with open(dom_structure_path, "w", encoding="utf-8") as f:
                 f.write(dom_tree)
-            logger.info(f"{log_prefix}   ✅ DOM structure saved")
+            logger.info(f"{log_prefix}   DOM structure saved")
         except Exception as dom_err:
-            logger.error(f"{log_prefix}   ❌ DOM structure failed: {dom_err}")
+            logger.error(f"{log_prefix}   DOM structure failed: {dom_err}")
 
         # === 4. Console Logs ===
         console_logs_path = snapshot_dir / "console_logs.txt"
@@ -483,14 +488,14 @@ async def save_comprehensive_snapshot(
                         f.write("\n")
 
                 logger.info(
-                    f"{log_prefix}   ✅ Console logs saved ({len(console_logs)} entries)"
+                    f"{log_prefix}   Console logs saved ({len(console_logs)} entries)"
                 )
             else:
                 with open(console_logs_path, "w", encoding="utf-8") as f:
                     f.write("No console logs captured.\n")
-                logger.info(f"{log_prefix}   ℹ️ No console logs available")
+                logger.info(f"{log_prefix}   No console logs available")
         except Exception as console_err:
-            logger.error(f"{log_prefix}   ❌ Console logs failed: {console_err}")
+            logger.error(f"{log_prefix}   Console logs failed: {console_err}")
 
         # === 5. Network Requests ===
         network_path = snapshot_dir / "network_requests.json"
@@ -503,10 +508,10 @@ async def save_comprehensive_snapshot(
             req_count = len(network_log.get("requests", []))
             resp_count = len(network_log.get("responses", []))
             logger.info(
-                f"{log_prefix}   ✅ Network log saved ({req_count} reqs, {resp_count} resps)"
+                f"{log_prefix}   Network log saved ({req_count} reqs, {resp_count} resps)"
             )
         except Exception as net_err:
-            logger.error(f"{log_prefix}   ❌ Network log failed: {net_err}")
+            logger.error(f"{log_prefix}   Network log failed: {net_err}")
 
         # === 6. Playwright State ===
         playwright_state_path = snapshot_dir / "playwright_state.json"
@@ -514,9 +519,9 @@ async def save_comprehensive_snapshot(
             pw_state = await capture_playwright_state(page, locators)
             with open(playwright_state_path, "w", encoding="utf-8") as f:
                 json.dump(pw_state, f, indent=2, ensure_ascii=False)
-            logger.info(f"{log_prefix}   ✅ Playwright state saved")
+            logger.info(f"{log_prefix}   Playwright state saved")
         except Exception as pw_err:
-            logger.error(f"{log_prefix}   ❌ Playwright state failed: {pw_err}")
+            logger.error(f"{log_prefix}   Playwright state failed: {pw_err}")
 
         # === 7. System Context (LLM Context) ===
         context_path = snapshot_dir / "llm.json"
@@ -524,9 +529,9 @@ async def save_comprehensive_snapshot(
             system_context = await capture_system_context(req_id, error_name)
             with open(context_path, "w", encoding="utf-8") as f:
                 json.dump(system_context, f, indent=2, ensure_ascii=False)
-            logger.info(f"{log_prefix}   ✅ LLM context saved")
+            logger.info(f"{log_prefix}   LLM context saved")
         except Exception as ctx_err:
-            logger.error(f"{log_prefix}   ❌ LLM context failed: {ctx_err}")
+            logger.error(f"{log_prefix}   LLM context failed: {ctx_err}")
 
         # === 8. Metadata ===
         metadata_path = snapshot_dir / "metadata.json"
@@ -568,37 +573,45 @@ async def save_comprehensive_snapshot(
 
             with open(metadata_path, "w", encoding="utf-8") as f:
                 json.dump(metadata, f, indent=2, ensure_ascii=False)
-            logger.info(f"{log_prefix}   ✅ Metadata saved")
+            logger.info(f"{log_prefix}   Metadata saved")
         except Exception as meta_err:
-            logger.error(f"{log_prefix}   ❌ Metadata failed: {meta_err}")
+            logger.error(f"{log_prefix}   Metadata failed: {meta_err}")
 
         logger.info(
-            f"{log_prefix} 🎉 Comprehensive snapshot complete: {snapshot_dir.name}"
+            f"{log_prefix} Comprehensive snapshot complete: {snapshot_dir.name}"
         )
         return str(snapshot_dir)
 
     except Exception as e:
         logger.error(
-            f"{log_prefix} ❌ Failed to create snapshot directory: {e}", exc_info=True
+            f"{log_prefix} Failed to create snapshot directory: {e}", exc_info=True
         )
         return ""
 
 
-async def save_error_snapshot_legacy(error_name: str = "error") -> None:
+async def save_error_snapshot_enhanced(
+    error_name: str = "error",
+    error_exception: Optional[Exception] = None,
+    error_stage: str = "",
+    additional_context: Optional[Dict[str, Any]] = None,
+    locators: Optional[Dict[str, Locator]] = None,
+) -> None:
     """
-    Legacy error snapshot function for backward compatibility.
+    Enhanced error snapshot function supporting rich context capture.
 
-    This function maintains the old interface but uses the new comprehensive
-    snapshot system internally.
-
-    DEPRECATED: Use save_comprehensive_snapshot() instead for full features.
+    This function bridges the simple interface with the comprehensive snapshot system,
+    allowing callers to pass exception objects and locator states for debugging.
 
     Args:
-        error_name: Error name with optional req_id suffix (e.g., "error_hbfu521")
+        error_name: Error name with optional req_id suffix (e.g., "clear_chat_error_hbfu521")
+        error_exception: The exception that triggered the snapshot (optional)
+        error_stage: Description of the error stage (optional)
+        additional_context: Extra context dict to include in metadata (optional)
+        locators: Dict of named locators to capture states for (optional)
     """
     import server
 
-    # Parse req_id from error_name if present
+    # Parse req_id from error_name if present (format: "error_name_req_id")
     name_parts = error_name.split("_")
     req_id = (
         name_parts[-1]
@@ -610,21 +623,54 @@ async def save_error_snapshot_legacy(error_name: str = "error") -> None:
     page_to_snapshot = server.page_instance
 
     if (
-        not server.browser_instance
+        not hasattr(server, "browser_instance")
+        or not server.browser_instance
         or not server.browser_instance.is_connected()
         or not page_to_snapshot
         or page_to_snapshot.is_closed()
     ):
         logger.warning(
-            f"[{req_id}] Cannot save legacy snapshot ({base_error_name}), browser/page unavailable."
+            f"[{req_id}] Cannot save snapshot ({base_error_name}), browser/page unavailable."
         )
         return
 
-    # Call new comprehensive snapshot
+    # Merge additional context with exception info
+    merged_context = additional_context.copy() if additional_context else {}
+
+    # Add exception details to context if provided
+    if error_exception:
+        merged_context["exception_type"] = type(error_exception).__name__
+        merged_context["exception_message"] = str(error_exception)
+        # Include args if available (some exceptions store useful info here)
+        if hasattr(error_exception, "args") and error_exception.args:
+            merged_context["exception_args"] = [
+                str(a) for a in error_exception.args[:3]
+            ]
+
+    # Call comprehensive snapshot with all context
     await save_comprehensive_snapshot(
         page=page_to_snapshot,
         error_name=base_error_name,
         req_id=req_id,
+        error_stage=error_stage or "Enhanced snapshot call",
+        additional_context=merged_context if merged_context else None,
+        locators=locators,
+        error_exception=error_exception,
+    )
+
+
+async def save_error_snapshot_legacy(error_name: str = "error") -> None:
+    """
+    Legacy error snapshot function for backward compatibility.
+
+    DEPRECATED: Use save_error_snapshot_enhanced() or save_comprehensive_snapshot() instead.
+
+    Args:
+        error_name: Error name with optional req_id suffix (e.g., "error_hbfu521")
+    """
+    # Delegate to enhanced function with minimal context
+    await save_error_snapshot_enhanced(
+        error_name=error_name,
         error_stage="Legacy snapshot call",
         additional_context={"legacy_call": True},
     )

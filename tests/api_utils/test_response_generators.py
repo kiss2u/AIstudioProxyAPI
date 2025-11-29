@@ -1,219 +1,315 @@
-import pytest
-import asyncio
 import json
-from unittest.mock import AsyncMock, Mock, patch
 from asyncio import Event
+from unittest.mock import AsyncMock, MagicMock, patch
 
-from api_utils.response_generators import gen_sse_from_aux_stream, gen_sse_from_playwright
-from models import ChatCompletionRequest, ClientDisconnectedError, Message
+import pytest
+
+from api_utils.response_generators import (
+    gen_sse_from_aux_stream,
+    gen_sse_from_playwright,
+)
+from models import ChatCompletionRequest, ClientDisconnectedError
+
 
 @pytest.fixture
 def mock_request():
-    return ChatCompletionRequest(
-        messages=[Message(role="user", content="test")],
-        model="test-model"
-    )
+    req = MagicMock(spec=ChatCompletionRequest)
+    req.messages = [MagicMock(model_dump=lambda: {"role": "user", "content": "hi"})]
+    return req
 
-@pytest.fixture
-def mock_check_disconnected():
-    return Mock()
 
 @pytest.fixture
 def mock_event():
     return Event()
 
+
+@pytest.fixture
+def mock_check_disconnect():
+    return MagicMock()
+
+
 @pytest.mark.asyncio
-async def test_gen_sse_from_aux_stream_success(mock_request, mock_check_disconnected, mock_event):
-    """Test successful SSE generation from auxiliary stream."""
-    req_id = "test-req-id"
+async def test_gen_sse_from_aux_stream_basic_flow(
+    mock_request, mock_event, mock_check_disconnect
+):
+    """Test basic flow with body content and completion."""
+    req_id = "test_req"
     model_name = "test-model"
-    
-    # Mock stream data
+
+    # Mock data stream
     stream_data = [
-        json.dumps({"reason": "Thinking...", "body": "", "done": False}),
-        json.dumps({"reason": "Thinking...", "body": "Hello", "done": False}),
-        json.dumps({"reason": "Thinking...", "body": "Hello World", "done": True})
+        json.dumps({"body": "Hello", "reason": "", "done": False}),
+        json.dumps({"body": "Hello World", "reason": "", "done": False}),
+        json.dumps({"body": "Hello World", "reason": "", "done": True}),
     ]
-    
-    async def mock_stream_generator(req_id):
-        for data in stream_data:
-            yield data
-            
-    with patch("api_utils.response_generators.use_stream_response", side_effect=mock_stream_generator):
+
+    async def mock_stream_gen(rid):
+        for item in stream_data:
+            yield item
+
+    with (
+        patch(
+            "api_utils.response_generators.use_stream_response",
+            side_effect=mock_stream_gen,
+        ),
+        patch(
+            "api_utils.response_generators.calculate_usage_stats",
+            return_value={"total_tokens": 10},
+        ),
+    ):
         chunks = []
         async for chunk in gen_sse_from_aux_stream(
-            req_id, mock_request, model_name, mock_check_disconnected, mock_event
+            req_id, mock_request, model_name, mock_check_disconnect, mock_event
         ):
             chunks.append(chunk)
-            
-        assert len(chunks) > 0
-        assert mock_event.is_set()
-        
-        # Verify content in chunks
-        content_found = False
-        for chunk in chunks:
-            if "Hello" in chunk:
-                content_found = True
-                break
-        assert content_found
+
+    # Verify chunks
+    # We expect:
+    # 1. Chunk with "Hello"
+    # 2. Chunk with " World"
+    # 3. Stop chunk (finish_reason="stop")
+    # 4. Usage chunk
+    # 5. [DONE]
+
+    assert len(chunks) >= 3
+    assert "Hello" in chunks[0]
+    assert "World" in chunks[1]
+    assert "[DONE]" in chunks[-1]
+    assert mock_event.is_set()
+
 
 @pytest.mark.asyncio
-async def test_gen_sse_from_aux_stream_client_disconnect(mock_request, mock_check_disconnected, mock_event):
-    """Test handling of client disconnection during stream."""
-    req_id = "test-req-id"
-    model_name = "test-model"
-    
-    # Mock check_disconnected to raise error on second call
-    mock_check_disconnected.side_effect = [None, ClientDisconnectedError("Disconnected")]
-    
-    async def mock_stream_generator(req_id):
-        yield json.dumps({"body": "chunk1"})
-        yield json.dumps({"body": "chunk2"})
-            
-    with patch("api_utils.response_generators.use_stream_response", side_effect=mock_stream_generator):
+async def test_gen_sse_from_aux_stream_reasoning(
+    mock_request, mock_event, mock_check_disconnect
+):
+    """Test flow with reasoning content."""
+    req_id = "test_req_reason"
+
+    stream_data = [
+        {"reason": "Thinking...", "body": "", "done": False},
+        {"reason": "Thinking... Done.", "body": "", "done": False},
+        {"reason": "", "body": "Answer", "done": True},
+    ]
+
+    async def mock_stream_gen(rid):
+        for item in stream_data:
+            yield item
+
+    with (
+        patch(
+            "api_utils.response_generators.use_stream_response",
+            side_effect=mock_stream_gen,
+        ),
+        patch(
+            "api_utils.response_generators.calculate_usage_stats",
+            return_value={"total_tokens": 10},
+        ),
+    ):
         chunks = []
         async for chunk in gen_sse_from_aux_stream(
-            req_id, mock_request, model_name, mock_check_disconnected, mock_event
+            req_id, mock_request, "model", mock_check_disconnect, mock_event
         ):
             chunks.append(chunk)
-            
-        # Should have stopped early and set event
-        assert mock_event.is_set()
+
+    # First chunk should have reasoning_content "Thinking..."
+    # Second chunk should have delta reasoning_content " Done." (diff)
+
+    chunk1_data = json.loads(chunks[0].replace("data: ", "").strip())
+    assert chunk1_data["choices"][0]["delta"]["reasoning_content"] == "Thinking..."
+
+    chunk2_data = json.loads(chunks[1].replace("data: ", "").strip())
+    assert chunk2_data["choices"][0]["delta"]["reasoning_content"] == " Done."
+
 
 @pytest.mark.asyncio
-async def test_gen_sse_from_aux_stream_json_error(mock_request, mock_check_disconnected, mock_event):
+async def test_gen_sse_from_aux_stream_tool_calls(
+    mock_request, mock_event, mock_check_disconnect
+):
+    """Test flow with tool calls."""
+    req_id = "test_req_tool"
+
+    function_data = [{"name": "get_weather", "params": {"location": "NYC"}}]
+
+    stream_data = [{"body": "", "reason": "", "done": True, "function": function_data}]
+
+    async def mock_stream_gen(rid):
+        for item in stream_data:
+            yield item
+
+    with (
+        patch(
+            "api_utils.response_generators.use_stream_response",
+            side_effect=mock_stream_gen,
+        ),
+        patch(
+            "api_utils.response_generators.calculate_usage_stats",
+            return_value={"total_tokens": 10},
+        ),
+        patch("api_utils.response_generators.random_id", return_value="123"),
+    ):
+        chunks = []
+        async for chunk in gen_sse_from_aux_stream(
+            req_id, mock_request, "model", mock_check_disconnect, mock_event
+        ):
+            chunks.append(chunk)
+
+    # Check for tool call chunk
+    found_tool = False
+    for chunk in chunks:
+        if "[DONE]" in chunk:
+            continue
+        data = json.loads(chunk.replace("data: ", "").strip())
+        delta = data["choices"][0]["delta"]
+        if "tool_calls" in delta:
+            found_tool = True
+            tool = delta["tool_calls"][0]
+            assert tool["function"]["name"] == "get_weather"
+            assert "NYC" in tool["function"]["arguments"]
+            assert data["choices"][0]["finish_reason"] == "tool_calls"
+
+    assert found_tool
+
+
+@pytest.mark.asyncio
+async def test_gen_sse_from_aux_stream_disconnect(mock_request, mock_event):
+    """Test client disconnect handling."""
+    req_id = "test_req_disc"
+
+    # Mock disconnect checker to raise error on second call
+    mock_check = MagicMock()
+    mock_check.side_effect = [None, ClientDisconnectedError("Disconnected")]
+
+    stream_data = [{"body": "1"}, {"body": "2"}]  # infinite stream effectively
+
+    async def mock_stream_gen(rid):
+        for item in stream_data:
+            yield item
+
+    with patch(
+        "api_utils.response_generators.use_stream_response", side_effect=mock_stream_gen
+    ):
+        chunks = []
+        async for chunk in gen_sse_from_aux_stream(
+            req_id, mock_request, "model", mock_check, mock_event
+        ):
+            chunks.append(chunk)
+
+    # Should stop early and set event
+    assert mock_event.is_set()
+    # Should contain logs about disconnect (verified via coverage/logic)
+
+
+@pytest.mark.asyncio
+async def test_gen_sse_from_aux_stream_invalid_json(
+    mock_request, mock_event, mock_check_disconnect
+):
     """Test handling of invalid JSON in stream."""
-    req_id = "test-req-id"
-    model_name = "test-model"
-    
-    async def mock_stream_generator(req_id):
-        yield "invalid-json"
-        yield json.dumps({"body": "valid", "done": True})
-            
-    with patch("api_utils.response_generators.use_stream_response", side_effect=mock_stream_generator):
+    req_id = "test_req_invalid"
+
+    stream_data = ["invalid json", json.dumps({"body": "Valid"})]
+
+    async def mock_stream_gen(rid):
+        for item in stream_data:
+            yield item
+
+    with patch(
+        "api_utils.response_generators.use_stream_response", side_effect=mock_stream_gen
+    ):
         chunks = []
         async for chunk in gen_sse_from_aux_stream(
-            req_id, mock_request, model_name, mock_check_disconnected, mock_event
+            req_id, mock_request, "model", mock_check_disconnect, mock_event
         ):
             chunks.append(chunk)
-            
-        assert len(chunks) > 0
-        assert mock_event.is_set()
+
+    # Should skip invalid and process valid
+    assert len(chunks) >= 1
+    assert "Valid" in chunks[0]
+
 
 @pytest.mark.asyncio
-async def test_gen_sse_from_aux_stream_tool_calls(mock_request, mock_check_disconnected, mock_event):
-    """Test SSE generation with tool calls."""
-    req_id = "test-req-id"
-    model_name = "test-model"
-    
-    tool_data = {
-        "body": "Calling tool",
-        "done": True,
-        "function": [{
-            "name": "test_tool",
-            "params": {"arg": "value"}
-        }]
-    }
-    
-    async def mock_stream_generator(req_id):
-        yield json.dumps(tool_data)
-            
-    with patch("api_utils.response_generators.use_stream_response", side_effect=mock_stream_generator):
-        chunks = []
-        async for chunk in gen_sse_from_aux_stream(
-            req_id, mock_request, model_name, mock_check_disconnected, mock_event
-        ):
-            chunks.append(chunk)
-            
-        # Verify tool call in chunks
-        tool_call_found = False
-        for chunk in chunks:
-            if "tool_calls" in chunk and "test_tool" in chunk:
-                tool_call_found = True
-                break
-        assert tool_call_found
-
-@pytest.mark.asyncio
-async def test_gen_sse_from_playwright_success(mock_request, mock_check_disconnected, mock_event):
-    """Test successful SSE generation from Playwright."""
-    req_id = "test-req-id"
-    model_name = "test-model"
+async def test_gen_sse_from_playwright_success(
+    mock_request, mock_event, mock_check_disconnect
+):
+    """Test success flow for Playwright generator."""
+    req_id = "test_req_pw"
     mock_page = AsyncMock()
-    mock_logger = Mock()
-    
-    # The PageController is imported inside the function, so we need to patch it where it's imported
-    # or patch the class in the module where it's defined if it's imported directly.
-    # In api_utils/response_generators.py: from browser_utils.page_controller import PageController
-    with patch("browser_utils.page_controller.PageController") as MockController:
-        mock_instance = MockController.return_value
-        mock_instance.get_response = AsyncMock(return_value="Test response content")
-        
+    mock_logger = MagicMock()
+
+    with (
+        patch("browser_utils.page_controller.PageController") as MockPC,
+        patch(
+            "api_utils.response_generators.calculate_usage_stats",
+            return_value={"tokens": 5},
+        ),
+    ):
+        instance = MockPC.return_value
+        instance.get_response = AsyncMock(return_value="Line 1\nLine 2")
+
         chunks = []
         async for chunk in gen_sse_from_playwright(
-            mock_page, mock_logger, req_id, model_name, mock_request,
-            mock_check_disconnected, mock_event
+            mock_page,
+            mock_logger,
+            req_id,
+            "model",
+            mock_request,
+            mock_check_disconnect,
+            mock_event,
         ):
             chunks.append(chunk)
-            
-        assert len(chunks) > 0
-        assert mock_event.is_set()
-        
-        # Verify content
-        content_found = False
-        for chunk in chunks:
-            if "Test response content" in chunk or "Test" in chunk: # Chunked
-                content_found = True
-                break
-        assert content_found
+
+    # Should chunk the response
+    # "Line 1" -> chunks (size 5) -> "Line ", "1"
+    # "\n"
+    # "Line 2" -> "Line ", "2"
+    # Stop chunk
+
+    content_parts = []
+    for c in chunks:
+        if "[DONE]" in c:
+            continue
+        try:
+            data = json.loads(c.replace("data: ", "").strip())
+            if "choices" in data and len(data["choices"]) > 0:
+                delta = data["choices"][0].get("delta", {})
+                if "content" in delta and delta["content"]:
+                    content_parts.append(delta["content"])
+        except json.JSONDecodeError:
+            continue
+
+    content = "".join(content_parts)
+
+    assert "Line 1\nLine 2" in content
+    assert mock_event.is_set()
+
 
 @pytest.mark.asyncio
-async def test_gen_sse_from_playwright_disconnect(mock_request, mock_check_disconnected, mock_event):
-    """Test client disconnect during Playwright generation."""
-    req_id = "test-req-id"
-    model_name = "test-model"
+async def test_gen_sse_from_playwright_exception(
+    mock_request, mock_event, mock_check_disconnect
+):
+    """Test exception handling in Playwright generator."""
+    req_id = "test_req_pw_err"
     mock_page = AsyncMock()
-    mock_logger = Mock()
-    
-    # Mock check_disconnected to raise error
-    mock_check_disconnected.side_effect = ClientDisconnectedError("Disconnected")
-    
-    with patch("browser_utils.page_controller.PageController") as MockController:
-        mock_instance = MockController.return_value
-        mock_instance.get_response = AsyncMock(return_value="Test response")
-        
-        chunks = []
-        async for chunk in gen_sse_from_playwright(
-            mock_page, mock_logger, req_id, model_name, mock_request,
-            mock_check_disconnected, mock_event
-        ):
-            chunks.append(chunk)
-            
-        assert mock_event.is_set()
+    mock_logger = MagicMock()
 
-@pytest.mark.asyncio
-async def test_gen_sse_from_playwright_error(mock_request, mock_check_disconnected, mock_event):
-    """Test error handling in Playwright generation."""
-    req_id = "test-req-id"
-    model_name = "test-model"
-    mock_page = AsyncMock()
-    mock_logger = Mock()
-    
-    with patch("browser_utils.page_controller.PageController") as MockController:
-        mock_instance = MockController.return_value
-        mock_instance.get_response = AsyncMock(side_effect=Exception("Page error"))
-        
+    with patch("browser_utils.page_controller.PageController") as MockPC:
+        instance = MockPC.return_value
+        instance.get_response = AsyncMock(side_effect=Exception("Page Error"))
+
         chunks = []
         async for chunk in gen_sse_from_playwright(
-            mock_page, mock_logger, req_id, model_name, mock_request,
-            mock_check_disconnected, mock_event
+            mock_page,
+            mock_logger,
+            req_id,
+            "model",
+            mock_request,
+            mock_check_disconnect,
+            mock_event,
         ):
             chunks.append(chunk)
-            
-        # Should contain error message
-        error_found = False
-        for chunk in chunks:
-            if "Page error" in chunk:
-                error_found = True
-                break
-        assert error_found
-        assert mock_event.is_set()
+
+    # Should yield error chunk
+    error_chunk_str = chunks[0].replace("data: ", "").strip()
+    error_chunk = json.loads(error_chunk_str)
+    content = error_chunk["choices"][0]["delta"]["content"]
+    assert "[错误: Page Error]" in content
+    assert mock_event.is_set()

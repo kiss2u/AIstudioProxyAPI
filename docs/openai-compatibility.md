@@ -59,7 +59,7 @@ AI Studio Proxy API 旨在提供与 OpenAI API 最大程度的兼容性，使现
 
 | 参数 | 类型 | 说明 | 限制 |
 |------|------|------|------|
-| `reasoning_effort` | String/Number | 思考模式和预算控制 | 自定义参数，支持 `"low"`, `"medium"`, `"high"`, 数值，`0` (关闭)，`"none"` (不限制) |
+| `reasoning_effort` | String/Number | 思考模式和预算控制 | 自定义参数，支持 `"low"`, `"high"`, 数值，`0` (关闭)，`"none"` (不限制) |
 | `tools` | Array | 函数调用工具定义 | 支持 Google Search 工具，自定义工具支持有限 |
 | `tool_choice` | String/Object | 工具选择策略 | 支持 `"auto"`, `"none"` |
 | `response_format` | Object | 响应格式 | 部分支持，取决于 AI Studio 能力 |

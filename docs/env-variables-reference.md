@@ -70,7 +70,7 @@
 ### UNIFIED_PROXY_CONFIG
 - **用途**: 统一代理配置（优先级高于 HTTP_PROXY/HTTPS_PROXY）
 - **类型**: 字符串 (URL)
-- **默认值**: `http://127.0.0.1:7890`
+- **默认值**: `空`
 - **示例**: `UNIFIED_PROXY_CONFIG=socks5://127.0.0.1:1080`
 - **说明**: 推荐使用此配置，会同时应用到 HTTP 和 HTTPS 请求
 
@@ -314,15 +314,15 @@
 ### CLEAR_CHAT_VERIFY_TIMEOUT_MS
 - **用途**: 清空聊天验证超时
 - **类型**: 整数（毫秒）
-- **默认值**: `4000`
-- **示例**: `CLEAR_CHAT_VERIFY_TIMEOUT_MS=5000`
+- **默认值**: `5000`
+- **示例**: `CLEAR_CHAT_VERIFY_TIMEOUT_MS=6000`
 - **说明**: 验证聊天是否已清空的超时时间
 
 ### CLEAR_CHAT_VERIFY_INTERVAL_MS
 - **用途**: 清空聊天验证间隔
 - **类型**: 整数（毫秒）
-- **默认值**: `4000`
-- **示例**: `CLEAR_CHAT_VERIFY_INTERVAL_MS=2000`
+- **默认值**: `2000`
+- **示例**: `CLEAR_CHAT_VERIFY_INTERVAL_MS=1000`
 - **说明**: 检查聊天是否已清空的间隔
 
 ### CLICK_TIMEOUT_MS
@@ -389,7 +389,7 @@
 ### USERSCRIPT_PATH
 - **用途**: 油猴脚本文件路径
 - **类型**: 字符串（相对路径）
-- **默认值**: `browser_utils/more_modles.js`
+- **默认值**: `browser_utils/more_models.js`
 - **示例**: `USERSCRIPT_PATH=custom_scripts/my_script.js`
 - **说明**: 相对于项目根目录的脚本文件路径
 

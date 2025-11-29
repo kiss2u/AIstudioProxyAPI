@@ -1,17 +1,20 @@
 import os
 from unittest.mock import patch
+
 from config.settings import (
-    get_environment_variable,
     get_boolean_env,
+    get_environment_variable,
     get_int_env,
 )
+
 
 def test_get_environment_variable():
     """Test getting environment variables."""
     with patch.dict(os.environ, {"TEST_VAR": "test_value"}):
         assert get_environment_variable("TEST_VAR") == "test_value"
-    
+
     assert get_environment_variable("NON_EXISTENT_VAR", "default") == "default"
+
 
 def test_get_boolean_env():
     """Test getting boolean environment variables."""
@@ -39,12 +42,13 @@ def test_get_boolean_env():
     assert get_boolean_env("NON_EXISTENT_BOOL", default=True) is True
     assert get_boolean_env("NON_EXISTENT_BOOL", default=False) is False
 
+
 def test_get_int_env():
     """Test getting integer environment variables."""
     with patch.dict(os.environ, {"INT_VAR": "123"}):
         assert get_int_env("INT_VAR") == 123
-    
+
     with patch.dict(os.environ, {"INT_VAR": "invalid"}):
         assert get_int_env("INT_VAR", default=10) == 10
-    
+
     assert get_int_env("NON_EXISTENT_INT", default=5) == 5

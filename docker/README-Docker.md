@@ -217,8 +217,11 @@ docker run -d \
 
 ```env
 # 服务端口配置
-# 注意：在 Docker 环境中，建议仅修改 docker-compose.yml 中的端口映射，
-# 而不要修改这里的内部端口默认值，以免造成映射错误。
+# 主机映射端口 (外部访问端口)
+HOST_FASTAPI_PORT=2048
+HOST_STREAM_PORT=3120
+
+# 容器内部端口 (通常无需修改)
 SERVER_PORT=2048
 DEFAULT_FASTAPI_PORT=2048
 STREAM_PORT=3120
@@ -240,7 +243,7 @@ AUTH_SAVE_TIMEOUT=30
 
 # 脚本注入配置
 ENABLE_SCRIPT_INJECTION=true
-USERSCRIPT_PATH=browser_utils/more_modles.js
+USERSCRIPT_PATH=browser_utils/more_models.js
 # 注意：MODEL_CONFIG_PATH 已废弃，现在直接从油猴脚本解析模型数据
 # 使用 Playwright 原生网络拦截
 
@@ -378,7 +381,7 @@ ENABLE_SCRIPT_INJECTION=true
 
 # 油猴脚本文件路径（容器内路径）
 # 模型数据直接从此脚本文件中解析，无需额外配置文件
-USERSCRIPT_PATH=browser_utils/more_modles.js
+USERSCRIPT_PATH=browser_utils/more_models.js
 ```
 
 ### 自定义脚本和模型配置
@@ -388,11 +391,11 @@ USERSCRIPT_PATH=browser_utils/more_modles.js
 1. **自定义脚本配置**：
    ```bash
    # 在主机上创建自定义脚本文件
-   cp browser_utils/more_modles.js browser_utils/my_script.js
+   cp browser_utils/more_models.js browser_utils/my_script.js
    # 编辑 my_script.js 中的 MODELS_TO_INJECT 数组
 
    # 在 docker-compose.yml 中取消注释并修改挂载行：
-   # - ../browser_utils/my_script.js:/app/browser_utils/more_modles.js:ro
+   # - ../browser_utils/my_script.js:/app/browser_utils/more_models.js:ro
 
    # 或者在 .env 中修改路径：
    # USERSCRIPT_PATH=browser_utils/my_script.js

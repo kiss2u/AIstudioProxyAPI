@@ -60,7 +60,7 @@ cp -r browser_utils/model_configs/ browser_utils/model_configs_backup/
 ENABLE_SCRIPT_INJECTION=true
 
 # 油猴脚本文件路径（v2.0 只需要这一个配置）
-USERSCRIPT_PATH=browser_utils/more_modles.js
+USERSCRIPT_PATH=browser_utils/more_models.js
 ```
 
 ### 4. 移除旧配置文件
@@ -111,14 +111,14 @@ browser_utils/
 │   ├── model_a.json
 │   ├── model_b.json
 │   └── ...
-├── more_modles.js
+├── more_models.js
 └── script_manager.py
 ```
 
 **v2.0/v3.0 配置（简单）**:
 ```
 browser_utils/
-├── more_modles.js  # 只需要这一个文件
+├── more_models.js  # 只需要这一个文件
 └── script_manager.py
 ```
 
@@ -145,7 +145,7 @@ v2.0 完全兼容现有的油猴脚本格式，无需修改脚本内容。
 
 1. 检查脚本文件是否存在：
    ```bash
-   ls -la browser_utils/more_modles.js
+   ls -la browser_utils/more_models.js
    ```
 
 2. 检查配置是否正确：
@@ -175,7 +175,7 @@ v2.0 完全兼容现有的油猴脚本格式，无需修改脚本内容。
 
 1. 验证脚本语法：
    ```bash
-   node -c browser_utils/more_modles.js
+   node -c browser_utils/more_models.js
    ```
 
 2. 检查 `MODELS_TO_INJECT` 数组格式

@@ -146,7 +146,7 @@ deprecated-model-id
 # 启用脚本注入功能
 ENABLE_SCRIPT_INJECTION=true
 
-# 指定自定义脚本路径 (默认为 browser_utils/more_modles.js)
+# 指定自定义脚本路径 (默认为 browser_utils/more_models.js)
 USERSCRIPT_PATH=custom_scripts/my_enhanced_script.js
 ```
 

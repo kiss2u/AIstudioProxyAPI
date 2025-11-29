@@ -25,7 +25,7 @@ ENABLE_SCRIPT_INJECTION=true
 
 # 油猴脚本文件路径（相对于项目根目录）
 # 模型数据直接从此脚本文件中解析
-USERSCRIPT_PATH=browser_utils/more_modles.js
+USERSCRIPT_PATH=browser_utils/more_models.js
 ```
 
 ## 工作原理
@@ -56,7 +56,7 @@ ENABLE_SCRIPT_INJECTION=true
 
 ### 2. 准备脚本文件
 
-将您的油猴脚本放在 `browser_utils/more_modles.js`（或您在 `USERSCRIPT_PATH` 中指定的路径）。
+将您的油猴脚本放在 `browser_utils/more_models.js`（或您在 `USERSCRIPT_PATH` 中指定的路径）。
 
 **⚠️ 脚本文件必须存在，否则不会执行任何注入操作。**
 

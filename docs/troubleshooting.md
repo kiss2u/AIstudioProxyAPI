@@ -416,10 +416,10 @@ grep USERSCRIPT_PATH .env
 echo "ENABLE_SCRIPT_INJECTION=true" >> .env
 
 # 检查脚本文件是否存在
-ls -la browser_utils/more_modles.js
+ls -la browser_utils/more_models.js
 
 # 检查文件权限
-chmod 644 browser_utils/more_modles.js
+chmod 644 browser_utils/more_models.js
 ```
 
 ### 模型未显示在列表中
@@ -495,17 +495,17 @@ poetry run python launch_camoufox.py --debug
 
 ```bash
 # 检查脚本文件语法
-node -c browser_utils/more_modles.js
+node -c browser_utils/more_models.js
 ```
 
 **文件权限问题**:
 
 ```bash
 # 检查文件权限
-ls -la browser_utils/more_modles.js
+ls -la browser_utils/more_models.js
 
 # 修复权限
-chmod 644 browser_utils/more_modles.js
+chmod 644 browser_utils/more_models.js
 ```
 
 **脚本文件不存在**:
@@ -566,7 +566,7 @@ export ENABLE_SCRIPT_INJECTION=false
 poetry run python launch_camoufox.py --headless
 
 # 方法3：删除脚本文件（临时）
-mv browser_utils/more_modles.js browser_utils/more_modles.js.bak
+mv browser_utils/more_models.js browser_utils/more_models.js.bak
 ```
 
 ## 日志和调试
@@ -592,9 +592,18 @@ export DEBUG_LOGS_ENABLED=true
 export TRACE_LOGS_ENABLED=true
 ```
 
-### 错误快照
+### 综合错误快照 (Comprehensive Snapshots)
 
-出错时会自动在 `errors_py/` 目录保存截图和 HTML，这些文件对调试很有帮助。
+出错时系统会自动在 `errors_py/YYYY-MM-DD/` 目录下创建包含详细调试信息的目录。这些快照对于诊断复杂问题（如无头模式下的交互失败）至关重要。
+
+**快照内容包括**:
+1.  **screenshot.png**: 错误发生时的页面截图。
+2.  **dom_dump.html**: 完整的页面 HTML 源码。
+3.  **dom_structure.txt**: 人类可读的 DOM 树结构，便于分析元素层级。
+4.  **console_logs.txt**: 浏览器控制台日志（包含错误和警告）。
+5.  **network_requests.json**: 最近的网络请求和响应记录。
+6.  **playwright_state.json**: Playwright 内部状态（URL、视口、关键元素状态）。
+7.  **metadata.json**: 错误元数据（时间戳、错误类型、环境变量配置）。
 
 ## 性能问题
 

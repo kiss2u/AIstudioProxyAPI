@@ -4,13 +4,9 @@
 
 [![Star History Chart](https://api.star-history.com/svg?repos=CJackHwang/AIstudioProxyAPI&type=Date)](https://www.star-history.com/#CJackHwang/AIstudioProxyAPI&Date)
 
-This project is generously sponsored by ZMTO. Visit their website: [https://zmto.com/](https://zmto.com/)
-
-本项目由 ZMTO 慷慨赞助服务器支持。访问他们的网站：[https://zmto.com/](https://zmto.com/)
-
 ---
 
-## 致谢 (Acknowledgements)
+## 致谢
 
 本项目的诞生与发展，离不开以下个人、组织和社区的慷慨支持与智慧贡献：
 
@@ -29,15 +25,14 @@ This project is generously sponsored by ZMTO. Visit their website: [https://zmto
 
 ## 📊 兼容性矩阵
 
-| 组件 | 版本要求 | 推荐版本 | 说明 |
-|------|---------|---------|------|
-| **Python** | ≥3.9, <4.0 | 3.10+ 或 3.11+ | Docker 环境使用 3.10 |
-| **操作系统** | Windows / macOS / Linux | - | 完全跨平台支持，Docker 支持 x86_64 和 ARM64 |
-| **内存** | ≥2GB | ≥4GB | 浏览器自动化需要 |
-| **网络** | 稳定互联网连接 | - | 可配置代理访问 Google AI Studio |
-| **依赖管理** | Poetry | 最新版本 | 现代化 Python 依赖管理工具 |
-| **类型检查** | Pyright (可选) | 最新版本 | 用于开发时类型检查和 IDE 支持 (需要 Node.js) |
-
+| 组件         | 版本要求                | 推荐版本       | 说明                                         |
+| ------------ | ----------------------- | -------------- | -------------------------------------------- |
+| **Python**   | ≥3.9, <4.0              | 3.10+ 或 3.11+ | Docker 环境使用 3.10                         |
+| **操作系统** | Windows / macOS / Linux | -              | 完全跨平台支持，Docker 支持 x86_64 和 ARM64  |
+| **内存**     | ≥2GB                    | ≥4GB           | 浏览器自动化需要                             |
+| **网络**     | 稳定互联网连接          | -              | 可配置代理访问 Google AI Studio              |
+| **依赖管理** | Poetry                  | 最新版本       | 现代化 Python 依赖管理工具                   |
+| **类型检查** | Pyright (可选)          | 最新版本       | 用于开发时类型检查和 IDE 支持 (需要 Node.js) |
 
 ## 系统要求
 
@@ -67,13 +62,13 @@ This project is generously sponsored by ZMTO. Visit their website: [https://zmto
 
 ```mermaid
 graph TD
-    subgraph "用户端 (User End)"
-        User["用户 (User)"]
-        WebUI["Web UI (Browser)"]
-        API_Client["API 客户端 (API Client)"]
+    subgraph "用户端"
+        User["用户"]
+        WebUI["Web UI (浏览器)"]
+        API_Client["API 客户端"]
     end
 
-    subgraph "启动与配置 (Launch & Config)"
+    subgraph "启动与配置"
         GUI_Launch["gui_launcher.py (图形启动器)"]
         CLI_Launch["launch_camoufox.py (命令行启动)"]
         EnvConfig[".env (统一配置)"]
@@ -81,7 +76,7 @@ graph TD
         ConfigDir["config/ (配置模块)"]
     end
 
-    subgraph "核心应用 (Core Application)"
+    subgraph "核心应用"
         FastAPI_App["api_utils/app.py (FastAPI 应用)"]
         Routes["api_utils/routers/* (路由处理)"]
         RequestProcessor["api_utils/request_processor.py (请求处理)"]
@@ -93,50 +88,50 @@ graph TD
         StreamProxy["stream/ (流式代理服务器)"]
     end
 
-    subgraph "外部依赖 (External Dependencies)"
+    subgraph "外部依赖"
         CamoufoxInstance["Camoufox 浏览器 (反指纹)"]
         AI_Studio["Google AI Studio"]
         UserScript["油猴脚本 (可选)"]
     end
 
-    User -- "运行 (Run)" --> GUI_Launch
-    User -- "运行 (Run)" --> CLI_Launch
-    User -- "访问 (Access)" --> WebUI
+    User -- "运行" --> GUI_Launch
+    User -- "运行" --> CLI_Launch
+    User -- "访问" --> WebUI
 
-    GUI_Launch -- "启动 (Starts)" --> CLI_Launch
-    CLI_Launch -- "启动 (Starts)" --> FastAPI_App
-    CLI_Launch -- "配置 (Configures)" --> StreamProxy
+    GUI_Launch -- "启动" --> CLI_Launch
+    CLI_Launch -- "启动" --> FastAPI_App
+    CLI_Launch -- "配置" --> StreamProxy
 
-    API_Client -- "API 请求 (Request)" --> FastAPI_App
-    WebUI -- "聊天请求 (Chat Request)" --> FastAPI_App
+    API_Client -- "API 请求" --> FastAPI_App
+    WebUI -- "聊天请求" --> FastAPI_App
 
-    FastAPI_App -- "读取配置 (Reads Config)" --> EnvConfig
-    FastAPI_App -- "使用路由 (Uses Routes)" --> Routes
-    AuthUtils -- "验证密钥 (Validates Key)" --> KeyFile
-    ConfigDir -- "提供设置 (Provides Settings)" --> EnvConfig
+    FastAPI_App -- "读取配置" --> EnvConfig
+    FastAPI_App -- "使用路由" --> Routes
+    AuthUtils -- "验证密钥" --> KeyFile
+    ConfigDir -- "提供设置" --> EnvConfig
 
-    Routes -- "处理请求 (Processes Request)" --> RequestProcessor
-    Routes -- "认证管理 (Auth Management)" --> AuthUtils
-    RequestProcessor -- "控制浏览器 (Controls Browser)" --> PageController
-    RequestProcessor -- "通过代理 (Uses Proxy)" --> StreamProxy
+    Routes -- "处理请求" --> RequestProcessor
+    Routes -- "认证管理" --> AuthUtils
+    RequestProcessor -- "控制浏览器" --> PageController
+    RequestProcessor -- "通过代理" --> StreamProxy
 
-    PageController -- "初始化 (Initializes)" --> BrowserInit
-    PageController -- "执行操作 (Executes Ops)" --> BrowserOps
-    PageController -- "模型管理 (Model Management)" --> ModelManager
-    BrowserInit -- "脚本注入 (Script Injection)" --> UserScript
-    BrowserInit -- "增强功能 (Enhances)" --> CamoufoxInstance
-    PageController -- "自动化 (Automates)" --> CamoufoxInstance
-    CamoufoxInstance -- "访问 (Accesses)" --> AI_Studio
-    StreamProxy -- "转发请求 (Forwards Request)" --> AI_Studio
+    PageController -- "初始化" --> BrowserInit
+    PageController -- "执行操作" --> BrowserOps
+    PageController -- "模型管理" --> ModelManager
+    BrowserInit -- "脚本注入" --> UserScript
+    BrowserInit -- "增强功能" --> CamoufoxInstance
+    PageController -- "自动化" --> CamoufoxInstance
+    CamoufoxInstance -- "访问" --> AI_Studio
+    StreamProxy -- "转发请求" --> AI_Studio
 
-    AI_Studio -- "响应 (Response)" --> CamoufoxInstance
-    AI_Studio -- "响应 (Response)" --> StreamProxy
+    AI_Studio -- "响应" --> CamoufoxInstance
+    AI_Studio -- "响应" --> StreamProxy
 
-    CamoufoxInstance -- "返回数据 (Returns Data)" --> PageController
-    StreamProxy -- "返回数据 (Returns Data)" --> RequestProcessor
+    CamoufoxInstance -- "返回数据" --> PageController
+    StreamProxy -- "返回数据" --> RequestProcessor
 
-    FastAPI_App -- "API 响应 (Response)" --> API_Client
-    FastAPI_App -- "UI 响应 (Response)" --> WebUI
+    FastAPI_App -- "API 响应" --> API_Client
+    FastAPI_App -- "UI 响应" --> WebUI
 ```
 
 ## 🚀 快速开始
@@ -198,11 +193,13 @@ curl -X POST http://127.0.0.1:2048/v1/chat/completions \
 ### 一键安装脚本
 
 **macOS/Linux**:
+
 ```bash
 curl -sSL https://raw.githubusercontent.com/CJackHwang/AIstudioProxyAPI/main/scripts/install.sh | bash
 ```
 
 **Windows (PowerShell)**:
+
 ```powershell
 iwr -useb https://raw.githubusercontent.com/CJackHwang/AIstudioProxyAPI/main/scripts/install.ps1 | iex
 ```
@@ -267,13 +264,13 @@ pip install -r requirements.txt
 
 ### 日常运行模式
 
-| 命令 | 说明 | 适用场景 |
-|------|------|---------|
-| `python gui_launcher.py` | GUI 启动器 | 新手、可视化配置 |
-| `python launch_camoufox.py --headless` | 无头模式 | 日常使用、服务器 |
-| `python launch_camoufox.py` | 普通模式 | 查看浏览器窗口 |
-| `python launch_camoufox.py --debug` | 调试模式 | 首次认证、故障排查 |
-| `python launch_camoufox.py --virtual-display` | 虚拟显示模式 | Linux 无 GUI 环境 |
+| 命令                                          | 说明         | 适用场景           |
+| --------------------------------------------- | ------------ | ------------------ |
+| `python gui_launcher.py`                      | GUI 启动器   | 新手、可视化配置   |
+| `python launch_camoufox.py --headless`        | 无头模式     | 日常使用、服务器   |
+| `python launch_camoufox.py`                   | 普通模式     | 查看浏览器窗口     |
+| `python launch_camoufox.py --debug`           | 调试模式     | 首次认证、故障排查 |
+| `python launch_camoufox.py --virtual-display` | 虚拟显示模式 | Linux 无 GUI 环境  |
 
 ### 直接启动 FastAPI (开发调试)
 
@@ -328,17 +325,17 @@ nano .env  # 或使用其他编辑器
 
 ### 主要配置类别
 
-| 类别 | 示例配置 | 说明 |
-|------|---------|------|
-| **端口配置** | `PORT=2048` | FastAPI 服务端口 |
-| | `STREAM_PORT=3120` | 流式代理端口（设为 0 禁用） |
-| **代理配置** | `UNIFIED_PROXY_CONFIG=http://127.0.0.1:7890` | HTTP/HTTPS 代理 |
-| **日志配置** | `SERVER_LOG_LEVEL=INFO` | 日志级别 (DEBUG/INFO/WARNING) |
-| | `DEBUG_LOGS_ENABLED=false` | 启用调试日志 |
-| **API 参数** | `DEFAULT_TEMPERATURE=1.0` | 默认温度参数 |
-| | `DEFAULT_MAX_OUTPUT_TOKENS=65536` | 默认最大输出 token |
-| **超时配置** | `RESPONSE_COMPLETION_TIMEOUT=300000` | 响应超时（毫秒） |
-| **认证配置** | `AUTO_SAVE_AUTH=false` | 自动保存认证文件 |
+| 类别         | 示例配置                                     | 说明                          |
+| ------------ | -------------------------------------------- | ----------------------------- |
+| **端口配置** | `PORT=2048`                                  | FastAPI 服务端口              |
+|              | `STREAM_PORT=3120`                           | 流式代理端口（设为 0 禁用）   |
+| **代理配置** | `UNIFIED_PROXY_CONFIG=http://127.0.0.1:7890` | HTTP/HTTPS 代理               |
+| **日志配置** | `SERVER_LOG_LEVEL=INFO`                      | 日志级别 (DEBUG/INFO/WARNING) |
+|              | `DEBUG_LOGS_ENABLED=false`                   | 启用调试日志                  |
+| **API 参数** | `DEFAULT_TEMPERATURE=1.0`                    | 默认温度参数                  |
+|              | `DEFAULT_MAX_OUTPUT_TOKENS=65536`            | 默认最大输出 token            |
+| **超时配置** | `RESPONSE_COMPLETION_TIMEOUT=300000`         | 响应超时（毫秒）              |
+| **认证配置** | `AUTO_SAVE_AUTH=false`                       | 自动保存认证文件              |
 
 ### 配置优势
 
@@ -358,7 +355,7 @@ nano .env  # 或使用其他编辑器
 
 #### 🚀 快速上手
 
-- **[快速开始指南](docs/quick-start-guide.md)** - 15分钟快速部署和测试 🎯
+- **[快速开始指南](docs/quick-start-guide.md)** - 15 分钟快速部署和测试 🎯
 - [安装指南](docs/installation-guide.md) - 详细的安装步骤和环境配置
 - [环境变量配置指南](docs/environment-configuration.md) - .env 文件配置管理 ⭐
 - [环境变量完整参考](docs/env-variables-reference.md) - 所有配置项的详细说明 📋
@@ -469,12 +466,14 @@ AI Studio Proxy API 由多个组件协同工作，提供完整的代理服务：
 **作用**: 提供 OpenAI 兼容的 REST API 端点
 
 **功能**:
+
 - 处理 `/v1/chat/completions`、`/v1/models` 等 API 请求
 - 管理请求队列和并发控制
 - 提供 Web UI 和健康检查端点
 - 处理 API 密钥认证
 
 **启动方式**:
+
 ```bash
 # 通过 launch_camoufox.py 自动启动（推荐）
 python launch_camoufox.py --headless
@@ -490,6 +489,7 @@ uvicorn server:app --host 0.0.0.0 --port 2048
 **作用**: 提供具有反指纹检测能力的 Firefox 浏览器实例
 
 **功能**:
+
 - 模拟真实用户流量，降低被检测风险
 - 通过修改浏览器底层 C++ 代码伪装设备指纹
 - 提供 Playwright 兼容的 WebSocket 端点
@@ -506,6 +506,7 @@ uvicorn server:app --host 0.0.0.0 --port 2048
 **作用**: 控制浏览器执行自动化操作
 
 **功能**:
+
 - 管理 AI Studio 页面交互（输入提示、提取响应）
 - 动态切换模型
 - 设置模型参数（temperature、max_tokens 等）
@@ -518,6 +519,7 @@ uvicorn server:app --host 0.0.0.0 --port 2048
 **作用**: 提供低延迟的流式响应代理
 
 **功能**:
+
 - 直接转发 AI Studio 的流式响应，减少延迟
 - 在本地 (`127.0.0.1:3120`) 作为代理服务器运行
 - 支持自签名证书管理（`certs/` 目录）
@@ -528,6 +530,7 @@ uvicorn server:app --host 0.0.0.0 --port 2048
 **端口配置**: `.env` 中的 `STREAM_PORT` (默认 3120，设为 `0` 禁用)
 
 **工作流程**:
+
 ```
 客户端请求 → FastAPI → Stream Proxy → AI Studio
                 ↓            ↓
@@ -539,12 +542,14 @@ uvicorn server:app --host 0.0.0.0 --port 2048
 **作用**: 提供图形化的启动和配置界面
 
 **功能**:
+
 - 可视化配置端口、代理、认证等选项
 - 一键启动/停止所有服务
 - 实时查看日志输出
 - 管理多个配置预设
 
 **启动方式**:
+
 ```bash
 python gui_launcher.py
 ```
@@ -556,12 +561,14 @@ python gui_launcher.py
 #### 响应获取优先级
 
 1. **第一层: 集成流式代理服务** (默认启用)
+
    - ⚡ **性能最优**: 直接转发流式响应，延迟最低
    - 📍 **端口**: 3120 (可通过 `STREAM_PORT` 配置)
    - ✅ **适用场景**: 流式请求、实时对话
    - ⚠️ **限制**: 参数支持有限，主要支持基础参数
 
 2. **第二层: 外部 Helper 服务** (可选配置)
+
    - 🔧 **需要**: 有效的认证文件 (`auth_profiles/active/*.json`)
    - 📡 **配置**: 通过 `--helper <endpoint>` 或 `.env` 配置
    - ✅ **适用场景**: 需要额外功能的场景
@@ -575,25 +582,28 @@ python gui_launcher.py
 
 #### 参数控制机制
 
-| 层级 | 性能 | 参数支持 | 延迟 | 推荐场景 |
-|------|------|---------|------|---------|
-| 流式代理 | ⚡⚡⚡ | 基础参数 | 最低 | 流式对话、实时响应 |
-| Helper 服务 | ⚡⚡ | 取决于实现 | 中等 | 特定功能需求 |
-| Playwright | ⚡ | 所有参数 | 较高 | 精确控制、模型切换 |
+| 层级        | 性能   | 参数支持   | 延迟 | 推荐场景           |
+| ----------- | ------ | ---------- | ---- | ------------------ |
+| 流式代理    | ⚡⚡⚡ | 基础参数   | 最低 | 流式对话、实时响应 |
+| Helper 服务 | ⚡⚡   | 取决于实现 | 中等 | 特定功能需求       |
+| Playwright  | ⚡     | 所有参数   | 较高 | 精确控制、模型切换 |
 
 #### 配置示例
 
 **启用流式代理** (推荐):
+
 ```env
 STREAM_PORT=3120
 ```
 
 **禁用流式代理，使用 Playwright**:
+
 ```env
 STREAM_PORT=0
 ```
 
 **配置 Helper 服务**:
+
 ```bash
 python launch_camoufox.py --helper http://helper.example.com:8080
 ```
@@ -618,7 +628,7 @@ python launch_camoufox.py --helper http://helper.example.com:8080
 
 欢迎提交 Issue 和 Pull Request！
 
-## License
+## 许可
 
 [AGPLv3](LICENSE)
 
