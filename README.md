@@ -11,10 +11,10 @@
 本项目的诞生与发展，离不开以下个人、组织和社区的慷慨支持与智慧贡献：
 
 - **项目发起与主要开发**: @CJackHwang ([https://github.com/CJackHwang](https://github.com/CJackHwang))
+- **核心维护** (架构重构、测试体系、生产环境稳定性): @NikkeTryHard ([https://github.com/NikkeTryHard](https://github.com/NikkeTryHard))
 - **功能完善、页面操作优化思路贡献**: @ayuayue ([https://github.com/ayuayue](https://github.com/ayuayue))
 - **实时流式功能优化与完善**: @luispater ([https://github.com/luispater](https://github.com/luispater))
 - **3400+行主文件项目重构伟大贡献**: @yattin (Holt) ([https://github.com/yattin](https://github.com/yattin))
-- **项目后期高质量维护**: @Louie （[https://github.com/NikkeTryHard](https://github.com/NikkeTryHard)）
 - **社区支持与灵感碰撞**: 特别感谢 [Linux.do 社区](https://linux.do/) 成员们的热烈讨论、宝贵建议和问题反馈，你们的参与是项目前进的重要动力。
 
 同时，我们衷心感谢所有通过提交 Issue、提供建议、分享使用体验、贡献代码修复等方式为本项目默默奉献的每一位朋友。是你们共同的努力，让这个项目变得更好！
