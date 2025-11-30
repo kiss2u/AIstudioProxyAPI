@@ -3,6 +3,7 @@ import logging
 import re
 import sys
 import zlib
+from typing import Any, Dict, Tuple, Union
 
 from logging_utils.setup import ColoredFormatter
 
@@ -12,7 +13,7 @@ class HttpInterceptor:
     Class to intercept and process HTTP requests and responses
     """
 
-    def __init__(self, log_dir="logs"):
+    def __init__(self, log_dir: str = "logs"):
         self.log_dir = log_dir
         self.logger = logging.getLogger("http_interceptor")
         self.setup_logging()
@@ -36,7 +37,7 @@ class HttpInterceptor:
         logging.getLogger("websockets").setLevel(logging.ERROR)
 
     @staticmethod
-    def should_intercept(host, path):
+    def should_intercept(host: str, path: str):
         """
         Determine if the request should be intercepted based on host and path
         """
@@ -47,7 +48,9 @@ class HttpInterceptor:
         # Add more conditions as needed
         return False
 
-    async def process_request(self, request_data, host, path):
+    async def process_request(
+        self, request_data: Union[int, bytes], host: str, path: str
+    ) -> Union[int, bytes]:
         """
         Process the request data before sending to the server
         """
@@ -63,7 +66,13 @@ class HttpInterceptor:
             # Not JSON or not UTF-8, just pass through
             return request_data
 
-    async def process_response(self, response_data, host, path, headers):
+    async def process_response(
+        self,
+        response_data: Union[int, bytes],
+        host: str,
+        path: str,
+        headers: Dict[Any, Any],
+    ) -> Dict[str, Any]:
         """
         Process the response data before sending to the client
         """
@@ -78,7 +87,7 @@ class HttpInterceptor:
         except Exception as e:
             raise e
 
-    def parse_response(self, response_data):
+    def parse_response(self, response_data: bytes) -> Dict[str, Any]:
         pattern = rb'\[\[\[null,.*?]],"model"]'
         matches = []
         for match_obj in re.finditer(pattern, response_data):
@@ -114,7 +123,7 @@ class HttpInterceptor:
 
         return resp
 
-    def parse_toolcall_params(self, args):
+    def parse_toolcall_params(self, args: Any) -> Dict[str, Any]:
         try:
             params = args[0]
             func_params = {}
@@ -140,13 +149,13 @@ class HttpInterceptor:
             raise e
 
     @staticmethod
-    def _decompress_zlib_stream(compressed_stream):
+    def _decompress_zlib_stream(compressed_stream: Union[bytearray, bytes]) -> bytes:
         decompressor = zlib.decompressobj(wbits=zlib.MAX_WBITS | 32)  # zlib header
         decompressed = decompressor.decompress(compressed_stream)
         return decompressed
 
     @staticmethod
-    def _decode_chunked(response_body: bytes) -> tuple[bytes, bool]:
+    def _decode_chunked(response_body: bytes) -> Tuple[bytes, bool]:
         chunked_data = bytearray()
         while True:
             # print(' '.join(format(x, '02x') for x in response_body))
@@ -165,7 +174,7 @@ class HttpInterceptor:
             if length == 0:
                 length_crlf_idx = response_body.find(b"0\r\n\r\n")
                 if length_crlf_idx != -1:
-                    return chunked_data, True
+                    return bytes(chunked_data), True
 
             if length + 2 > len(response_body):
                 break
@@ -177,4 +186,4 @@ class HttpInterceptor:
                 break
 
             response_body = response_body[length_crlf_idx + 2 + length + 2 :]
-        return chunked_data, False
+        return bytes(chunked_data), False

@@ -1,13 +1,14 @@
 import logging
 import os
 import sys
+from typing import Dict, List, Optional
 
 from launcher.config import ACTIVE_AUTH_DIR, SAVED_AUTH_DIR
 
 logger = logging.getLogger("CamoufoxLauncher")
 
 
-def ensure_auth_dirs_exist():
+def ensure_auth_dirs_exist() -> None:
     logger.info("正在检查并确保认证文件目录存在...")
     try:
         os.makedirs(ACTIVE_AUTH_DIR, exist_ok=True)
@@ -19,9 +20,11 @@ def ensure_auth_dirs_exist():
         sys.exit(1)
 
 
-def check_dependencies(launch_server, DefaultAddons):
+def check_dependencies(
+    launch_server: Optional[bool], DefaultAddons: Optional[bool]
+) -> None:
     logger.info("--- 步骤 1: 检查依赖项 ---")
-    required_modules = {}
+    required_modules: Dict[str, str] = {}
     if launch_server is not None and DefaultAddons is not None:
         required_modules["camoufox"] = "camoufox (for server and addons)"
     elif launch_server is not None:
@@ -29,7 +32,7 @@ def check_dependencies(launch_server, DefaultAddons):
         logger.warning(
             "  'camoufox.server' 已导入，但 'camoufox.DefaultAddons' 未导入。排除插件功能可能受限。"
         )
-    missing_py_modules = []
+    missing_py_modules: List[str] = []
     dependencies_ok = True
     if required_modules:
         logger.info("正在检查 Python 模块:")

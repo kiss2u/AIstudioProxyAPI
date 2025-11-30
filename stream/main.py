@@ -1,15 +1,15 @@
 import argparse
 import asyncio
 import logging
-import multiprocessing
 import sys
 from pathlib import Path
+from typing import Any, Optional
 
 from logging_utils import GridFormatter, set_source
 from stream.proxy_server import ProxyServer
 
 
-def parse_args():
+def parse_args() -> argparse.Namespace:
     """Parse command line arguments"""
     parser = argparse.ArgumentParser(
         description="HTTPS Proxy Server with SSL Inspection"
@@ -34,7 +34,7 @@ def parse_args():
     return parser.parse_args()
 
 
-async def main():
+async def main() -> None:
     """Main entry point"""
     args = parse_args()
 
@@ -83,7 +83,9 @@ async def main():
         sys.exit(1)
 
 
-async def builtin(queue: multiprocessing.Queue = None, port=None, proxy=None):
+async def builtin(
+    queue: Optional[Any] = None, port: Optional[int] = None, proxy: Optional[str] = None
+) -> None:
     # Set up logging with GridFormatter for consistent output
     set_source("PROXY")
 

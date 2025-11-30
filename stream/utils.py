@@ -1,17 +1,21 @@
 import logging
 from urllib.parse import urlparse
 
+from typing import Optional, Tuple
+
 from logging_utils.setup import ColoredFormatter
 
 
-def is_generate_content_endpoint(url):
+def is_generate_content_endpoint(url: str) -> bool:
     """
     Check if the URL is a GenerateContent endpoint
     """
     return "GenerateContent" in url
 
 
-def parse_proxy_url(proxy_url):
+def parse_proxy_url(
+    proxy_url: Optional[str],
+) -> Tuple[Optional[str], Optional[str], Optional[int], Optional[str], Optional[str]]:
     """
     Parse a proxy URL into its components
 
@@ -32,7 +36,9 @@ def parse_proxy_url(proxy_url):
     return scheme, host, port, username, password
 
 
-def setup_logger(name, log_file=None, level=logging.INFO):
+def setup_logger(
+    name: str, log_file: Optional[str] = None, level: int = logging.INFO
+) -> logging.Logger:
     """
     Set up a logger with the specified name and configuration
 

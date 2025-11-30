@@ -2,7 +2,7 @@ import argparse
 import os
 import sys
 from dataclasses import dataclass
-from typing import Optional
+from typing import Dict, Optional
 
 from launcher.utils import get_proxy_from_gsettings
 
@@ -64,7 +64,9 @@ class LauncherConfig:
     internal_camoufox_os: str = "random"
 
 
-def determine_proxy_configuration(internal_camoufox_proxy_arg=None):
+def determine_proxy_configuration(
+    internal_camoufox_proxy_arg: Optional[str] = None,
+) -> Dict[str, Optional[str]]:
     """
     统一的代理配置确定函数
     按优先级顺序：命令行参数 > 环境变量 > 系统设置

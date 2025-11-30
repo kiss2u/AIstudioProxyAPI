@@ -1,5 +1,6 @@
 import datetime
 from pathlib import Path
+from typing import Any, Tuple
 
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
@@ -9,7 +10,7 @@ from cryptography.x509.oid import NameOID
 
 
 class CertificateManager:
-    def __init__(self, cert_dir="certs"):
+    def __init__(self, cert_dir: str = "certs"):
         self.cert_dir = Path(cert_dir)
         self.cert_dir.mkdir(exist_ok=True)
 
@@ -92,7 +93,7 @@ class CertificateManager:
         with open(self.ca_cert_path, "rb") as f:
             self.ca_cert = x509.load_pem_x509_certificate(f.read(), default_backend())
 
-    def get_domain_cert(self, domain):
+    def get_domain_cert(self, domain: str) -> Tuple[Any, Any]:
         """Get or generate a certificate for the specified domain"""
         cert_path = self.cert_dir / f"{domain}.crt"
         key_path = self.cert_dir / f"{domain}.key"
@@ -112,7 +113,7 @@ class CertificateManager:
         # Generate new certificate
         return self._generate_domain_cert(domain)
 
-    def _generate_domain_cert(self, domain):
+    def _generate_domain_cert(self, domain: str) -> Tuple[Any, Any]:
         """Generate a certificate for the specified domain signed by the CA"""
         # Generate private key
         private_key = rsa.generate_private_key(
@@ -152,7 +153,7 @@ class CertificateManager:
             .add_extension(
                 x509.SubjectAlternativeName([x509.DNSName(domain)]), critical=False
             )
-            .sign(self.ca_key, hashes.SHA256(), default_backend())
+            .sign(self.ca_key, hashes.SHA256(), default_backend())  # type: ignore[arg-type]
         )
 
         # Write certificate to file
