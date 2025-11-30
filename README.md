@@ -4,6 +4,9 @@
 
 [![Star History Chart](https://api.star-history.com/svg?repos=CJackHwang/AIstudioProxyAPI&type=Date)](https://www.star-history.com/#CJackHwang/AIstudioProxyAPI&Date)
 
+This project is generously sponsored by ZMTO. Visit their website: [https://zmto.com/](https://zmto.com/)
+
+本项目由 ZMTO 慷慨赞助服务器支持。访问他们的网站：[https://zmto.com/](https://zmto.com/)
 ---
 
 ## 致谢
@@ -168,12 +171,12 @@ curl http://127.0.0.1:2048/v1/models
 # 测试聊天（非流式）
 curl -X POST http://127.0.0.1:2048/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -d '{"model":"gemini-1.5-pro","messages":[{"role":"user","content":"Hello"}]}'
+  -d '{"model":"gemini-3-pro-preview","messages":[{"role":"user","content":"Hello"}]}'
 
 # 测试流式聊天
 curl -X POST http://127.0.0.1:2048/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -d '{"model":"gemini-1.5-pro","messages":[{"role":"user","content":"讲个故事"}],"stream":true}' --no-buffer
+  -d '{"model":"gemini-3-pro-preview","messages":[{"role":"user","content":"讲个故事"}],"stream":true}' --no-buffer
 ```
 
 ### 访问 Web UI
@@ -626,7 +629,7 @@ python launch_camoufox.py --helper http://helper.example.com:8080
 
 欢迎提交 Issue 和 Pull Request！
 
-## 许可
+## License
 
 [AGPLv3](LICENSE)
 
