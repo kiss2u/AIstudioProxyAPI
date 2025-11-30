@@ -147,9 +147,15 @@ def kill_process_interactive(pid: int) -> bool:
                 logger.info(f"    PID {pid} 执行 taskkill 时未找到 (可能已退出)。")
                 success = True  # 视为成功，因为目标是端口可用
             else:
-                logger.error(
-                    f"    ✗ PID {pid} taskkill /F 失败: {(error_output + ' ' + output).strip()}."
-                )
+                # 统计错误数量而非逐个输出
+                combined = (error_output + " " + output).strip()
+                error_count = combined.count("ERROR:")
+                if error_count > 0:
+                    logger.warning(
+                        f"    PID {pid} taskkill /F: (抑制 {error_count} 条错误信息)"
+                    )
+                else:
+                    logger.warning(f"    PID {pid} taskkill /F 返回非零状态")
         else:
             logger.warning(f"    不支持的操作系统 '{system_platform}' 用于终止进程。")
     except Exception as e:

@@ -217,6 +217,7 @@ USERSCRIPT_PATH=browser_utils/more_models.js
 ```
 
 **功能特点**：
+
 - **Playwright 原生拦截**: 使用 Playwright 路由拦截，确保可靠性
 - **双重保障机制**: 网络拦截 + 脚本注入
 - **直接脚本解析**: 从油猴脚本中自动解析模型列表，无需配置文件
@@ -291,18 +292,21 @@ STREAM_PORT=3120
 项目采用分层配置系统，按以下优先级顺序确定最终配置：
 
 1. **命令行参数** (最高优先级)
+
    ```bash
    # 命令行参数会覆盖环境变量和 .env 设置
    python launch_camoufox.py --headless --server-port 3048
    ```
 
 2. **系统环境变量**
+
    ```bash
    # 系统环境变量会覆盖 .env 文件中的设置
    export DEFAULT_FASTAPI_PORT=2048
    ```
 
 3. **`.env` 文件配置** (推荐)
+
    ```env
    # .env 文件中的配置
    DEFAULT_FASTAPI_PORT=2048

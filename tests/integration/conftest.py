@@ -45,8 +45,17 @@ async def real_server_state():
     mock_page.wait_for_selector = AsyncMock()
     mock_page.click = AsyncMock()
     mock_page.fill = AsyncMock()
-    mock_page.evaluate = AsyncMock()
-    mock_page.locator = MagicMock(return_value=MagicMock())
+    mock_page.evaluate = AsyncMock(return_value='{"mock": "preferences"}')
+
+    # Mock locator to return proper AsyncMock locator objects
+    mock_locator = AsyncMock()
+    mock_locator.fill = AsyncMock()
+    mock_locator.click = AsyncMock()
+    mock_locator.is_visible = AsyncMock(return_value=True)
+    mock_locator.wait_for = AsyncMock()
+    mock_page.locator = MagicMock(return_value=mock_locator)
+
+    mock_page.is_closed = MagicMock(return_value=False)  # Page is open
 
     mock_browser = AsyncMock()
     mock_browser.new_context = AsyncMock(return_value=AsyncMock())

@@ -21,6 +21,9 @@ from playwright.async_api import (
     Page as AsyncPage,
 )
 
+# --- Centralized State ---
+from api_utils.server_state import state
+
 # --- Browser Utils Imports ---
 from browser_utils import save_error_snapshot
 from browser_utils.page_controller import PageController
@@ -33,11 +36,11 @@ from config import (
     UPLOAD_FILES_DIR,
 )
 
+# --- Logging Utils Imports ---
+from logging_utils import log_context, set_request_id, set_source
+
 # --- Models Imports ---
 from models import ChatCompletionRequest, ClientDisconnectedError
-
-# --- Centralized State ---
-from api_utils.server_state import state
 
 from .client_connection import (
     check_client_connection as _check_client_connection,
@@ -116,7 +119,8 @@ async def _handle_model_switch_failure(
     req_id: str, page: AsyncPage, model_id_to_use: str, model_before_switch: str, logger
 ) -> None:
     """Handles model switching failure"""
-    logger.warning(f"[{req_id}] Model switch to {model_id_to_use} failed.")
+    set_request_id(req_id)
+    logger.warning(f"Model switch to {model_id_to_use} failed.")
     # Try to restore global state
     state.current_ai_studio_model_id = model_before_switch
 
@@ -337,9 +341,7 @@ async def _handle_auxiliary_stream_response(
             )
 
         except Exception as e:
-            logger.error(
-                f"[{req_id}] Error getting stream data from queue: {e}", exc_info=True
-            )
+            logger.error(f"Error getting stream data from queue: {e}", exc_info=True)
             if completion_event and not completion_event.is_set():
                 completion_event.set()
             raise
@@ -359,21 +361,17 @@ async def _handle_auxiliary_stream_response(
                 try:
                     data = json.loads(raw_data)
                 except json.JSONDecodeError:
-                    logger.warning(
-                        f"[{req_id}] Failed to parse non-stream data JSON: {raw_data}"
-                    )
+                    logger.warning(f"Failed to parse non-stream data JSON: {raw_data}")
                     continue
             elif isinstance(raw_data, dict):
                 data = raw_data
             else:
-                logger.warning(
-                    f"[{req_id}] Non-stream unknown data type: {type(raw_data)}"
-                )
+                logger.warning(f"Non-stream unknown data type: {type(raw_data)}")
                 continue
 
             # Ensure data is dict type
             if not isinstance(data, dict):
-                logger.warning(f"[{req_id}] Non-stream data is not dict: {data}")
+                logger.warning(f"Non-stream data is not dict: {data}")
                 continue
 
             final_data_from_aux_stream = data
@@ -388,7 +386,7 @@ async def _handle_auxiliary_stream_response(
             and final_data_from_aux_stream.get("reason") == "internal_timeout"
         ):
             logger.error(
-                f"[{req_id}] Non-streaming request failed via aux stream: Internal Timeout"
+                "Non-streaming request failed via aux stream: Internal Timeout"
             )
             raise HTTPException(
                 status_code=502,
@@ -402,7 +400,7 @@ async def _handle_auxiliary_stream_response(
             and not functions
         ):
             logger.error(
-                f"[{req_id}] Non-streaming request completed via aux stream but no content provided"
+                "Non-streaming request completed via aux stream but no content provided"
             )
             raise HTTPException(
                 status_code=502,
@@ -512,9 +510,7 @@ async def _handle_playwright_response(
             final_content,
             "",  # Playwright mode has no reasoning content
         )
-        logger.info(
-            f"[{req_id}] Playwright non-streaming token usage stats: {usage_stats}"
-        )
+        logger.info(f"Playwright non-streaming token usage stats: {usage_stats}")
 
         # Unified OpenAI compatible response construction
         model_name_for_json = current_ai_studio_model_id or MODEL_NAME
@@ -557,6 +553,9 @@ async def _cleanup_request_resources(
     logger = logging.getLogger("AIStudioProxyServer")
     import shutil
 
+    # 确保日志上下文已设置
+    set_request_id(req_id)
+
     if disconnect_check_task and not disconnect_check_task.done():
         disconnect_check_task.cancel()
         try:
@@ -564,18 +563,18 @@ async def _cleanup_request_resources(
         except asyncio.CancelledError:
             pass
         except Exception as task_clean_err:
-            logger.error(f"[{req_id}] Error cleaning up task: {task_clean_err}")
+            logger.error(f"Error cleaning up task: {task_clean_err}")
 
-    logger.info(f"[{req_id}] Processing complete.")
+    logger.info("Processing complete.")
 
     # Clean up upload subdirectory for this request to avoid disk accumulation
     try:
         req_dir = os.path.join(UPLOAD_FILES_DIR, req_id)
         if os.path.isdir(req_dir):
             shutil.rmtree(req_dir, ignore_errors=True)
-            logger.info(f"[{req_id}] Cleaned up request upload directory: {req_dir}")
+            logger.info(f"Cleaned up request upload directory: {req_dir}")
     except Exception as clean_err:
-        logger.warning(f"[{req_id}] Failed to clean upload directory: {clean_err}")
+        logger.warning(f"Failed to clean upload directory: {clean_err}")
 
     if (
         is_streaming
@@ -583,9 +582,7 @@ async def _cleanup_request_resources(
         and not completion_event.is_set()
         and (result_future.done() and result_future.exception() is not None)
     ):
-        logger.warning(
-            f"[{req_id}] Streaming request exception, ensuring completion event is set."
-        )
+        logger.warning("Streaming request exception, ensuring completion event is set.")
         completion_event.set()
     return None
 
@@ -597,6 +594,9 @@ async def _process_request_refactored(
     result_future: Future,
 ) -> Optional[Tuple[Optional[Event], Locator, Callable[[str], bool]]]:
     """Core request processing function - Refactored"""
+    # 设置日志上下文 (Grid Logger)
+    set_request_id(req_id)
+    set_source("PROCESSOR")
 
     # Optimization: Proactively check client connection before starting any processing
     import logging
@@ -607,7 +607,7 @@ async def _process_request_refactored(
     is_connected = await _check_client_connection(req_id, http_request)
     if not is_connected:
         logger.info(
-            f"[{req_id}] Client disconnected before core processing, exiting early to save resources"
+            "Client disconnected before core processing, exiting early to save resources"
         )
         if not result_future.done():
             result_future.set_exception(
@@ -621,16 +621,14 @@ async def _process_request_refactored(
     stream_port = get_environment_variable("STREAM_PORT")
     use_stream = stream_port != "0"
     if use_stream:
-        logger.info(
-            f"[{req_id}] Clearing stream queue before request (prevent residual data)..."
-        )
+        logger.info("Clearing stream queue before request (prevent residual data)...")
         try:
             from api_utils import clear_stream_queue
 
             await clear_stream_queue()
-            logger.info(f"[{req_id}] Stream queue cleared")
+            logger.info("Stream queue cleared")
         except Exception as clear_err:
-            logger.warning(f"[{req_id}] Error clearing stream queue: {clear_err}")
+            logger.warning(f"Error clearing stream queue: {clear_err}")
 
     context = await _initialize_request_context(req_id, request)
     context = await _analyze_model_requirements(req_id, context, request)
@@ -656,46 +654,53 @@ async def _process_request_refactored(
         await _handle_model_switching(req_id, context, check_client_disconnected)
         await _handle_parameter_cache(req_id, context)
 
-        prepared_prompt, image_list = await _prepare_and_validate_request(
-            req_id, request, check_client_disconnected
-        )
+        # Wrap entire processing section in silent context for visual hierarchy
+        # This creates the base indentation level for Prompt Prep, Parameters, and Execution
+        with log_context("", context["logger"], silent=True):
+            prepared_prompt, image_list = await _prepare_and_validate_request(
+                req_id, request, check_client_disconnected
+            )
 
-        # Extra merge of top-level and message-level attachments/files (compatible with history)
-        # Attachment source strategy: Only accept data:/file:/absolute paths (existing) explicitly provided in current request
-        from api_utils.utils import collect_and_validate_attachments
+            # Extra merge of top-level and message-level attachments/files (compatible with history)
+            # Attachment source strategy: Only accept data:/file:/absolute paths (existing) explicitly provided in current request
+            from api_utils.utils import collect_and_validate_attachments
 
-        # Ensure image_list is List[str] by filtering out None
-        valid_image_list: List[str] = [img for img in image_list if img is not None]
-        valid_image_list = collect_and_validate_attachments(
-            request, req_id, valid_image_list
-        )
-        image_list = [
-            img for img in valid_image_list
-        ]  # Cast back to compatible type if needed, but collect_and_validate_attachments returns List[str]
+            # Ensure image_list is List[str] by filtering out None
+            valid_image_list: List[str] = [img for img in image_list if img is not None]
+            valid_image_list = collect_and_validate_attachments(
+                request, req_id, valid_image_list
+            )
+            image_list = [
+                img for img in valid_image_list
+            ]  # Cast back to compatible type if needed, but collect_and_validate_attachments returns List[str]
 
-        # Use PageController for page interaction
-        # Note: Chat history clearing moved to after queue processing lock release
+            # Use PageController for page interaction
+            # Note: Chat history clearing moved to after queue processing lock release
 
-        request_params = request.model_dump(exclude_none=True)
-        # Fix: If stop is explicitly set to None (e.g. sent as null), preserve it to avoid default fallback
-        if "stop" in request.model_fields_set and request.stop is None:
-            request_params["stop"] = None
+            request_params = request.model_dump(exclude_none=True)
+            # Fix: If stop is explicitly set to None (e.g. sent as null), preserve it to avoid default fallback
+            if "stop" in request.model_fields_set and request.stop is None:
+                request_params["stop"] = None
 
-        await page_controller.adjust_parameters(
-            request_params,
-            context["page_params_cache"],
-            context["params_cache_lock"],
-            context["model_id_to_use"],
-            context["parsed_model_list"],
-            check_client_disconnected,
-        )
+            # Wrap parameter adjustment in visual context
+            with log_context("Adjusting Parameters", context["logger"]):
+                await page_controller.adjust_parameters(
+                    request_params,
+                    context["page_params_cache"],
+                    context["params_cache_lock"],
+                    context["model_id_to_use"],
+                    context["parsed_model_list"],
+                    check_client_disconnected,
+                )
 
-        # Optimization: Final check of client connection before submitting prompt
-        check_client_disconnected("Final check before submitting prompt")
+            # Optimization: Final check of client connection before submitting prompt
+            check_client_disconnected("Final check before submitting prompt")
 
-        await page_controller.submit_prompt(
-            prepared_prompt, image_list, check_client_disconnected
-        )
+            # Wrap prompt submission in visual context
+            with log_context("Execution", context["logger"]):
+                await page_controller.submit_prompt(
+                    prepared_prompt, image_list, check_client_disconnected
+                )
 
         # Response processing still needs to be here as it determines streaming vs non-streaming and sets future
         response_result = await _handle_response_processing(
@@ -734,33 +739,31 @@ async def _process_request_refactored(
         return completion_event, submit_button_locator, check_client_disconnected  # type: ignore
 
     except ClientDisconnectedError as disco_err:
-        context["logger"].info(
-            f"[{req_id}] Caught client disconnected signal: {disco_err}"
-        )
+        context["logger"].info(f"Caught client disconnected signal: {disco_err}")
         if not result_future.done():
             result_future.set_exception(
                 client_disconnected(req_id, "Client disconnected during processing.")
             )
     except asyncio.CancelledError:
-        context["logger"].info(f"[{req_id}] Request cancelled.")
+        context["logger"].info("Request cancelled.")
         if not result_future.done():
             result_future.cancel()
         raise  # Re-raise CancelledError
     except HTTPException as http_err:
         context["logger"].warning(
-            f"[{req_id}] Caught HTTP Exception: {http_err.status_code} - {http_err.detail}"
+            f"Caught HTTP Exception: {http_err.status_code} - {http_err.detail}"
         )
         if not result_future.done():
             result_future.set_exception(http_err)
     except PlaywrightAsyncError as pw_err:
-        context["logger"].error(f"[{req_id}] Caught Playwright Error: {pw_err}")
+        context["logger"].error(f"Caught Playwright Error: {pw_err}")
         await save_error_snapshot(f"process_playwright_error_{req_id}")
         if not result_future.done():
             result_future.set_exception(
                 upstream_error(req_id, f"Playwright interaction failed: {pw_err}")
             )
     except Exception as e:
-        context["logger"].exception(f"[{req_id}] Caught unexpected error")
+        context["logger"].exception("Caught unexpected error")
         await save_error_snapshot(f"process_unexpected_error_{req_id}")
         if not result_future.done():
             result_future.set_exception(

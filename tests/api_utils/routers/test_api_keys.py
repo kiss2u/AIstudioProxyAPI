@@ -5,18 +5,20 @@ Focus: Test all 4 endpoints (get, add, test, delete) with success and error path
 Strategy: Mock auth_utils module and file operations, test validation and exception handling.
 """
 
-import pytest
 from unittest.mock import MagicMock, mock_open, patch
 
+import pytest
 from fastapi import HTTPException
 
 from api_utils.routers.api_keys import (
+    ApiKeyRequest,
+    ApiKeyTestRequest,
     add_api_key,
     delete_api_key,
     get_api_keys,
+)
+from api_utils.routers.api_keys import (
     test_api_key as api_key_test_endpoint,  # Alias doesn't start with 'test_'
-    ApiKeyRequest,
-    ApiKeyTestRequest,
 )
 
 

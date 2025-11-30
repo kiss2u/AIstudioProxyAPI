@@ -48,7 +48,7 @@ def test_read_index_not_found(client):
     测试场景: index.html 不存在
     预期: 返回 404 错误 (lines 18-20)
     """
-    logger = MagicMock()
+    MagicMock()
 
     with patch("api_utils.routers.static.os.path.exists", return_value=False):
         response = client.get("/")
@@ -74,7 +74,7 @@ def test_get_css_not_found(client):
     测试场景: webui.css 不存在
     预期: 返回 404 错误 (lines 26-28)
     """
-    logger = MagicMock()
+    MagicMock()
 
     with patch("api_utils.routers.static.os.path.exists", return_value=False):
         response = client.get("/css")
@@ -100,7 +100,7 @@ def test_get_js_not_found(client):
     测试场景: webui.js 不存在
     预期: 返回 404 错误 (lines 34-36)
     """
-    logger = MagicMock()
+    MagicMock()
 
     with patch("api_utils.routers.static.os.path.exists", return_value=False):
         response = client.get("/js")

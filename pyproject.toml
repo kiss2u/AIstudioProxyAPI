@@ -25,6 +25,7 @@ Flask = "==3.0.3"
 aiosocks = "~=0.2.6"
 python-socks = "~=2.7.1"
 tzdata = "^2025.2"
+colorama = "^0.4.6"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.0.0"

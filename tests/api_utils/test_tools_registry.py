@@ -25,6 +25,7 @@ def cleanup_registry():
 
 
 def test_tool_get_current_time():
+    """Test get_current_time tool returns formatted timestamp."""
     result = tool_get_current_time({})
     assert "current_time" in result
     # Basic format check
@@ -32,12 +33,14 @@ def test_tool_get_current_time():
 
 
 def test_tool_echo():
+    """Test echo tool returns input parameters."""
     params = {"key": "value"}
     result = tool_echo(params)
     assert result["echo"] == params
 
 
 def test_tool_sum():
+    """Test sum tool handles valid, invalid, and missing values."""
     # Valid sum
     result = tool_sum({"values": [1, 2, 3]})
     assert result["sum"] == 6.0
@@ -60,6 +63,7 @@ def test_tool_sum():
 
 
 def test_register_runtime_tools_basic():
+    """Test registering runtime tools with function and name fields."""
     tools = [{"function": {"name": "tool1"}}, {"name": "tool2"}]
     register_runtime_tools(tools)
     assert "tool1" in api_utils.tools_registry._ALLOWED_RUNTIME_TOOLS
@@ -67,6 +71,7 @@ def test_register_runtime_tools_basic():
 
 
 def test_register_runtime_tools_empty():
+    """Test registering empty or None tool lists."""
     register_runtime_tools([])
     assert len(api_utils.tools_registry._ALLOWED_RUNTIME_TOOLS) == 0
 
@@ -75,6 +80,7 @@ def test_register_runtime_tools_empty():
 
 
 def test_register_runtime_tools_malformed():
+    """Test registering malformed tool definitions doesn't crash."""
     # Should not crash
     register_runtime_tools(["not a dict"])
     # Should handle partially malformed
@@ -82,6 +88,7 @@ def test_register_runtime_tools_malformed():
 
 
 def test_register_runtime_tools_mcp_endpoint():
+    """Test MCP endpoint registration via argument and tool extensions."""
     # Via argument - needs at least one tool to process
     register_runtime_tools([{"name": "dummy"}], mcp_endpoint="http://mcp")
     assert api_utils.tools_registry._RUNTIME_MCP_ENDPOINT == "http://mcp"
@@ -103,6 +110,7 @@ def test_register_runtime_tools_mcp_endpoint():
 
 
 def test_register_runtime_tools_exceptions():
+    """Test exception handling during tool registration."""
     # Test line 55: function is not a dict
     tools = [{"function": "not_a_dict", "name": "tool_weird"}]
     register_runtime_tools(tools)

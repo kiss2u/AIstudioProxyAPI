@@ -2,6 +2,8 @@ import os
 import sys
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from launcher.checks import check_dependencies, ensure_auth_dirs_exist
 from launcher.config import determine_proxy_configuration, parse_args
 from launcher.utils import (
@@ -15,6 +17,7 @@ from launcher.utils import (
 
 
 def test_parse_args_defaults():
+    """Test argument parsing with default values."""
     # Mock environment variables to ensure defaults are tested correctly
     # independent of pytest.ini settings
     with (
@@ -40,6 +43,7 @@ def test_parse_args_defaults():
 
 
 def test_parse_args_custom():
+    """Test argument parsing with custom values."""
     test_args = [
         "launcher",
         "--server-port",
@@ -59,6 +63,7 @@ def test_parse_args_custom():
 
 
 def test_determine_proxy_configuration_arg():
+    """Test proxy configuration from command-line argument."""
     result = determine_proxy_configuration(
         internal_camoufox_proxy_arg="http://proxy:8080"
     )
@@ -68,6 +73,7 @@ def test_determine_proxy_configuration_arg():
 
 
 def test_determine_proxy_configuration_env():
+    """Test proxy configuration from environment variable."""
     with patch.dict(os.environ, {"UNIFIED_PROXY_CONFIG": "http://env:8080"}):
         result = determine_proxy_configuration()
         assert result["camoufox_proxy"] == "http://env:8080"
@@ -77,26 +83,29 @@ def test_determine_proxy_configuration_env():
 # --- Test launcher.utils ---
 
 
+@pytest.mark.parametrize(
+    "bind_side_effect,expected_result,test_id",
+    [
+        (OSError("Port in use"), True, "port_in_use"),
+        (None, False, "port_free"),
+    ],
+)
 @patch("socket.socket")
-def test_is_port_in_use_true(mock_socket):
+def test_is_port_in_use(mock_socket, bind_side_effect, expected_result, test_id):
+    """Test port availability check when port is in use or free."""
     mock_socket_instance = MagicMock()
     mock_socket.return_value.__enter__.return_value = mock_socket_instance
-    mock_socket_instance.bind.side_effect = OSError("Port in use")
 
-    assert is_port_in_use(8080) is True
+    if bind_side_effect:
+        mock_socket_instance.bind.side_effect = bind_side_effect
 
-
-@patch("socket.socket")
-def test_is_port_in_use_false(mock_socket):
-    mock_socket_instance = MagicMock()
-    mock_socket.return_value.__enter__.return_value = mock_socket_instance
-
-    assert is_port_in_use(8080) is False
+    assert is_port_in_use(8080) is expected_result
 
 
 @patch("subprocess.Popen")
 @patch("platform.system")
 def test_find_pids_on_port_linux(mock_system, mock_popen):
+    """Test finding processes on port using lsof (Linux)."""
     mock_system.return_value = "Linux"
     process_mock = MagicMock()
     process_mock.communicate.return_value = ("123\n456\n", "")
@@ -111,6 +120,7 @@ def test_find_pids_on_port_linux(mock_system, mock_popen):
 @patch("subprocess.Popen")
 @patch("platform.system")
 def test_find_pids_on_port_windows(mock_system, mock_popen):
+    """Test finding processes on port using netstat (Windows)."""
     mock_system.return_value = "Windows"
     process_mock = MagicMock()
     # Simulate netstat output
@@ -128,6 +138,7 @@ def test_find_pids_on_port_windows(mock_system, mock_popen):
 @patch("subprocess.run")
 @patch("platform.system")
 def test_kill_process_interactive_linux(mock_system, mock_run):
+    """Test killing process on Linux using kill command."""
     mock_system.return_value = "Linux"
     mock_run.return_value.returncode = 0
 
@@ -140,6 +151,7 @@ def test_kill_process_interactive_linux(mock_system, mock_run):
 @patch("subprocess.run")
 @patch("platform.system")
 def test_kill_process_interactive_windows(mock_system, mock_run):
+    """Test killing process on Windows using taskkill."""
     mock_system.return_value = "Windows"
     mock_run.return_value.returncode = 0
     mock_run.return_value.stdout = (
@@ -152,6 +164,7 @@ def test_kill_process_interactive_windows(mock_system, mock_run):
 
 @patch("subprocess.run")
 def test_get_proxy_from_gsettings(mock_run):
+    """Test retrieving proxy configuration from gsettings (Linux)."""
     # Mock sequence of calls: mode, http host, http port
     mock_run.side_effect = [
         MagicMock(returncode=0, stdout="'manual'"),
@@ -168,12 +181,14 @@ def test_get_proxy_from_gsettings(mock_run):
 
 @patch("os.makedirs")
 def test_ensure_auth_dirs_exist(mock_makedirs):
+    """Test creation of authentication directories."""
     ensure_auth_dirs_exist()
     assert mock_makedirs.call_count == 2
 
 
 @patch("sys.exit")
 def test_check_dependencies_missing_camoufox(mock_exit):
+    """Test dependency check exits when camoufox is missing."""
     # Simulate missing camoufox
     with patch.dict(sys.modules, {"camoufox": None}):
         # We need to mock __import__ to raise ImportError for camoufox
@@ -190,6 +205,7 @@ def test_check_dependencies_missing_camoufox(mock_exit):
 
 
 def test_check_dependencies_success():
+    """Test dependency check succeeds when all dependencies are available."""
     with (
         patch("builtins.__import__"),
         patch("sys.modules", {"server": MagicMock(), "server.app": MagicMock()}),

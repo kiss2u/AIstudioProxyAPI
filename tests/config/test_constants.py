@@ -5,7 +5,6 @@ Focus: Test DEFAULT_STOP_SEQUENCES parsing with invalid JSON and TypeError.
 Strategy: Use importlib to reload module with mocked environment variables.
 """
 
-import importlib
 import os
 import sys
 from unittest.mock import patch

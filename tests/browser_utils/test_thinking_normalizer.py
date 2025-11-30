@@ -7,8 +7,6 @@ Note: Some tests mock DEFAULT_THINKING_BUDGET and ENABLE_THINKING_BUDGET for pre
 
 from unittest.mock import patch
 
-import pytest
-
 
 def test_normalize_reasoning_effort_none_uses_default():
     """

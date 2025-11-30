@@ -5,7 +5,7 @@ Focus: Test get_api_info endpoint with various request configurations.
 Strategy: Mock only dependencies (auth_utils.API_KEYS, get_current_ai_studio_model_id), test actual logic.
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from fastapi import FastAPI
@@ -174,7 +174,7 @@ def test_get_api_info_with_custom_port_via_env(client):
         response = client.get("/info")
 
         assert response.status_code == 200
-        data = response.json()
+        response.json()
 
         # TestClient 默认使用 testserver, 但如果 request.url.port 为 None,
         # 会回退到 SERVER_PORT_INFO

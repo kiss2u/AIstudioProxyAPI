@@ -161,45 +161,53 @@ response = requests.post(
 
 ```json
 {
-  "reasoning_effort": 0     // 整数 0
+  "reasoning_effort": 0 // 整数 0
 }
 ```
+
 或
+
 ```json
 {
-  "reasoning_effort": "0"   // 字符串 "0"
+  "reasoning_effort": "0" // 字符串 "0"
 }
 ```
 
 行为:
+
 - 关闭主思考开关，完全禁用思考模式
 - 如果主开关不可用（某些模型版本），将预算设置为 0 作为降级方案，网页会自动设置成最低的预算
 
 **场景2: 开启思考并限制预算**
 
 使用预设值:
+
 ```json
 {
-  "reasoning_effort": 1000       // 使用具体数值限制预算
+  "reasoning_effort": 1000 // 使用具体数值限制预算
   // 或 8000
   // 或 32768
 }
 ```
 
 使用具体数值:
+
 ```json
 {
-  "reasoning_effort": 5000       // 整数，设置具体的 token 预算
+  "reasoning_effort": 5000 // 整数，设置具体的 token 预算
 }
 ```
+
 或
+
 ```json
 {
-  "reasoning_effort": "3000"     // 字符串数值也支持
+  "reasoning_effort": "3000" // 字符串数值也支持
 }
 ```
 
 行为:
+
 - 开启主思考开关
 - 开启手动预算限制
 - 设置具体的预算值
@@ -208,23 +216,28 @@ response = requests.post(
 
 ```json
 {
-  "reasoning_effort": "none"     // 字符串 "none"
+  "reasoning_effort": "none" // 字符串 "none"
 }
 ```
+
 或
+
 ```json
 {
-  "reasoning_effort": -1         // 整数 -1
+  "reasoning_effort": -1 // 整数 -1
 }
 ```
+
 或
+
 ```json
 {
-  "reasoning_effort": "-1"       // 字符串 "-1"
+  "reasoning_effort": "-1" // 字符串 "-1"
 }
 ```
 
 行为:
+
 - 开启主思考开关
 - 关闭手动预算限制，让模型自由思考
 
@@ -461,7 +474,6 @@ else:
 ### 三层响应获取机制与参数控制
 
 - **响应获取优先级**: 项目采用三层响应获取机制，确保高可用性和最佳性能：
-
   1. **集成流式代理服务 (Stream Proxy)**:
      - 默认启用，监听端口 `3120` (可通过 `.env` 文件的 `STREAM_PORT` 配置)
      - 提供最佳性能和稳定性，直接处理 AI Studio 请求
@@ -476,13 +488,11 @@ else:
      - 通过模拟用户操作（编辑/复制按钮）获取响应
 
 - **参数控制详解**:
-
   - **流式代理模式**: 支持基础参数 (`model`, `temperature`, `max_tokens` 等)，性能最优
   - **Helper 服务模式**: 参数支持取决于外部 Helper 服务的具体实现
   - **Playwright 模式**: 完整支持所有参数，包括 `temperature`, `max_output_tokens`, `top_p`, `stop`, `reasoning_effort`, `tools` 等
 
 - **模型管理**:
-
   - API 请求中的 `model` 字段用于在 AI Studio 页面切换模型
   - 支持动态模型列表获取和模型 ID 验证
   - [`excluded_models.txt`](../excluded_models.txt) 文件可排除特定模型 ID

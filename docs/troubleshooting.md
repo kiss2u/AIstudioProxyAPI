@@ -123,6 +123,7 @@ poetry install
 **原因**: Docker 容器通常运行在无头模式 (Headless)，无法进行 Google 账号的交互式登录。
 
 **解决方案**:
+
 1. **在宿主机生成认证**: 在运行 Docker 的主机上（或任何可以运行浏览器的机器上），使用调试模式运行程序：
    ```bash
    poetry run python launch_camoufox.py --debug
@@ -597,6 +598,7 @@ export TRACE_LOGS_ENABLED=true
 出错时系统会自动在 `errors_py/YYYY-MM-DD/` 目录下创建包含详细调试信息的目录。这些快照对于诊断复杂问题（如无头模式下的交互失败）至关重要。
 
 **快照内容包括**:
+
 1.  **screenshot.png**: 错误发生时的页面截图。
 2.  **dom_dump.html**: 完整的页面 HTML 源码。
 3.  **dom_structure.txt**: 人类可读的 DOM 树结构，便于分析元素层级。

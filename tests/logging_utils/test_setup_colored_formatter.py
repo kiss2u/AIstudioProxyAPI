@@ -10,8 +10,6 @@ Targets:
 import logging
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from logging_utils.setup import ColoredFormatter
 
 

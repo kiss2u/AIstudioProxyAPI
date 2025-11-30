@@ -238,6 +238,7 @@ async def _handle_model_list_response(response: Any):
 
             if models_array_container is not None:
                 new_parsed_list = []
+                excluded_during_parse: list[str] = []  # 收集被排除的模型ID
                 for entry_in_container in models_array_container:
                     model_fields_list = None
                     if isinstance(entry_in_container, dict):
@@ -427,10 +428,7 @@ async def _handle_model_list_response(response: Any):
                             else model_id_path_str
                         )
                         if simple_model_id_str in excluded_model_ids:
-                            if not is_in_login_flow:
-                                logger.info(
-                                    f"模型 '{simple_model_id_str}' 在排除列表 excluded_model_ids 中，已跳过。"
-                                )
+                            excluded_during_parse.append(simple_model_id_str)
                             continue
 
                         final_display_name_str = (
@@ -455,6 +453,17 @@ async def _handle_model_list_response(response: Any):
                     else:
                         logger.debug(
                             f"Skipping entry due to invalid model_id_path: {model_id_path_str} from entry {str(entry_in_container)[:100]}"
+                        )
+
+                # 输出排除模型汇总日志 (一次性)
+                if excluded_during_parse and not is_in_login_flow:
+                    count = len(excluded_during_parse)
+                    sample = excluded_during_parse[:3]
+                    if count <= 3:
+                        logger.info(f"已排除 {count} 个模型: {', '.join(sample)}")
+                    else:
+                        logger.info(
+                            f"已排除 {count} 个模型: {', '.join(sample)} 等 (+{count - 3} more)"
                         )
 
                 if new_parsed_list:

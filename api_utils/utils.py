@@ -10,6 +10,7 @@ import os
 from typing import Any, Dict, List, Optional, Tuple, Union
 from urllib.parse import unquote, urlparse
 
+from logging_utils import set_request_id
 from models import Message
 
 from .sse import (
@@ -50,10 +51,11 @@ def prepare_combined_prompt(
     import logging
 
     logger = logging.getLogger("AIStudioProxyServer")
+    set_request_id(req_id)
 
-    logger.info(
-        f"[{req_id}] (准备提示) 正在从 {len(messages)} 条消息准备组合提示 (包括历史)。"
-    )
+    # Track summary stats for consolidated logging
+    _has_system_prompt = False
+    _msg_count = len(messages)
     # 不在此处清空 upload_files；由上层在每次请求开始时按需清理，避免历史附件丢失导致“文件不存在”错误。
 
     combined_parts = []
@@ -113,15 +115,14 @@ def prepare_combined_prompt(
             if isinstance(content, str) and content.strip():
                 system_prompt_content = content.strip()
                 processed_system_message_indices.add(i)
-                logger.info(
-                    f"[{req_id}] (准备提示) 在索引 {i} 找到并使用系统提示: '{system_prompt_content[:80]}...'"
+                _has_system_prompt = True
+                logger.debug(
+                    f"Found system prompt at index {i}: {system_prompt_content[:80]}..."
                 )
                 system_instr_prefix = "系统指令:\n"
                 combined_parts.append(f"{system_instr_prefix}{system_prompt_content}")
             else:
-                logger.info(
-                    f"[{req_id}] (准备提示) 在索引 {i} 忽略非字符串或空的系统消息。"
-                )
+                logger.debug(f"Ignoring empty system message at index {i}")
                 processed_system_message_indices.add(i)
             break
 
@@ -139,7 +140,7 @@ def prepare_combined_prompt(
             continue
 
         if msg.role == "system":
-            logger.info(f"[{req_id}] (准备提示) 跳过在索引 {i} 的后续系统消息。")
+            logger.debug(f"Skipping subsequent system message at index {i}")
             continue
 
         if combined_parts:
@@ -270,34 +271,30 @@ def prepare_combined_prompt(
                             )
                             if file_path:
                                 files_list.append(file_path)
-                                logger.info(
-                                    f"[{req_id}] (准备提示) 已识别并加入 data:URL 附件: {file_path}"
+                                logger.debug(
+                                    f"(准备提示) 已识别并加入 data:URL 附件: {file_path}"
                                 )
                         elif url_value.startswith("file:"):
                             parsed = urlparse(url_value)
                             local_path = unquote(parsed.path)
                             if os.path.exists(local_path):
                                 files_list.append(local_path)
-                                logger.info(
-                                    f"[{req_id}] (准备提示) 已识别并加入本地附件(file://): {local_path}"
+                                logger.debug(
+                                    f"(准备提示) 已识别并加入本地附件(file://): {local_path}"
                                 )
                             else:
                                 logger.warning(
-                                    f"[{req_id}] (准备提示) file URL 指向的本地文件不存在: {local_path}"
+                                    f"(准备提示) file URL 指向的本地文件不存在: {local_path}"
                                 )
                         elif os.path.isabs(url_value) and os.path.exists(url_value):
                             files_list.append(url_value)
-                            logger.info(
-                                f"[{req_id}] (准备提示) 已识别并加入本地附件(绝对路径): {url_value}"
+                            logger.debug(
+                                f"(准备提示) 已识别并加入本地附件(绝对路径): {url_value}"
                             )
                         else:
-                            logger.info(
-                                f"[{req_id}] (准备提示) 忽略非本地附件 URL: {url_value}"
-                            )
+                            logger.debug(f"(准备提示) 忽略非本地附件 URL: {url_value}")
                     except Exception as e:
-                        logger.warning(
-                            f"[{req_id}] (准备提示) 处理附件 URL 时发生错误: {e}"
-                        )
+                        logger.warning(f"(准备提示) 处理附件 URL 时发生错误: {e}")
                     continue
 
                 # 音/视频输入
@@ -334,23 +331,23 @@ def prepare_combined_prompt(
                                     )
                                     if saved:
                                         files_list.append(saved)
-                                        logger.info(
-                                            f"[{req_id}] (准备提示) 已识别并加入音视频 data:URL 附件: {saved}"
+                                        logger.debug(
+                                            f"(准备提示) 已识别并加入音视频 data:URL 附件: {saved}"
                                         )
                                 elif url_value.startswith("file:"):
                                     parsed = urlparse(url_value)
                                     local_path = unquote(parsed.path)
                                     if os.path.exists(local_path):
                                         files_list.append(local_path)
-                                        logger.info(
-                                            f"[{req_id}] (准备提示) 已识别并加入音视频本地附件(file://): {local_path}"
+                                        logger.debug(
+                                            f"(准备提示) 已识别并加入音视频本地附件(file://): {local_path}"
                                         )
                                 elif os.path.isabs(url_value) and os.path.exists(
                                     url_value
                                 ):
                                     files_list.append(url_value)
-                                    logger.info(
-                                        f"[{req_id}] (准备提示) 已识别并加入音视频本地附件(绝对路径): {url_value}"
+                                    logger.debug(
+                                        f"(准备提示) 已识别并加入音视频本地附件(绝对路径): {url_value}"
                                     )
                             elif data_val:
                                 if isinstance(data_val, str) and data_val.startswith(
@@ -361,8 +358,8 @@ def prepare_combined_prompt(
                                     )
                                     if saved:
                                         files_list.append(saved)
-                                        logger.info(
-                                            f"[{req_id}] (准备提示) 已识别并加入音视频 data:URL 附件: {saved}"
+                                        logger.debug(
+                                            f"(准备提示) 已识别并加入音视频 data:URL 附件: {saved}"
                                         )
                                 else:
                                     # 认为是纯 base64 数据
@@ -373,20 +370,18 @@ def prepare_combined_prompt(
                                         )
                                         if saved:
                                             files_list.append(saved)
-                                            logger.info(
-                                                f"[{req_id}] (准备提示) 已识别并加入音视频 base64 附件: {saved}"
+                                            logger.debug(
+                                                f"(准备提示) 已识别并加入音视频 base64 附件: {saved}"
                                             )
                                     except Exception:
                                         pass
                     except Exception as e:
-                        logger.warning(
-                            f"[{req_id}] (准备提示) 处理音视频输入时出错: {e}"
-                        )
+                        logger.warning(f"(准备提示) 处理音视频输入时出错: {e}")
                     continue
 
                 # 其他未知项：记录而不影响
                 logger.warning(
-                    f"[{req_id}] (准备提示) 警告: 在索引 {i} 的消息中忽略非文本或未知类型的 content item"
+                    f"(准备提示) 警告: 在索引 {i} 的消息中忽略非文本或未知类型的 content item"
                 )
             content_str = "\n".join(text_parts).strip()
         elif isinstance(content, dict):
@@ -415,25 +410,25 @@ def prepare_combined_prompt(
                             fp = extract_data_url_to_local(url_value)
                             if fp:
                                 files_list.append(fp)
-                                logger.info(
-                                    f"[{req_id}] (准备提示) 已识别并加入字典附件 data:URL: {fp}"
+                                logger.debug(
+                                    f"(准备提示) 已识别并加入字典附件 data:URL: {fp}"
                                 )
                         elif url_value.startswith("file:"):
                             parsed = urlparse(url_value)
                             lp = unquote(parsed.path)
                             if os.path.exists(lp):
                                 files_list.append(lp)
-                                logger.info(
-                                    f"[{req_id}] (准备提示) 已识别并加入字典附件 file://: {lp}"
+                                logger.debug(
+                                    f"(准备提示) 已识别并加入字典附件 file://: {lp}"
                                 )
                         elif os.path.isabs(url_value) and os.path.exists(url_value):
                             files_list.append(url_value)
-                            logger.info(
-                                f"[{req_id}] (准备提示) 已识别并加入字典附件绝对路径: {url_value}"
+                            logger.debug(
+                                f"(准备提示) 已识别并加入字典附件绝对路径: {url_value}"
                             )
                         else:
-                            logger.info(
-                                f"[{req_id}] (准备提示) 忽略字典附件的非本地 URL: {url_value}"
+                            logger.debug(
+                                f"(准备提示) 忽略字典附件的非本地 URL: {url_value}"
                             )
             # 同时将字典中可能的纯文本说明拼入
             if isinstance(content.get("text"), str):
@@ -441,7 +436,7 @@ def prepare_combined_prompt(
             content_str = "\n".join(text_parts).strip()
         else:
             logger.warning(
-                f"[{req_id}] (准备提示) 警告: 角色 {role} 在索引 {i} 的内容类型意外 ({type(content)}) 或为 None。"
+                f"(准备提示) 警告: 角色 {role} 在索引 {i} 的内容类型意外 ({type(content)}) 或为 None。"
             )
             content_str = str(content or "").strip()
 
@@ -511,21 +506,22 @@ def prepare_combined_prompt(
         if len(current_turn_parts) > 1 or (role == "assistant" and tool_calls):
             combined_parts.append("".join(current_turn_parts))
         elif not combined_parts and not current_turn_parts:
-            logger.info(
-                f"[{req_id}] (准备提示) 跳过角色 {role} 在索引 {i} 的空消息 (且无工具调用)。"
+            logger.debug(
+                f"(准备提示) 跳过角色 {role} 在索引 {i} 的空消息 (且无工具调用)。"
             )
         elif len(current_turn_parts) == 1 and not combined_parts:
-            logger.info(
-                f"[{req_id}] (准备提示) 跳过角色 {role} 在索引 {i} 的空消息 (只有前缀)。"
-            )
+            logger.debug(f"(准备提示) 跳过角色 {role} 在索引 {i} 的空消息 (只有前缀)。")
 
     final_prompt = "".join(combined_parts)
     if final_prompt:
         final_prompt += "\n"
 
-    preview_text = final_prompt[:300].replace("\n", "\\n")
+    # Consolidated English summary (replaces verbose Chinese logs)
+    sys_indicator = "Yes" if _has_system_prompt else "No"
+    attach_info = f", {len(files_list)} attachments" if files_list else ""
     logger.info(
-        f"[{req_id}] (准备提示) 组合提示长度: {len(final_prompt)}，附件数量: {len(files_list)}。预览: '{preview_text}...'"
+        f"Prompt Prep: Composed {_msg_count} msgs (System: {sys_indicator}) "
+        f"into {len(final_prompt):,} chars{attach_info}."
     )
 
     return final_prompt, files_list
@@ -651,9 +647,10 @@ def collect_and_validate_attachments(
         if isinstance(p, str) and p and os.path.isabs(p) and os.path.exists(p):
             valid_images.append(p)
 
+    set_request_id(req_id)
     if len(valid_images) != len(initial_image_list):
         logger.warning(
-            f"[{req_id}] 过滤掉不存在的附件路径: {set(initial_image_list) - set(valid_images)}"
+            f"过滤掉不存在的附件路径: {set(initial_image_list) - set(valid_images)}"
         )
 
     image_list = valid_images
@@ -711,7 +708,7 @@ def collect_and_validate_attachments(
                     elif os.path.isabs(url_value) and os.path.exists(url_value):
                         image_list.append(url_value)
     except Exception as e:
-        logger.warning(f"[{req_id}] 附件收集过程中出错: {e}")
+        logger.warning(f"附件收集过程中出错: {e}")
         pass
 
     return image_list

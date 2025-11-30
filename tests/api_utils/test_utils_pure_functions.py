@@ -6,8 +6,6 @@ Focus: Test real business logic with no mocks, only pure function testing.
 
 import json
 
-import pytest
-
 
 def test_extract_json_from_text_valid_json():
     """

@@ -6,27 +6,29 @@ from playwright.async_api import Error as PlaywrightAsyncError
 from playwright.async_api import Page as AsyncPage
 
 from config import ERROR_TOAST_SELECTOR
+from logging_utils import set_request_id
 
 logger = logging.getLogger("AIStudioProxyServer")
 
 
 async def detect_and_extract_page_error(page: AsyncPage, req_id: str) -> Optional[str]:
     """检测并提取页面错误"""
+    set_request_id(req_id)
     error_toast_locator = page.locator(ERROR_TOAST_SELECTOR).last
     try:
         await error_toast_locator.wait_for(state="visible", timeout=500)
         message_locator = error_toast_locator.locator("span.content-text")
         error_message = await message_locator.text_content(timeout=500)
         if error_message:
-            logger.error(f"[{req_id}]    检测到并提取错误消息: {error_message}")
+            logger.error(f"    检测到并提取错误消息: {error_message}")
             return error_message.strip()
         else:
-            logger.warning(f"[{req_id}]    检测到错误提示框，但无法提取消息。")
+            logger.warning("    检测到错误提示框，但无法提取消息。")
             return "检测到错误提示框，但无法提取特定消息。"
     except PlaywrightAsyncError:
         return None
     except Exception as e:
-        logger.warning(f"[{req_id}]    检查页面错误时出错: {e}")
+        logger.warning(f"    检查页面错误时出错: {e}")
         return None
 
 

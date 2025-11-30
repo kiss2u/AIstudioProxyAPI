@@ -209,106 +209,63 @@ class CamoufoxProcessManager:
         logger.info("--- 开始执行清理程序 (CamoufoxProcessManager) ---")
         if self.camoufox_proc and self.camoufox_proc.poll() is None:
             pid = self.camoufox_proc.pid
-            logger.info(f"正在终止 Camoufox 内部子进程 (PID: {pid})...")
+            logger.info(f"正在终止 Camoufox 进程树 (PID: {pid})...")
             try:
-                if (
-                    sys.platform != "win32"
-                    and hasattr(os, "getpgid")
-                    and hasattr(os, "killpg")
-                ):
+                if sys.platform == "win32":
+                    # Windows: 直接强制终止，不尝试优雅关闭（headless 浏览器常挂起）
                     try:
-                        pgid = os.getpgid(pid)
-                        logger.info(
-                            f"  向 Camoufox 进程组 (PGID: {pgid}) 发送 SIGTERM 信号..."
-                        )
-                        os.killpg(pgid, signal.SIGTERM)
-                    except ProcessLookupError:
-                        logger.info(
-                            f"  Camoufox 进程组 (PID: {pid}) 未找到，尝试直接终止进程..."
-                        )
-                        self.camoufox_proc.terminate()
-                else:
-                    if sys.platform == "win32":
-                        logger.info(f"进程树 (PID: {pid}) 发送终止请求")
-                        result = subprocess.run(
-                            ["taskkill", "/T", "/PID", str(pid)],
-                            capture_output=True,
-                            text=True,
-                            check=False,
-                        )
-                        if result.returncode != 0:
-                            logger.warning(
-                                f"  taskkill SIGTERM 输出: {result.stdout.strip()} {result.stderr.strip()}"
-                            )
-                    else:
-                        logger.info(f"  向 Camoufox (PID: {pid}) 发送 SIGTERM 信号...")
-                        self.camoufox_proc.terminate()
-                self.camoufox_proc.wait(timeout=5)
-                logger.info(f"  Camoufox (PID: {pid}) 已通过 SIGTERM 成功终止。")
-            except subprocess.TimeoutExpired:
-                logger.warning(
-                    f"  Camoufox (PID: {pid}) SIGTERM 超时。正在发送 SIGKILL 强制终止..."
-                )
-                if (
-                    sys.platform != "win32"
-                    and hasattr(os, "getpgid")
-                    and hasattr(os, "killpg")
-                ):
-                    try:
-                        pgid = os.getpgid(pid)
-                        logger.info(
-                            f"  向 Camoufox 进程组 (PGID: {pgid}) 发送 SIGKILL 信号..."
-                        )
-                        os.killpg(pgid, signal.SIGKILL)
-                    except ProcessLookupError:
-                        logger.info(
-                            f"  Camoufox 进程组 (PID: {pid}) 在 SIGKILL 时未找到，尝试直接强制终止..."
-                        )
-                        self.camoufox_proc.kill()
-                else:
-                    if sys.platform == "win32":
-                        logger.info(f"  强制杀死 Camoufox 进程树 (PID: {pid})")
-                        result = subprocess.run(
+                        subprocess.run(
                             ["taskkill", "/F", "/T", "/PID", str(pid)],
                             capture_output=True,
                             text=True,
                             check=False,
+                            timeout=5,
                         )
-                        if result.returncode != 0:
-                            logger.warning(
-                                f"  taskkill SIGKILL 输出: {result.stdout.strip()} {result.stderr.strip()}"
-                            )
-                    else:
+                        logger.info("进程树已成功终止。")
+                    except subprocess.TimeoutExpired:
+                        logger.warning("taskkill 超时，进程可能已终止。")
+                    except Exception as e:
+                        logger.warning(f"taskkill 执行异常: {e}")
+                elif hasattr(os, "getpgid") and hasattr(os, "killpg"):
+                    # Unix: 尝试 SIGTERM，超时后 SIGKILL
+                    try:
+                        pgid = os.getpgid(pid)
+                        os.killpg(pgid, signal.SIGTERM)
+                        self.camoufox_proc.wait(timeout=5)
+                        logger.info(f"进程组 (PGID: {pgid}) 已通过 SIGTERM 成功终止。")
+                    except subprocess.TimeoutExpired:
+                        logger.warning("SIGTERM 超时，正在发送 SIGKILL...")
+                        try:
+                            os.killpg(os.getpgid(pid), signal.SIGKILL)
+                            self.camoufox_proc.wait(timeout=2)
+                            logger.info("进程组已通过 SIGKILL 成功终止。")
+                        except Exception:
+                            pass
+                    except ProcessLookupError:
+                        logger.info("进程组未找到，可能已自行退出。")
+                else:
+                    # Fallback: 直接终止进程
+                    self.camoufox_proc.terminate()
+                    try:
+                        self.camoufox_proc.wait(timeout=5)
+                        logger.info("进程已成功终止。")
+                    except subprocess.TimeoutExpired:
                         self.camoufox_proc.kill()
-                try:
-                    self.camoufox_proc.wait(timeout=2)
-                    logger.info(f"  Camoufox (PID: {pid}) 已通过 SIGKILL 成功终止。")
-                except Exception as e_kill:
-                    logger.error(
-                        f"  等待 Camoufox (PID: {pid}) SIGKILL 完成时出错: {e_kill}"
-                    )
+                        logger.info("进程已强制终止。")
             except Exception as e_term:
-                logger.error(
-                    f"  终止 Camoufox (PID: {pid}) 时发生错误: {e_term}",
-                    exc_info=True,
-                )
+                logger.warning(f"终止进程时发生错误: {e_term}")
             finally:
-                if (
-                    hasattr(self.camoufox_proc, "stdout")
-                    and self.camoufox_proc.stdout
-                    and not self.camoufox_proc.stdout.closed
-                ):
-                    self.camoufox_proc.stdout.close()
-                if (
-                    hasattr(self.camoufox_proc, "stderr")
-                    and self.camoufox_proc.stderr
-                    and not self.camoufox_proc.stderr.closed
-                ):
-                    self.camoufox_proc.stderr.close()
+                # 清理流
+                for stream in [self.camoufox_proc.stdout, self.camoufox_proc.stderr]:
+                    if stream and not stream.closed:
+                        try:
+                            stream.close()
+                        except Exception:
+                            pass
             self.camoufox_proc = None
         elif self.camoufox_proc:
             logger.info(
-                f"Camoufox 内部子进程 (PID: {self.camoufox_proc.pid if hasattr(self.camoufox_proc, 'pid') else 'N/A'}) 先前已自行结束，退出码: {self.camoufox_proc.poll()}。"
+                f"Camoufox 内部子进程先前已自行结束，退出码: {self.camoufox_proc.poll()}。"
             )
             self.camoufox_proc = None
         else:

@@ -91,7 +91,7 @@ AIstudioProxyAPI/
 - 中间件配置 (API 密钥认证)
 - 全局状态初始化
 
-#### routers/* - API 路由（按职责拆分）
+#### routers/\* - API 路由（按职责拆分）
 
 - static.py: `/`, `/webui.css`, `/webui.js`
 - info.py: `/api/info`
@@ -230,6 +230,7 @@ AIstudioProxyAPI/
   - 适合：作为回退路径，确保功能完整
 
 两条路径均保持：
+
 - 客户端断开检测与提前结束
 - 最终使用统计 `usage` 的输出
 - OpenAI 兼容的 SSE/JSON 格式

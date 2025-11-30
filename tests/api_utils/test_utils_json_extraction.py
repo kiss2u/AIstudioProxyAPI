@@ -7,8 +7,6 @@ Strategy: Comprehensive edge case coverage for JSON parsing.
 
 import json
 
-import pytest
-
 
 def test_extract_json_empty_string():
     """
@@ -150,13 +148,13 @@ def test_extract_json_multiple_objects_extracts_first():
 
     # 这个测试验证实际行为：find 第一个 {，rfind 最后一个 }
     text = '{"first": 1} some text {"second": 2}'
-    result = _extract_json_from_text(text)
+    _extract_json_from_text(text)
 
     # 实际行为：会提取 {"first": 1} some text {"second": 2}
     # 但这不是有效的 JSON，所以会返回 None
     # 让我们用一个不会失败的例子
     text2 = '{"first": {"nested": 1}} {"second": 2}'
-    result2 = _extract_json_from_text(text2)
+    _extract_json_from_text(text2)
 
     # 会提取 {"first": {"nested": 1}} {"second": 2}
     # 这也不是有效的 JSON，返回 None

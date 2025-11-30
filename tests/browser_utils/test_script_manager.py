@@ -1,3 +1,4 @@
+import contextlib
 import json
 from unittest.mock import mock_open, patch
 
@@ -12,68 +13,86 @@ def script_manager():
 
 
 def test_init(script_manager):
+    """Test ScriptManager initialization with script directory."""
     assert script_manager.script_dir == "test_scripts"
     assert script_manager.loaded_scripts == {}
     assert script_manager.model_configs == {}
 
 
-def test_load_script_success(script_manager):
-    script_content = "console.log('hello');"
-    with (
-        patch("os.path.exists", return_value=True),
-        patch("builtins.open", mock_open(read_data=script_content)),
-    ):
+@pytest.mark.parametrize(
+    "file_exists,file_content,read_side_effect,expected_result,test_id",
+    [
+        (True, "console.log('hello');", None, "console.log('hello');", "success"),
+        (False, None, None, None, "not_found"),
+        (True, None, Exception("Read error"), None, "error"),
+    ],
+)
+def test_load_script(
+    script_manager,
+    file_exists,
+    file_content,
+    read_side_effect,
+    expected_result,
+    test_id,
+):
+    """Test script loading handles success, file not found, and read errors."""
+    patches = [patch("os.path.exists", return_value=file_exists)]
+
+    if file_exists and read_side_effect:
+        patches.append(patch("builtins.open", side_effect=read_side_effect))
+    elif file_exists:
+        patches.append(patch("builtins.open", mock_open(read_data=file_content)))
+
+    with contextlib.ExitStack() as stack:
+        for p in patches:
+            stack.enter_context(p)
+
         content = script_manager.load_script("test.js")
+        assert content == expected_result
 
-        assert content == script_content
-        assert script_manager.loaded_scripts["test.js"] == content
-
-
-def test_load_script_not_found(script_manager):
-    with patch("os.path.exists", return_value=False):
-        content = script_manager.load_script("test.js")
-        assert content is None
+        if expected_result is not None:
+            assert script_manager.loaded_scripts["test.js"] == content
 
 
-def test_load_script_error(script_manager):
-    with (
-        patch("os.path.exists", return_value=True),
-        patch("builtins.open", side_effect=Exception("Read error")),
-    ):
-        content = script_manager.load_script("test.js")
-        assert content is None
+@pytest.mark.parametrize(
+    "file_exists,config_data,read_side_effect,expected_result,test_id",
+    [
+        (
+            True,
+            {"models": [{"name": "model1"}]},
+            None,
+            [{"name": "model1"}],
+            "success",
+        ),
+        (False, None, None, None, "not_found"),
+        (True, {"models": []}, Exception("Read error"), None, "error"),
+    ],
+)
+def test_load_model_config(
+    script_manager, file_exists, config_data, read_side_effect, expected_result, test_id
+):
+    """Test model config loading handles success, file not found, and read errors."""
+    patches = [patch("os.path.exists", return_value=file_exists)]
 
+    if file_exists and read_side_effect:
+        patches.append(patch("builtins.open", side_effect=read_side_effect))
+    elif file_exists:
+        json_data = json.dumps(config_data)
+        patches.append(patch("builtins.open", mock_open(read_data=json_data)))
 
-def test_load_model_config_success(script_manager):
-    config_data = {"models": [{"name": "model1"}]}
-    json_data = json.dumps(config_data)
+    with contextlib.ExitStack() as stack:
+        for p in patches:
+            stack.enter_context(p)
 
-    with (
-        patch("os.path.exists", return_value=True),
-        patch("builtins.open", mock_open(read_data=json_data)),
-    ):
         models = script_manager.load_model_config("config.json")
+        assert models == expected_result
 
-        assert models == config_data["models"]
-        assert script_manager.model_configs["config.json"] == config_data["models"]
-
-
-def test_load_model_config_not_found(script_manager):
-    with patch("os.path.exists", return_value=False):
-        models = script_manager.load_model_config("config.json")
-        assert models is None
-
-
-def test_load_model_config_error(script_manager):
-    with (
-        patch("os.path.exists", return_value=True),
-        patch("builtins.open", side_effect=Exception("Read error")),
-    ):
-        models = script_manager.load_model_config("config.json")
-        assert models is None
+        if expected_result is not None:
+            assert script_manager.model_configs["config.json"] == expected_result
 
 
 def test_generate_dynamic_script_success(script_manager):
+    """Test dynamic script generation with model injection."""
     base_script = """
     // Some code
     const MODELS_TO_INJECT = [
@@ -93,6 +112,7 @@ def test_generate_dynamic_script_success(script_manager):
 
 
 def test_generate_dynamic_script_marker_not_found(script_manager):
+    """Test script generation returns original when marker not found."""
     base_script = "console.log('no markers');"
     models = [{"name": "new"}]
 
@@ -102,6 +122,7 @@ def test_generate_dynamic_script_marker_not_found(script_manager):
 
 
 def test_generate_dynamic_script_end_marker_not_found(script_manager):
+    """Test script generation when end marker is missing."""
     base_script = "const MODELS_TO_INJECT = ["
     models = [{"name": "new"}]
 

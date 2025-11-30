@@ -4,16 +4,17 @@ Target coverage: >80% (from baseline 10%)
 """
 
 import json
+from unittest.mock import AsyncMock, patch
+
 import pytest
-from unittest.mock import AsyncMock, Mock, patch, call
 
 from browser_utils.initialization.network import (
-    setup_network_interception_and_scripts,
-    _setup_model_list_interception,
-    _modify_model_list_response,
-    _inject_models_to_response,
     _find_model_list_array,
     _find_template_model,
+    _inject_models_to_response,
+    _modify_model_list_response,
+    _setup_model_list_interception,
+    setup_network_interception_and_scripts,
 )
 
 

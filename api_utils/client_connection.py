@@ -5,6 +5,7 @@ from typing import Any, Callable, Coroutine, Tuple
 
 from fastapi import HTTPException, Request
 
+from logging_utils import set_request_id
 from models import ClientDisconnectedError
 
 
@@ -61,6 +62,7 @@ async def setup_disconnect_monitoring(
 
     logger = logging.getLogger("AIStudioProxyServer")
     client_disconnected_event = Event()
+    set_request_id(req_id)
 
     async def check_disconnect_periodically() -> None:
         while not client_disconnected_event.is_set():
@@ -68,7 +70,7 @@ async def setup_disconnect_monitoring(
                 is_connected = await check_client_connection(req_id, http_request)
                 if not is_connected:
                     logger.info(
-                        f"[{req_id}] Active disconnect check detected client disconnection."
+                        "Active disconnect check detected client disconnection."
                     )
                     client_disconnected_event.set()
                     if not result_future.done():
@@ -85,7 +87,7 @@ async def setup_disconnect_monitoring(
                 # Task cancelled, exit gracefully
                 break
             except Exception as e:
-                logger.error(f"[{req_id}] (Disco Check Task) Error: {e}")
+                logger.error(f"(Disco Check Task) Error: {e}")
                 client_disconnected_event.set()
                 if not result_future.done():
                     result_future.set_exception(
@@ -100,7 +102,7 @@ async def setup_disconnect_monitoring(
 
     def check_client_disconnected(stage: str = "") -> bool:
         if client_disconnected_event.is_set():
-            logger.info(f"[{req_id}] Client disconnected detected at stage: '{stage}'")
+            logger.info(f"Client disconnected detected at stage: '{stage}'")
             raise ClientDisconnectedError(
                 f"[{req_id}] Client disconnected at stage: {stage}"
             )
@@ -116,13 +118,14 @@ async def enhanced_disconnect_monitor(
     Enhanced disconnect monitor for streaming responses.
     Returns True if client disconnected early.
     """
+    set_request_id(req_id)
     client_disconnected_early = False
     while not completion_event.is_set():
         try:
             is_connected = await check_client_connection(req_id, http_request)
             if not is_connected:
                 logger.info(
-                    f"[{req_id}] (Monitor) Client disconnected during streaming, triggering completion event."
+                    "(Monitor) Client disconnected during streaming, triggering completion event."
                 )
                 client_disconnected_early = True
                 if not completion_event.is_set():
@@ -132,7 +135,7 @@ async def enhanced_disconnect_monitor(
         except asyncio.CancelledError:
             break
         except Exception as e:
-            logger.error(f"[{req_id}] (Monitor) Enhanced disconnect checker error: {e}")
+            logger.error(f"(Monitor) Enhanced disconnect checker error: {e}")
             break
     return client_disconnected_early
 
@@ -147,13 +150,14 @@ async def non_streaming_disconnect_monitor(
     Disconnect monitor for non-streaming responses.
     Returns True if client disconnected early.
     """
+    set_request_id(req_id)
     client_disconnected_early = False
     while not result_future.done():
         try:
             is_connected = await check_client_connection(req_id, http_request)
             if not is_connected:
                 logger.info(
-                    f"[{req_id}] (Monitor) Client disconnected during non-streaming processing."
+                    "(Monitor) Client disconnected during non-streaming processing."
                 )
                 client_disconnected_early = True
                 if not result_future.done():
@@ -168,8 +172,6 @@ async def non_streaming_disconnect_monitor(
         except asyncio.CancelledError:
             break
         except Exception as e:
-            logger.error(
-                f"[{req_id}] (Monitor) Non-streaming disconnect checker error: {e}"
-            )
+            logger.error(f"(Monitor) Non-streaming disconnect checker error: {e}")
             break
     return client_disconnected_early

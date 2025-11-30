@@ -42,14 +42,14 @@ python launch_camoufox.py --debug
 
 ### 关于 `--virtual-display` (Linux 虚拟显示无头模式)
 
-*   **为什么使用?** 与标准的无头模式相比，虚拟显示模式通过创建一个完整的虚拟 X 服务器环境 (Xvfb) 来运行浏览器。这可以模拟一个更真实的桌面环境，从而可能进一步降低被网站检测为自动化脚本或机器人的风险，特别适用于对反指纹和反检测有更高要求的场景，同时确保无桌面的环境下能正常运行服务
-*   **什么时候使用?** 当您在 Linux 环境下运行，并且希望以无头模式操作。
-*   **如何使用?**
-    1. 确保您的 Linux 系统已安装 `xvfb` (参见 [安装指南](installation-guide.md) 中的安装说明)。
-    2. 在运行 [`launch_camoufox.py`](../launch_camoufox.py) 时添加 `--virtual-display` 标志。例如:
-        ```bash
-        python launch_camoufox.py --virtual-display --server-port 2048 --stream-port 3120 --internal-camoufox-proxy ''
-        ```
+- **为什么使用?** 与标准的无头模式相比，虚拟显示模式通过创建一个完整的虚拟 X 服务器环境 (Xvfb) 来运行浏览器。这可以模拟一个更真实的桌面环境，从而可能进一步降低被网站检测为自动化脚本或机器人的风险，特别适用于对反指纹和反检测有更高要求的场景，同时确保无桌面的环境下能正常运行服务
+- **什么时候使用?** 当您在 Linux 环境下运行，并且希望以无头模式操作。
+- **如何使用?**
+  1. 确保您的 Linux 系统已安装 `xvfb` (参见 [安装指南](installation-guide.md) 中的安装说明)。
+  2. 在运行 [`launch_camoufox.py`](../launch_camoufox.py) 时添加 `--virtual-display` 标志。例如:
+     ```bash
+     python launch_camoufox.py --virtual-display --server-port 2048 --stream-port 3120 --internal-camoufox-proxy ''
+     ```
 
 ## 代理配置优先级
 
@@ -64,6 +64,7 @@ python launch_camoufox.py --debug
 5. **系统代理设置** (Linux 下的 gsettings，最低优先级)
 
 **推荐配置方式**:
+
 ```env
 # .env 文件中统一配置代理
 UNIFIED_PROXY_CONFIG=http://127.0.0.1:7890
@@ -163,23 +164,23 @@ python gui_launcher.py
 
 ### GUI 功能
 
-*   **服务端口配置**: 指定 FastAPI 服务器监听的端口号 (默认为 2048)。
-*   **端口进程管理**: 查询和停止指定端口上的进程。
-*   **认证文件管理**:
-    *   **创建新认证**: 引导式流程，打开浏览器登录并自动保存 Cookie 到文件。
-    *   **切换认证**: 在多个已保存的认证文件（Profile）之间快速切换。
-*   **启动选项**:
-    1. **启动有头模式 (Debug, 交互式)**: 对应 `python launch_camoufox.py --debug`
-    2. **启动无头模式 (后台独立运行)**: 对应 `python launch_camoufox.py --headless`
-*   **本地 LLM 模拟服务**: 启动和管理本地 LLM 模拟服务 (基于 [`llm.py`](../llm.py))
-*   **状态与日志**: 显示服务状态和实时日志
+- **服务端口配置**: 指定 FastAPI 服务器监听的端口号 (默认为 2048)。
+- **端口进程管理**: 查询和停止指定端口上的进程。
+- **认证文件管理**:
+  - **创建新认证**: 引导式流程，打开浏览器登录并自动保存 Cookie 到文件。
+  - **切换认证**: 在多个已保存的认证文件（Profile）之间快速切换。
+- **启动选项**:
+  1. **启动有头模式 (Debug, 交互式)**: 对应 `python launch_camoufox.py --debug`
+  2. **启动无头模式 (后台独立运行)**: 对应 `python launch_camoufox.py --headless`
+- **本地 LLM 模拟服务**: 启动和管理本地 LLM 模拟服务 (基于 [`llm.py`](../llm.py))
+- **状态与日志**: 显示服务状态和实时日志
 
 ### 使用建议
 
-*   **首次运行**: 点击"管理认证文件" -> "创建新认证文件"，跟随指引完成登录。
-*   **日常后台运行**: 确保认证文件已激活，然后点击"启动无头模式"。
-*   **故障排查**: 使用"启动有头模式"观察浏览器行为。
-*   需要详细日志或调试：直接使用命令行 [`launch_camoufox.py`](../launch_camoufox.py)
+- **首次运行**: 点击"管理认证文件" -> "创建新认证文件"，跟随指引完成登录。
+- **日常后台运行**: 确保认证文件已激活，然后点击"启动无头模式"。
+- **故障排查**: 使用"启动有头模式"观察浏览器行为。
+- 需要详细日志或调试：直接使用命令行 [`launch_camoufox.py`](../launch_camoufox.py)
 
 ## 重要注意事项
 
@@ -200,6 +201,7 @@ python gui_launcher.py
 ## 下一步
 
 日常运行设置完成后，请参考：
+
 - [API 使用指南](api-usage.md)
 - [Web UI 使用指南](webui-guide.md)
 - [故障排除指南](troubleshooting.md)

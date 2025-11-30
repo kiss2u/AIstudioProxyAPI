@@ -5,7 +5,6 @@ Focus: Test build_chat_completion_response_json with all parameter combinations.
 Strategy: Test required fields, optional parameters (seed, response_format), structure validation.
 """
 
-import time
 from unittest.mock import patch
 
 from api_utils.response_payloads import build_chat_completion_response_json

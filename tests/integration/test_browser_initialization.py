@@ -11,7 +11,6 @@ work correctly with real files and real logic.
 """
 
 import os
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest

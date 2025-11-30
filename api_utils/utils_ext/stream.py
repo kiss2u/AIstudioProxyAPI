@@ -2,17 +2,21 @@ import asyncio
 import json
 from typing import Any, AsyncGenerator
 
+from logging_utils import set_request_id
+
 
 async def use_stream_response(req_id: str) -> AsyncGenerator[Any, None]:
     import queue
 
+    from api_utils.server_state import state
     from server import STREAM_QUEUE, logger
 
+    set_request_id(req_id)
     if STREAM_QUEUE is None:
-        logger.warning(f"[{req_id}] STREAM_QUEUE is None, 无法使用流响应")
+        logger.warning("STREAM_QUEUE is None, 无法使用流响应")
         return
 
-    logger.info(f"[{req_id}] 开始使用流响应")
+    logger.info("开始使用流响应")
 
     empty_count = 0
     max_empty_retries = 300
@@ -23,17 +27,20 @@ async def use_stream_response(req_id: str) -> AsyncGenerator[Any, None]:
 
     try:
         while True:
+            # Check shutdown signal FIRST - every loop iteration
+            if state.should_exit:
+                logger.info("Shutdown signal received, terminating stream.")
+                return
+
             try:
                 data = STREAM_QUEUE.get_nowait()
                 if data is None:
-                    logger.info(f"[{req_id}] 接收到流结束标志 (None)")
+                    logger.info("接收到流结束标志 (None)")
                     break
                 empty_count = 0
                 data_received = True
                 received_items_count += 1
-                logger.debug(
-                    f"[{req_id}] 接收到流数据[#{received_items_count}]: {type(data)}"
-                )
+                logger.debug(f"接收到流数据[#{received_items_count}]: {type(data)}")
 
                 if isinstance(data, str):
                     try:
@@ -46,7 +53,7 @@ async def use_stream_response(req_id: str) -> AsyncGenerator[Any, None]:
                                 "message", "Unknown upstream error"
                             )
                             logger.error(
-                                f"[{req_id}] [UPSTREAM ERROR] Detected from stream proxy: {error_status} - {error_message}"
+                                f"[UPSTREAM ERROR] Detected from stream proxy: {error_status} - {error_message}"
                             )
 
                             # 根据状态码抛出相应异常，立即中止并触发重试逻辑
@@ -57,7 +64,7 @@ async def use_stream_response(req_id: str) -> AsyncGenerator[Any, None]:
 
                             if error_status == 429 or "quota" in error_message.lower():
                                 logger.warning(
-                                    f"[{req_id}] [FAIL-FAST] Raising QuotaExceededError for tier switch"
+                                    "[FAIL-FAST] Raising QuotaExceededError for tier switch"
                                 )
                                 raise QuotaExceededError(
                                     message=f"AI Studio quota exceeded: {error_message}",
@@ -65,7 +72,7 @@ async def use_stream_response(req_id: str) -> AsyncGenerator[Any, None]:
                                 )
                             else:
                                 logger.warning(
-                                    f"[{req_id}] [FAIL-FAST] Raising UpstreamError for tier switch"
+                                    "[FAIL-FAST] Raising UpstreamError for tier switch"
                                 )
                                 raise UpstreamError(
                                     message=f"AI Studio error: {error_message}",
@@ -79,7 +86,7 @@ async def use_stream_response(req_id: str) -> AsyncGenerator[Any, None]:
                             if body or reason:
                                 has_content = True
                             logger.info(
-                                f"[{req_id}] 接收到JSON格式的完成标志 (body长度:{len(body)}, reason长度:{len(reason)}, 已收到项目数:{received_items_count})"
+                                f"接收到JSON格式的完成标志 (body长度:{len(body)}, reason长度:{len(reason)}, 已收到项目数:{received_items_count})"
                             )
                             if (
                                 not has_content
@@ -87,7 +94,7 @@ async def use_stream_response(req_id: str) -> AsyncGenerator[Any, None]:
                                 and not stale_done_ignored
                             ):
                                 logger.warning(
-                                    f"[{req_id}] [STALE DATA] 收到done=True但没有任何内容，且这是第一个接收的项目！可能是队列残留的旧数据，尝试忽略并继续等待..."
+                                    "[STALE DATA] 收到done=True但没有任何内容，且这是第一个接收的项目！可能是队列残留的旧数据，尝试忽略并继续等待..."
                                 )
                                 stale_done_ignored = True
                                 continue
@@ -101,7 +108,7 @@ async def use_stream_response(req_id: str) -> AsyncGenerator[Any, None]:
                             stale_done_ignored = False
                             yield parsed_data
                     except json.JSONDecodeError:
-                        logger.debug(f"[{req_id}] 返回非JSON字符串数据")
+                        logger.debug("返回非JSON字符串数据")
                         has_content = True
                         stale_done_ignored = False
                         yield data
@@ -114,7 +121,7 @@ async def use_stream_response(req_id: str) -> AsyncGenerator[Any, None]:
                             has_content = True
                         if data.get("done") is True:
                             logger.info(
-                                f"[{req_id}] 接收到字典格式的完成标志 (body长度:{len(body)}, reason长度:{len(reason)}, 已收到项目数:{received_items_count})"
+                                f"接收到字典格式的完成标志 (body长度:{len(body)}, reason长度:{len(reason)}, 已收到项目数:{received_items_count})"
                             )
                             if (
                                 not has_content
@@ -122,7 +129,7 @@ async def use_stream_response(req_id: str) -> AsyncGenerator[Any, None]:
                                 and not stale_done_ignored
                             ):
                                 logger.warning(
-                                    f"[{req_id}] [STALE DATA] 收到done=True但没有任何内容，且这是第一个接收的项目！可能是队列残留的旧数据，尝试忽略并继续等待..."
+                                    "[STALE DATA] 收到done=True但没有任何内容，且这是第一个接收的项目！可能是队列残留的旧数据，尝试忽略并继续等待..."
                                 )
                                 stale_done_ignored = True
                                 continue
@@ -132,17 +139,17 @@ async def use_stream_response(req_id: str) -> AsyncGenerator[Any, None]:
             except (queue.Empty, asyncio.QueueEmpty):
                 empty_count += 1
                 if empty_count % 50 == 0:
-                    logger.info(
-                        f"[{req_id}] 等待流数据... ({empty_count}/{max_empty_retries}, 已收到:{received_items_count}项)"
+                    logger.debug(
+                        f"Waiting for stream data... ({empty_count}/{max_empty_retries}, received:{received_items_count})"
                     )
                 if empty_count >= max_empty_retries:
                     if not data_received:
                         logger.error(
-                            f"[{req_id}] 流响应队列空读取次数达到上限且未收到任何数据，可能是辅助流未启动或出错"
+                            "流响应队列空读取次数达到上限且未收到任何数据，可能是辅助流未启动或出错"
                         )
                     else:
                         logger.warning(
-                            f"[{req_id}] 流响应队列空读取次数达到上限 ({max_empty_retries})，结束读取"
+                            f"流响应队列空读取次数达到上限 ({max_empty_retries})，结束读取"
                         )
                     yield {
                         "done": True,
@@ -154,11 +161,11 @@ async def use_stream_response(req_id: str) -> AsyncGenerator[Any, None]:
                 await asyncio.sleep(0.1)
                 continue
     except Exception as e:
-        logger.error(f"[{req_id}] 使用流响应时出错: {e}", exc_info=True)
+        logger.error(f"使用流响应时出错: {e}", exc_info=True)
         raise
     finally:
         logger.info(
-            f"[{req_id}] 流响应使用完成, 数据接收状态: {data_received}, 有内容: {has_content}, 收到项目数: {received_items_count}, "
+            f"流响应使用完成, 数据接收状态: {data_received}, 有内容: {has_content}, 收到项目数: {received_items_count}, "
             f"曾忽略空done: {stale_done_ignored}"
         )
 

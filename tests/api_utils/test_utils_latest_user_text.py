@@ -5,7 +5,6 @@ Focus: Test _get_latest_user_text with pure function testing (no mocks).
 Strategy: Comprehensive edge case coverage for message content extraction.
 """
 
-import pytest
 
 from models import Message
 

@@ -16,6 +16,7 @@
 4. **系统代理设置** (Linux 下的 gsettings，最低优先级)
 
 **推荐配置方式**:
+
 ```env
 # .env 文件中统一配置代理
 UNIFIED_PROXY_CONFIG=http://127.0.0.1:7890
@@ -32,6 +33,7 @@ UNIFIED_PROXY_CONFIG=
 ### 模式1: 优先使用集成的流式代理 (默认推荐)
 
 **推荐使用 .env 配置方式**:
+
 ```env
 # .env 文件配置
 DEFAULT_FASTAPI_PORT=2048
@@ -128,6 +130,7 @@ openssl rsa -in certs/ca.key -out certs/ca.key
 项目根目录下的 `excluded_models.txt` 文件可用于从 `/v1/models` 端点返回的列表中排除特定的模型 ID。
 
 每行一个模型ID，例如：
+
 ```
 gemini-1.0-pro
 gemini-1.0-pro-vision
@@ -163,6 +166,7 @@ DEBUG_LOGS_ENABLED=true
 以下环境变量可用于启用实验性功能或调整特定行为：
 
 ### 思考模型预算控制
+
 ```env
 # 启用思考模型的 Token 预算控制
 ENABLE_THINKING_BUDGET=true
@@ -171,18 +175,21 @@ DEFAULT_THINKING_BUDGET=8192
 ```
 
 ### 联网搜索增强
+
 ```env
 # 启用 Google 搜索工具 (如果模型支持)
 ENABLE_GOOGLE_SEARCH=true
 ```
 
 ### URL 上下文获取
+
 ```env
 # 允许解析 Prompt 中的 URL 内容
 ENABLE_URL_CONTEXT=true
 ```
 
 ### 附件处理优化
+
 ```env
 # 仅收集当前用户消息中的附件 (忽略历史消息中的附件，减少 Token 消耗)
 ONLY_COLLECT_CURRENT_USER_ATTACHMENTS=true
@@ -238,9 +245,11 @@ API 请求中的模型参数（如 `temperature`, `max_output_tokens`, `top_p`, 
 ## 下一步
 
 高级配置完成后，请参考：
+
 - [脚本注入指南](script_injection_guide.md) - 详细的脚本注入功能使用说明
 - [日志控制指南](logging-control.md)
 - [故障排除指南](troubleshooting.md)
+
 ## Toolcall / MCP 兼容性说明
 
 - 请求结构需遵循 OpenAI Completions 兼容格式：
@@ -295,5 +304,6 @@ for line in resp.iter_lines():
 ```
 
 ### 行为说明
+
 - 当工具执行发生时，响应中会包含 `tool_calls` 片段与 `finish_reason: "tool_calls"`；客户端需按 OpenAI Completions 的解析方式处理。
 - 若声明非内置工具且提供 `mcp_endpoint`（或设置环境 `MCP_HTTP_ENDPOINT`），服务器会将调用转发到 MCP 服务并返回其结果。

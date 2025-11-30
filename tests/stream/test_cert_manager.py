@@ -32,6 +32,7 @@ class TestCertificateManager:
             yield mock
 
     def test_init_creates_dir(self, mock_path):
+        """Test certificate manager creates certificate directory on init."""
         mock_dir = MagicMock()
         mock_path.return_value = mock_dir
 
@@ -50,6 +51,7 @@ class TestCertificateManager:
             mock_dir.mkdir.assert_called_with(exist_ok=True)
 
     def test_init_generates_ca_if_missing(self, mock_path, mock_rsa, mock_x509):
+        """Test CA certificate generation when missing on init."""
         mock_dir = MagicMock()
         mock_path.return_value = mock_dir
 
@@ -97,6 +99,7 @@ class TestCertificateManager:
             assert mocked_file.call_count >= 2
 
     def test_get_domain_cert_existing(self, mock_path):
+        """Test retrieving existing domain certificate from cache."""
         mock_dir = MagicMock()
         mock_path.return_value = mock_dir
 
@@ -135,6 +138,7 @@ class TestCertificateManager:
             assert cert == "mock_cert"
 
     def test_get_domain_cert_generates_new(self, mock_path, mock_rsa, mock_x509):
+        """Test generating new domain certificate when not cached."""
         mock_dir = MagicMock()
         mock_path.return_value = mock_dir
 

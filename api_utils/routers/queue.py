@@ -5,6 +5,8 @@ from asyncio import Lock, Queue
 from fastapi import Depends
 from fastapi.responses import JSONResponse
 
+from logging_utils import set_request_id
+
 from ..dependencies import get_logger, get_processing_lock, get_request_queue
 from ..error_utils import client_cancelled
 
@@ -12,13 +14,14 @@ from ..error_utils import client_cancelled
 async def cancel_queued_request(
     req_id: str, request_queue: Queue, logger: logging.Logger
 ) -> bool:
+    set_request_id(req_id)
     items_to_requeue = []
     found = False
     try:
         while not request_queue.empty():
             item = request_queue.get_nowait()
             if item.get("req_id") == req_id:
-                logger.info(f"[{req_id}] 在队列中找到请求，标记为已取消。")
+                logger.info("在队列中找到请求，标记为已取消。")
                 item["cancelled"] = True
                 if (future := item.get("result_future")) and not future.done():
                     future.set_exception(client_cancelled(req_id))
@@ -35,7 +38,8 @@ async def cancel_request(
     logger: logging.Logger = Depends(get_logger),
     request_queue: Queue = Depends(get_request_queue),
 ):
-    logger.info(f"[{req_id}] 收到取消请求。")
+    set_request_id(req_id)
+    logger.info("收到取消请求。")
     if await cancel_queued_request(req_id, request_queue, logger):
         return JSONResponse(
             content={

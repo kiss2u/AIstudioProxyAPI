@@ -5,14 +5,12 @@ Focus: Test proxy connector initialization and connection creation for various p
 Strategy: Mock only external I/O boundaries (asyncio.open_connection, Proxy.from_url).
 """
 
-import asyncio
 import ssl as ssl_module
-from unittest.mock import AsyncMock, MagicMock, patch, Mock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from stream.proxy_connector import ProxyConnector
-
 
 # ============================================================================
 # __init__() Tests

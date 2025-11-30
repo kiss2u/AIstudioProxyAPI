@@ -26,7 +26,7 @@ class ChatController(BaseController):
 
     async def clear_chat_history(self, check_client_disconnected: Callable):
         """清空聊天记录。"""
-        self.logger.info(f"[{self.req_id}] 开始清空聊天记录...")
+        self.logger.info(" 开始清空聊天记录...")
         await self._check_disconnect(check_client_disconnected, "Start Clear Chat")
 
         try:
@@ -34,10 +34,10 @@ class ChatController(BaseController):
             # 导致后续请求无法发出而卡住,故先检查并点击发送按钮(此时是停止功能)
             submit_button_locator = self.page.locator(SUBMIT_BUTTON_SELECTOR)
             try:
-                self.logger.info(f"[{self.req_id}] 尝试检查发送按钮状态...")
+                self.logger.info(" 尝试检查发送按钮状态...")
                 # 使用较短的超时时间（1秒），避免长时间阻塞，因为这不是清空流程的常见步骤
                 await expect_async(submit_button_locator).to_be_enabled(timeout=1000)
-                self.logger.info(f"[{self.req_id}] 发送按钮可用，尝试点击并等待1秒...")
+                self.logger.info(" 发送按钮可用，尝试点击并等待1秒...")
                 await submit_button_locator.click(timeout=CLICK_TIMEOUT_MS)
                 try:
                     await expect_async(submit_button_locator).to_be_disabled(
@@ -45,11 +45,11 @@ class ChatController(BaseController):
                     )
                 except Exception:
                     pass
-                self.logger.info(f"[{self.req_id}] 发送按钮点击完成。")
+                self.logger.info(" 发送按钮点击完成。")
             except Exception:
                 # 如果发送按钮不可用、超时或发生Playwright相关错误，记录日志并继续
                 self.logger.info(
-                    f"[{self.req_id}] 发送按钮不可用或检查/点击时发生Playwright错误。符合预期,继续检查清空按钮。"
+                    " 发送按钮不可用或检查/点击时发生Playwright错误。符合预期,继续检查清空按钮。"
                 )
 
             clear_chat_button_locator = self.page.locator(CLEAR_CHAT_BUTTON_SELECTOR)
@@ -64,16 +64,16 @@ class ChatController(BaseController):
                     timeout=3000
                 )
                 can_attempt_clear = True
-                self.logger.info(f'[{self.req_id}] "清空聊天"按钮可用，继续清空流程。')
+                self.logger.info(' "清空聊天"按钮可用，继续清空流程。')
             except Exception as e_enable:
                 is_new_chat_url = "/prompts/new_chat" in self.page.url.rstrip("/")
                 if is_new_chat_url:
                     self.logger.info(
-                        f'[{self.req_id}] "清空聊天"按钮不可用 (预期，因为在 new_chat 页面)。跳过清空操作。'
+                        ' "清空聊天"按钮不可用 (预期，因为在 new_chat 页面)。跳过清空操作。'
                     )
                 else:
                     self.logger.warning(
-                        f'[{self.req_id}] 等待"清空聊天"按钮可用失败: {e_enable}。清空操作可能无法执行。'
+                        f' 等待"清空聊天"按钮可用失败: {e_enable}。清空操作可能无法执行。'
                     )
 
             await self._check_disconnect(
@@ -88,15 +88,13 @@ class ChatController(BaseController):
                     check_client_disconnected,
                 )
                 await self._verify_chat_cleared(check_client_disconnected)
-                self.logger.info(
-                    f"[{self.req_id}] 聊天已清空，重新启用 '临时聊天' 模式..."
-                )
+                self.logger.info(" 聊天已清空，重新启用 '临时聊天' 模式...")
                 await enable_temporary_chat_mode(self.page)
 
         except Exception as e_clear:
             if isinstance(e_clear, asyncio.CancelledError):
                 raise
-            self.logger.error(f"[{self.req_id}] 清空聊天过程中发生错误: {e_clear}")
+            self.logger.error(f" 清空聊天过程中发生错误: {e_clear}")
             if not (
                 isinstance(e_clear, ClientDisconnectedError)
                 or (hasattr(e_clear, "name") and "Disconnect" in e_clear.name)
@@ -136,17 +134,13 @@ class ChatController(BaseController):
         try:
             if await overlay_locator.is_visible(timeout=1000):
                 overlay_initially_visible = True
-                self.logger.info(
-                    f'[{self.req_id}] 清空聊天确认遮罩层已可见。直接点击"继续"。'
-                )
+                self.logger.info(' 清空聊天确认遮罩层已可见。直接点击"继续"。')
         except TimeoutError:
-            self.logger.info(
-                f"[{self.req_id}] 清空聊天确认遮罩层初始不可见 (检查超时或未找到)。"
-            )
+            self.logger.info(" 清空聊天确认遮罩层初始不可见 (检查超时或未找到)。")
             overlay_initially_visible = False
         except Exception as e_vis_check:
             self.logger.warning(
-                f"[{self.req_id}] 检查遮罩层可见性时发生错误: {e_vis_check}。假定不可见。"
+                f" 检查遮罩层可见性时发生错误: {e_vis_check}。假定不可见。"
             )
             overlay_initially_visible = False
 
@@ -156,13 +150,11 @@ class ChatController(BaseController):
 
         if overlay_initially_visible:
             self.logger.info(
-                f'[{self.req_id}] 点击"继续"按钮 (遮罩层已存在): {CLEAR_CHAT_CONFIRM_BUTTON_SELECTOR}'
+                f' 点击"继续"按钮 (遮罩层已存在): {CLEAR_CHAT_CONFIRM_BUTTON_SELECTOR}'
             )
             await confirm_button_locator.click(timeout=CLICK_TIMEOUT_MS)
         else:
-            self.logger.info(
-                f'[{self.req_id}] 点击"清空聊天"按钮: {CLEAR_CHAT_BUTTON_SELECTOR}'
-            )
+            self.logger.info(f' 点击"清空聊天"按钮: {CLEAR_CHAT_BUTTON_SELECTOR}')
             # 若存在透明遮罩层拦截指针事件，先尝试清理
             try:
                 await self._dismiss_backdrops()
@@ -176,7 +168,7 @@ class ChatController(BaseController):
                 await clear_chat_button_locator.click(timeout=CLICK_TIMEOUT_MS)
             except Exception as first_click_err:
                 self.logger.warning(
-                    f"[{self.req_id}] 清空按钮第一次点击失败，尝试清理遮罩并强制点击: {first_click_err}"
+                    f" 清空按钮第一次点击失败，尝试清理遮罩并强制点击: {first_click_err}"
                 )
                 try:
                     await self._dismiss_backdrops()
@@ -187,22 +179,18 @@ class ChatController(BaseController):
                         timeout=CLICK_TIMEOUT_MS, force=True
                     )
                 except Exception as force_click_err:
-                    self.logger.error(
-                        f"[{self.req_id}] 清空按钮强制点击仍失败: {force_click_err}"
-                    )
+                    self.logger.error(f" 清空按钮强制点击仍失败: {force_click_err}")
                     raise
             await self._check_disconnect(
                 check_client_disconnected, '清空聊天 - 点击"清空聊天"后'
             )
 
             try:
-                self.logger.info(
-                    f"[{self.req_id}] 等待清空聊天确认遮罩层出现: {OVERLAY_SELECTOR}"
-                )
+                self.logger.info(f" 等待清空聊天确认遮罩层出现: {OVERLAY_SELECTOR}")
                 await expect_async(overlay_locator).to_be_visible(
                     timeout=WAIT_FOR_ELEMENT_TIMEOUT_MS
                 )
-                self.logger.info(f"[{self.req_id}] 清空聊天确认遮罩层已出现。")
+                self.logger.info(" 清空聊天确认遮罩层已出现。")
             except TimeoutError:
                 error_msg = f"等待清空聊天确认遮罩层超时 (点击清空按钮后)。请求 ID: {self.req_id}"
                 self.logger.error(error_msg)
@@ -213,7 +201,7 @@ class ChatController(BaseController):
                 check_client_disconnected, "清空聊天 - 遮罩层出现后"
             )
             self.logger.info(
-                f'[{self.req_id}] 点击"继续"按钮 (在对话框中): {CLEAR_CHAT_CONFIRM_BUTTON_SELECTOR}'
+                f' 点击"继续"按钮 (在对话框中): {CLEAR_CHAT_CONFIRM_BUTTON_SELECTOR}'
             )
             try:
                 await confirm_button_locator.scroll_into_view_if_needed()
@@ -223,7 +211,7 @@ class ChatController(BaseController):
                 await confirm_button_locator.click(timeout=CLICK_TIMEOUT_MS)
             except Exception as confirm_err:
                 self.logger.warning(
-                    f'[{self.req_id}] 首次点击"继续"失败，尝试 force 点击: {confirm_err}'
+                    f' 首次点击"继续"失败，尝试 force 点击: {confirm_err}'
                 )
                 try:
                     await confirm_button_locator.click(
@@ -231,7 +219,7 @@ class ChatController(BaseController):
                     )
                 except Exception as confirm_force_err:
                     self.logger.error(
-                        f'[{self.req_id}] "继续"按钮 force 点击仍失败: {confirm_force_err}'
+                        f' "继续"按钮 force 点击仍失败: {confirm_force_err}'
                     )
                     raise
 
@@ -244,17 +232,17 @@ class ChatController(BaseController):
         for attempt_disappear in range(max_retries_disappear):
             try:
                 self.logger.info(
-                    f"[{self.req_id}] 等待清空聊天确认按钮/对话框消失 (尝试 {attempt_disappear + 1}/{max_retries_disappear})..."
+                    f" 等待清空聊天确认按钮/对话框消失 (尝试 {attempt_disappear + 1}/{max_retries_disappear})..."
                 )
                 await expect_async(confirm_button_locator).to_be_hidden(
                     timeout=CLEAR_CHAT_VERIFY_TIMEOUT_MS
                 )
                 await expect_async(overlay_locator).to_be_hidden(timeout=1000)
-                self.logger.info(f"[{self.req_id}] 清空聊天确认对话框已成功消失。")
+                self.logger.info(" 清空聊天确认对话框已成功消失。")
                 break
             except TimeoutError:
                 self.logger.warning(
-                    f"[{self.req_id}] 等待清空聊天确认对话框消失超时 (尝试 {attempt_disappear + 1}/{max_retries_disappear})。"
+                    f" 等待清空聊天确认对话框消失超时 (尝试 {attempt_disappear + 1}/{max_retries_disappear})。"
                 )
                 if attempt_disappear < max_retries_disappear - 1:
                     await self._check_disconnect(
@@ -270,15 +258,13 @@ class ChatController(BaseController):
                     )
                     raise Exception(error_msg)
             except ClientDisconnectedError:
-                self.logger.info(
-                    f"[{self.req_id}] 客户端在等待清空确认对话框消失时断开连接。"
-                )
+                self.logger.info(" 客户端在等待清空确认对话框消失时断开连接。")
                 raise
             except Exception as other_err:
                 if isinstance(other_err, asyncio.CancelledError):
                     raise
                 self.logger.warning(
-                    f"[{self.req_id}] 等待清空确认对话框消失时发生其他错误: {other_err}"
+                    f" 等待清空确认对话框消失时发生其他错误: {other_err}"
                 )
                 if attempt_disappear < max_retries_disappear - 1:
                     continue
@@ -304,7 +290,7 @@ class ChatController(BaseController):
                     cnt = 0
                 if cnt and cnt > 0:
                     self.logger.info(
-                        f"[{self.req_id}] 检测到透明遮罩层 ({cnt})，发送 ESC 关闭 (尝试 {i + 1}/3)。"
+                        f" 检测到透明遮罩层 ({cnt})，发送 ESC 关闭 (尝试 {i + 1}/3)。"
                     )
                     try:
                         await self.page.keyboard.press("Escape")
@@ -329,10 +315,8 @@ class ChatController(BaseController):
             await expect_async(last_response_container).to_be_hidden(
                 timeout=CLEAR_CHAT_VERIFY_TIMEOUT_MS - 500
             )
-            self.logger.info(
-                f"[{self.req_id}] 聊天已成功清空 (验证通过 - 最后响应容器隐藏)。"
-            )
+            self.logger.info(" 聊天已成功清空 (验证通过 - 最后响应容器隐藏)。")
         except Exception as verify_err:
             self.logger.warning(
-                f"[{self.req_id}] 警告: 清空聊天验证失败 (最后响应容器未隐藏): {verify_err}"
+                f" 警告: 清空聊天验证失败 (最后响应容器未隐藏): {verify_err}"
             )

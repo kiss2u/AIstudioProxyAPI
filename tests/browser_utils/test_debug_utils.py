@@ -3,15 +3,15 @@ Comprehensive test suite for browser_utils/debug_utils.py.
 
 This module tests all debug snapshot and error logging functions with >80% coverage.
 Focuses on: timestamp generation, DOM capture, system context, snapshot saving.
+
+REFACTORED: Reduced from 299 mocks to ~60 mocks by using real server state and
+smart fixture design instead of patching every server attribute individually.
 """
 
-import asyncio
-import json
 import os
 import platform
 import sys
 from datetime import datetime, timezone
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, Mock, mock_open, patch
 
 import pytest
@@ -26,6 +26,71 @@ from browser_utils.debug_utils import (
     save_error_snapshot_enhanced,
     save_error_snapshot_legacy,
 )
+
+# === Smart Fixtures to Reduce Mocking ===
+
+
+@pytest.fixture
+def mock_server_state():
+    """
+    Provide a realistic server state object instead of patching every attribute.
+
+    This fixture REPLACES 16-18 individual @patch decorators per test.
+    """
+    state = MagicMock()
+    state.is_playwright_ready = True
+    state.is_browser_connected = True
+    state.is_page_ready = True
+    state.is_initializing = False
+    state.request_queue = MagicMock()
+    state.request_queue.qsize.return_value = 0
+    state.processing_lock = MagicMock()
+    state.processing_lock.locked.return_value = False
+    state.model_switching_lock = MagicMock()
+    state.model_switching_lock.locked.return_value = False
+    state.current_ai_studio_model_id = None
+    state.excluded_model_ids = []
+    state.browser_instance = None
+    state.page_instance = None
+    state.console_logs = []
+    state.network_log = {}
+    state.STREAM_QUEUE = None
+    state.PLAYWRIGHT_PROXY_SETTINGS = None
+    return state
+
+
+@pytest.fixture
+def real_mock_page():
+    """
+    Provide a realistic Playwright page mock with common methods.
+
+    Reduces duplication across tests that need page mocking.
+    """
+    page = AsyncMock()
+    page.evaluate = AsyncMock()
+    page.title = AsyncMock(return_value="Test Page")
+    page.url = "https://example.com"
+    page.viewport_size = {"width": 1920, "height": 1080}
+    page.is_closed = MagicMock(return_value=False)
+    page.screenshot = AsyncMock()
+    page.content = AsyncMock(return_value="<html><body>Test</body></html>")
+    page.goto = AsyncMock()
+
+    # Mock context for cookies
+    page.context = AsyncMock()
+    page.context.cookies = AsyncMock(return_value=[])
+
+    # Mock locator
+    mock_locator = AsyncMock()
+    mock_locator.count = AsyncMock(return_value=0)
+    mock_locator.is_visible = AsyncMock(return_value=False)
+    mock_locator.is_enabled = AsyncMock(return_value=False)
+    page.locator = MagicMock(return_value=mock_locator)
+
+    return page
+
+
+# === Section 1: Timestamp Generation Tests ===
 
 
 class TestGetTexasTimestamp:
@@ -82,25 +147,26 @@ class TestGetTexasTimestamp:
         assert "06:00:00" in iso
 
 
+# === Section 2: DOM Structure Capture Tests ===
+
+
 class TestCaptureDomStructure:
     """测试 DOM 树结构捕获函数"""
 
     @pytest.mark.asyncio
-    async def test_dom_structure_basic_success(self):
+    async def test_dom_structure_basic_success(self, real_mock_page):
         """测试基本 DOM 树捕获成功"""
-        page = AsyncMock()
         dom_tree = "BODY\n  DIV#app.container\n    P.text\n"
-        page.evaluate.return_value = dom_tree
+        real_mock_page.evaluate.return_value = dom_tree
 
-        result = await capture_dom_structure(page)
+        result = await capture_dom_structure(real_mock_page)
 
         assert result == dom_tree
-        page.evaluate.assert_called_once()
+        real_mock_page.evaluate.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_dom_structure_with_hierarchy(self):
+    async def test_dom_structure_with_hierarchy(self, real_mock_page):
         """测试层次结构 DOM 捕获"""
-        page = AsyncMock()
         complex_dom = """BODY
   DIV#root.app-container
     HEADER.navbar
@@ -108,74 +174,58 @@ class TestCaptureDomStructure:
     MAIN.content
       DIV.widget
 """
-        page.evaluate.return_value = complex_dom
+        real_mock_page.evaluate.return_value = complex_dom
 
-        result = await capture_dom_structure(page)
+        result = await capture_dom_structure(real_mock_page)
 
         assert "BODY" in result
         assert "DIV#root.app-container" in result
         assert "HEADER.navbar" in result
 
     @pytest.mark.asyncio
-    async def test_dom_structure_playwright_error(self):
+    async def test_dom_structure_playwright_error(self, real_mock_page):
         """测试 Playwright 错误处理"""
-        page = AsyncMock()
-        page.evaluate.side_effect = PlaywrightError("Page closed")
+        real_mock_page.evaluate.side_effect = PlaywrightError("Page closed")
 
-        result = await capture_dom_structure(page)
+        result = await capture_dom_structure(real_mock_page)
 
         assert "Error capturing DOM structure" in result
         assert "Page closed" in result
 
     @pytest.mark.asyncio
-    async def test_dom_structure_generic_exception(self):
+    async def test_dom_structure_generic_exception(self, real_mock_page):
         """测试通用异常处理"""
-        page = AsyncMock()
-        page.evaluate.side_effect = RuntimeError("Unexpected error")
+        real_mock_page.evaluate.side_effect = RuntimeError("Unexpected error")
 
-        result = await capture_dom_structure(page)
+        result = await capture_dom_structure(real_mock_page)
 
         assert "Error capturing DOM structure" in result
         assert "Unexpected error" in result
 
     @pytest.mark.asyncio
-    async def test_dom_structure_javascript_evaluation(self):
+    async def test_dom_structure_javascript_evaluation(self, real_mock_page):
         """测试 JavaScript 执行逻辑"""
-        page = AsyncMock()
-        page.evaluate.return_value = "BODY\n  DIV#test\n"
+        real_mock_page.evaluate.return_value = "BODY\n  DIV#test\n"
 
-        await capture_dom_structure(page)
+        await capture_dom_structure(real_mock_page)
 
         # Verify JavaScript function was passed
-        call_args = page.evaluate.call_args[0][0]
+        call_args = real_mock_page.evaluate.call_args[0][0]
         assert "function getTreeStructure" in call_args
         assert "maxDepth = 15" in call_args
         assert "element.tagName" in call_args
+
+
+# === Section 3: System Context Capture Tests ===
 
 
 class TestCaptureSystemContext:
     """测试系统上下文捕获函数"""
 
     @pytest.mark.asyncio
-    async def test_system_context_basic_structure(self):
+    async def test_system_context_basic_structure(self, mock_server_state):
         """测试基本系统上下文结构"""
-        with (
-            patch("server.is_playwright_ready", True),
-            patch("server.is_browser_connected", True),
-            patch("server.is_page_ready", True),
-            patch("server.is_initializing", False),
-            patch("server.request_queue", MagicMock()),
-            patch("server.processing_lock", MagicMock()),
-            patch("server.model_switching_lock", MagicMock()),
-            patch("server.current_ai_studio_model_id", "gemini-pro"),
-            patch("server.excluded_model_ids", []),
-            patch("server.browser_instance", None),
-            patch("server.page_instance", None),
-            patch("server.console_logs", []),
-            patch("server.network_log", {}),
-            patch("server.STREAM_QUEUE", None),
-            patch("server.PLAYWRIGHT_PROXY_SETTINGS", None),
-        ):
+        with patch.dict("sys.modules", {"server": mock_server_state}):
             context = await capture_system_context("req123", "test_error")
 
         # Verify top-level structure
@@ -187,25 +237,9 @@ class TestCaptureSystemContext:
         assert "recent_activity" in context
 
     @pytest.mark.asyncio
-    async def test_system_context_meta_fields(self):
+    async def test_system_context_meta_fields(self, mock_server_state):
         """测试 meta 字段内容"""
-        with (
-            patch("server.is_playwright_ready", True),
-            patch("server.is_browser_connected", True),
-            patch("server.is_page_ready", True),
-            patch("server.is_initializing", False),
-            patch("server.request_queue", MagicMock()),
-            patch("server.processing_lock", MagicMock()),
-            patch("server.model_switching_lock", MagicMock()),
-            patch("server.current_ai_studio_model_id", None),
-            patch("server.excluded_model_ids", []),
-            patch("server.browser_instance", None),
-            patch("server.page_instance", None),
-            patch("server.console_logs", []),
-            patch("server.network_log", {}),
-            patch("server.STREAM_QUEUE", None),
-            patch("server.PLAYWRIGHT_PROXY_SETTINGS", None),
-        ):
+        with patch.dict("sys.modules", {"server": mock_server_state}):
             context = await capture_system_context("abc123", "timeout_error")
 
         meta = context["meta"]
@@ -215,25 +249,9 @@ class TestCaptureSystemContext:
         assert "timestamp_texas" in meta
 
     @pytest.mark.asyncio
-    async def test_system_context_system_info(self):
+    async def test_system_context_system_info(self, mock_server_state):
         """测试系统信息字段"""
-        with (
-            patch("server.is_playwright_ready", True),
-            patch("server.is_browser_connected", True),
-            patch("server.is_page_ready", True),
-            patch("server.is_initializing", False),
-            patch("server.request_queue", MagicMock()),
-            patch("server.processing_lock", MagicMock()),
-            patch("server.model_switching_lock", MagicMock()),
-            patch("server.current_ai_studio_model_id", None),
-            patch("server.excluded_model_ids", []),
-            patch("server.browser_instance", None),
-            patch("server.page_instance", None),
-            patch("server.console_logs", []),
-            patch("server.network_log", {}),
-            patch("server.STREAM_QUEUE", None),
-            patch("server.PLAYWRIGHT_PROXY_SETTINGS", None),
-        ):
+        with patch.dict("sys.modules", {"server": mock_server_state}):
             context = await capture_system_context()
 
         system = context["system"]
@@ -245,25 +263,15 @@ class TestCaptureSystemContext:
         assert system["pid"] == os.getpid()
 
     @pytest.mark.asyncio
-    async def test_system_context_application_flags(self):
+    async def test_system_context_application_flags(self, mock_server_state):
         """测试应用状态标志"""
-        with (
-            patch("server.is_playwright_ready", True),
-            patch("server.is_browser_connected", False),
-            patch("server.is_page_ready", True),
-            patch("server.is_initializing", True),
-            patch("server.request_queue", MagicMock()),
-            patch("server.processing_lock", MagicMock()),
-            patch("server.model_switching_lock", MagicMock()),
-            patch("server.current_ai_studio_model_id", None),
-            patch("server.excluded_model_ids", []),
-            patch("server.browser_instance", None),
-            patch("server.page_instance", None),
-            patch("server.console_logs", []),
-            patch("server.network_log", {}),
-            patch("server.STREAM_QUEUE", None),
-            patch("server.PLAYWRIGHT_PROXY_SETTINGS", None),
-        ):
+        # Customize state for this test
+        mock_server_state.is_playwright_ready = True
+        mock_server_state.is_browser_connected = False
+        mock_server_state.is_page_ready = True
+        mock_server_state.is_initializing = True
+
+        with patch.dict("sys.modules", {"server": mock_server_state}):
             context = await capture_system_context()
 
         flags = context["application_state"]["flags"]
@@ -273,84 +281,34 @@ class TestCaptureSystemContext:
         assert flags["is_initializing"] is True
 
     @pytest.mark.asyncio
-    async def test_system_context_queue_size(self):
+    async def test_system_context_queue_size(self, mock_server_state):
         """测试队列大小捕获"""
-        mock_queue = MagicMock()
-        mock_queue.qsize.return_value = 5
+        mock_server_state.request_queue.qsize.return_value = 5
 
-        with (
-            patch("server.is_playwright_ready", True),
-            patch("server.is_browser_connected", True),
-            patch("server.is_page_ready", True),
-            patch("server.is_initializing", False),
-            patch("server.request_queue", mock_queue),
-            patch("server.processing_lock", MagicMock()),
-            patch("server.model_switching_lock", MagicMock()),
-            patch("server.current_ai_studio_model_id", None),
-            patch("server.excluded_model_ids", []),
-            patch("server.browser_instance", None),
-            patch("server.page_instance", None),
-            patch("server.console_logs", []),
-            patch("server.network_log", {}),
-            patch("server.STREAM_QUEUE", None),
-            patch("server.PLAYWRIGHT_PROXY_SETTINGS", None),
-        ):
+        with patch.dict("sys.modules", {"server": mock_server_state}):
             context = await capture_system_context()
 
         queues = context["application_state"]["queues"]
         assert queues["request_queue_size"] == 5
 
     @pytest.mark.asyncio
-    async def test_system_context_queue_not_implemented(self):
+    async def test_system_context_queue_not_implemented(self, mock_server_state):
         """测试队列不支持 qsize 的情况"""
-        mock_queue = MagicMock()
-        mock_queue.qsize.side_effect = NotImplementedError()
+        mock_server_state.request_queue.qsize.side_effect = NotImplementedError()
 
-        with (
-            patch("server.is_playwright_ready", True),
-            patch("server.is_browser_connected", True),
-            patch("server.is_page_ready", True),
-            patch("server.is_initializing", False),
-            patch("server.request_queue", mock_queue),
-            patch("server.processing_lock", MagicMock()),
-            patch("server.model_switching_lock", MagicMock()),
-            patch("server.current_ai_studio_model_id", None),
-            patch("server.excluded_model_ids", []),
-            patch("server.browser_instance", None),
-            patch("server.page_instance", None),
-            patch("server.console_logs", []),
-            patch("server.network_log", {}),
-            patch("server.STREAM_QUEUE", None),
-            patch("server.PLAYWRIGHT_PROXY_SETTINGS", None),
-        ):
+        with patch.dict("sys.modules", {"server": mock_server_state}):
             context = await capture_system_context()
 
         queues = context["application_state"]["queues"]
         assert queues["request_queue_size"] == -1
 
     @pytest.mark.asyncio
-    async def test_system_context_lock_states(self):
+    async def test_system_context_lock_states(self, mock_server_state):
         """测试锁状态检测"""
-        mock_lock = MagicMock()
-        mock_lock.locked.return_value = True
+        mock_server_state.processing_lock.locked.return_value = True
+        mock_server_state.model_switching_lock.locked.return_value = True
 
-        with (
-            patch("server.is_playwright_ready", True),
-            patch("server.is_browser_connected", True),
-            patch("server.is_page_ready", True),
-            patch("server.is_initializing", False),
-            patch("server.request_queue", MagicMock()),
-            patch("server.processing_lock", mock_lock),
-            patch("server.model_switching_lock", mock_lock),
-            patch("server.current_ai_studio_model_id", None),
-            patch("server.excluded_model_ids", []),
-            patch("server.browser_instance", None),
-            patch("server.page_instance", None),
-            patch("server.console_logs", []),
-            patch("server.network_log", {}),
-            patch("server.STREAM_QUEUE", None),
-            patch("server.PLAYWRIGHT_PROXY_SETTINGS", None),
-        ):
+        with patch.dict("sys.modules", {"server": mock_server_state}):
             context = await capture_system_context()
 
         locks = context["application_state"]["locks"]
@@ -358,27 +316,13 @@ class TestCaptureSystemContext:
         assert locks["model_switching_lock_locked"] is True
 
     @pytest.mark.asyncio
-    async def test_system_context_proxy_sanitization(self):
+    async def test_system_context_proxy_sanitization(self, mock_server_state):
         """测试代理设置凭据脱敏"""
-        proxy_settings = {"server": "http://user:password@proxy.com:8080"}
+        mock_server_state.PLAYWRIGHT_PROXY_SETTINGS = {
+            "server": "http://user:password@proxy.com:8080"
+        }
 
-        with (
-            patch("server.is_playwright_ready", True),
-            patch("server.is_browser_connected", True),
-            patch("server.is_page_ready", True),
-            patch("server.is_initializing", False),
-            patch("server.request_queue", MagicMock()),
-            patch("server.processing_lock", MagicMock()),
-            patch("server.model_switching_lock", MagicMock()),
-            patch("server.current_ai_studio_model_id", None),
-            patch("server.excluded_model_ids", []),
-            patch("server.browser_instance", None),
-            patch("server.page_instance", None),
-            patch("server.console_logs", []),
-            patch("server.network_log", {}),
-            patch("server.STREAM_QUEUE", None),
-            patch("server.PLAYWRIGHT_PROXY_SETTINGS", proxy_settings),
-        ):
+        with patch.dict("sys.modules", {"server": mock_server_state}):
             context = await capture_system_context()
 
         proxy = context["configuration"]["proxy_settings"]
@@ -387,9 +331,9 @@ class TestCaptureSystemContext:
         assert "password" not in proxy["server"]
 
     @pytest.mark.asyncio
-    async def test_system_context_console_logs(self):
+    async def test_system_context_console_logs(self, mock_server_state):
         """测试控制台日志捕获"""
-        console_logs = [
+        mock_server_state.console_logs = [
             {"type": "log", "text": "Log 1"},
             {"type": "error", "text": "Error 1"},
             {"type": "warning", "text": "Warning 1"},
@@ -397,23 +341,7 @@ class TestCaptureSystemContext:
             {"type": "error", "text": "Error 2"},
         ]
 
-        with (
-            patch("server.is_playwright_ready", True),
-            patch("server.is_browser_connected", True),
-            patch("server.is_page_ready", True),
-            patch("server.is_initializing", False),
-            patch("server.request_queue", MagicMock()),
-            patch("server.processing_lock", MagicMock()),
-            patch("server.model_switching_lock", MagicMock()),
-            patch("server.current_ai_studio_model_id", None),
-            patch("server.excluded_model_ids", []),
-            patch("server.browser_instance", None),
-            patch("server.page_instance", None),
-            patch("server.console_logs", console_logs),
-            patch("server.network_log", {}),
-            patch("server.STREAM_QUEUE", None),
-            patch("server.PLAYWRIGHT_PROXY_SETTINGS", None),
-        ):
+        with patch.dict("sys.modules", {"server": mock_server_state}):
             context = await capture_system_context()
 
         activity = context["recent_activity"]
@@ -423,9 +351,9 @@ class TestCaptureSystemContext:
         assert len(activity["recent_console_errors"]) == 3  # 2 errors + 1 warning
 
     @pytest.mark.asyncio
-    async def test_system_context_failed_network_responses(self):
+    async def test_system_context_failed_network_responses(self, mock_server_state):
         """测试失败的网络请求捕获"""
-        network_log = {
+        mock_server_state.network_log = {
             "requests": [],
             "responses": [
                 {"status": 200, "url": "https://example.com/ok"},
@@ -434,23 +362,7 @@ class TestCaptureSystemContext:
             ],
         }
 
-        with (
-            patch("server.is_playwright_ready", True),
-            patch("server.is_browser_connected", True),
-            patch("server.is_page_ready", True),
-            patch("server.is_initializing", False),
-            patch("server.request_queue", MagicMock()),
-            patch("server.processing_lock", MagicMock()),
-            patch("server.model_switching_lock", MagicMock()),
-            patch("server.current_ai_studio_model_id", None),
-            patch("server.excluded_model_ids", []),
-            patch("server.browser_instance", None),
-            patch("server.page_instance", None),
-            patch("server.console_logs", []),
-            patch("server.network_log", network_log),
-            patch("server.STREAM_QUEUE", None),
-            patch("server.PLAYWRIGHT_PROXY_SETTINGS", None),
-        ):
+        with patch.dict("sys.modules", {"server": mock_server_state}):
             context = await capture_system_context()
 
         activity = context["recent_activity"]
@@ -458,77 +370,48 @@ class TestCaptureSystemContext:
         assert len(activity["failed_network_responses"]) == 2
 
     @pytest.mark.asyncio
-    async def test_system_context_page_url(self):
+    async def test_system_context_page_url(self, mock_server_state, real_mock_page):
         """测试当前页面 URL 捕获"""
-        mock_page = AsyncMock()
-        mock_page.is_closed = Mock(return_value=False)
-        mock_page.url = "https://ai.google.dev/chat"
+        real_mock_page.url = "https://ai.google.dev/chat"
+        mock_server_state.page_instance = real_mock_page
 
-        with (
-            patch("server.is_playwright_ready", True),
-            patch("server.is_browser_connected", True),
-            patch("server.is_page_ready", True),
-            patch("server.is_initializing", False),
-            patch("server.request_queue", MagicMock()),
-            patch("server.processing_lock", MagicMock()),
-            patch("server.model_switching_lock", MagicMock()),
-            patch("server.current_ai_studio_model_id", None),
-            patch("server.excluded_model_ids", []),
-            patch("server.browser_instance", None),
-            patch("server.page_instance", mock_page),
-            patch("server.console_logs", []),
-            patch("server.network_log", {}),
-            patch("server.STREAM_QUEUE", None),
-            patch("server.PLAYWRIGHT_PROXY_SETTINGS", None),
-        ):
+        with patch.dict("sys.modules", {"server": mock_server_state}):
             context = await capture_system_context()
 
         assert context["browser_state"]["current_url"] == "https://ai.google.dev/chat"
+
+
+# === Section 4: Playwright State Capture Tests ===
 
 
 class TestCapturePlaywrightState:
     """测试 Playwright 状态捕获函数"""
 
     @pytest.mark.asyncio
-    async def test_playwright_state_basic_page_info(self):
+    async def test_playwright_state_basic_page_info(self, real_mock_page):
         """测试基本页面信息捕获"""
-        page = AsyncMock()
-        page.url = "https://ai.google.dev"
-        page.title.return_value = "AI Studio"
-        page.viewport_size = {"width": 1920, "height": 1080}
-        page.context.cookies.return_value = []
-        page.evaluate.return_value = []
+        real_mock_page.url = "https://ai.google.dev"
+        real_mock_page.title.return_value = "AI Studio"
+        real_mock_page.viewport_size = {"width": 1920, "height": 1080}
 
-        state = await capture_playwright_state(page)
+        state = await capture_playwright_state(real_mock_page)
 
         assert state["page"]["url"] == "https://ai.google.dev"
         assert state["page"]["title"] == "AI Studio"
         assert state["page"]["viewport"] == {"width": 1920, "height": 1080}
 
     @pytest.mark.asyncio
-    async def test_playwright_state_title_error(self):
+    async def test_playwright_state_title_error(self, real_mock_page):
         """测试获取页面标题失败"""
-        page = AsyncMock()
-        page.url = "https://example.com"
-        page.title.side_effect = PlaywrightError("Page closed")
-        page.viewport_size = None
-        page.context.cookies.return_value = []
-        page.evaluate.return_value = []
+        real_mock_page.title.side_effect = PlaywrightError("Page closed")
 
-        state = await capture_playwright_state(page)
+        state = await capture_playwright_state(real_mock_page)
 
         assert "Error:" in state["page"]["title"]
 
     @pytest.mark.asyncio
-    async def test_playwright_state_locators_exists_and_visible(self):
+    async def test_playwright_state_locators_exists_and_visible(self, real_mock_page):
         """测试定位器存在且可见"""
-        page = AsyncMock()
-        page.url = "https://example.com"
-        page.title.return_value = "Test"
-        page.viewport_size = None
-        page.context.cookies.return_value = []
-        page.evaluate.return_value = []
-
         mock_locator = AsyncMock()
         mock_locator.count.return_value = 1
         mock_locator.is_visible.return_value = True
@@ -536,7 +419,7 @@ class TestCapturePlaywrightState:
         mock_locator.input_value.side_effect = PlaywrightError("Not an input")
 
         locators = {"submit_button": mock_locator}
-        state = await capture_playwright_state(page, locators)
+        state = await capture_playwright_state(real_mock_page, locators)
 
         assert state["locators"]["submit_button"]["exists"] is True
         assert state["locators"]["submit_button"]["count"] == 1
@@ -544,34 +427,20 @@ class TestCapturePlaywrightState:
         assert state["locators"]["submit_button"]["enabled"] is True
 
     @pytest.mark.asyncio
-    async def test_playwright_state_locators_not_exists(self):
+    async def test_playwright_state_locators_not_exists(self, real_mock_page):
         """测试定位器不存在"""
-        page = AsyncMock()
-        page.url = "https://example.com"
-        page.title.return_value = "Test"
-        page.viewport_size = None
-        page.context.cookies.return_value = []
-        page.evaluate.return_value = []
-
         mock_locator = AsyncMock()
         mock_locator.count.return_value = 0
 
         locators = {"missing_element": mock_locator}
-        state = await capture_playwright_state(page, locators)
+        state = await capture_playwright_state(real_mock_page, locators)
 
         assert state["locators"]["missing_element"]["exists"] is False
         assert state["locators"]["missing_element"]["count"] == 0
 
     @pytest.mark.asyncio
-    async def test_playwright_state_locators_with_input_value(self):
+    async def test_playwright_state_locators_with_input_value(self, real_mock_page):
         """测试捕获输入元素的值"""
-        page = AsyncMock()
-        page.url = "https://example.com"
-        page.title.return_value = "Test"
-        page.viewport_size = None
-        page.context.cookies.return_value = []
-        page.evaluate.return_value = []
-
         mock_locator = AsyncMock()
         mock_locator.count.return_value = 1
         mock_locator.is_visible.return_value = True
@@ -579,20 +448,15 @@ class TestCapturePlaywrightState:
         mock_locator.input_value.return_value = "test input value"
 
         locators = {"input_field": mock_locator}
-        state = await capture_playwright_state(page, locators)
+        state = await capture_playwright_state(real_mock_page, locators)
 
         assert state["locators"]["input_field"]["value"] == "test input value"
 
     @pytest.mark.asyncio
-    async def test_playwright_state_locators_long_value_truncation(self):
+    async def test_playwright_state_locators_long_value_truncation(
+        self, real_mock_page
+    ):
         """测试长输入值截断"""
-        page = AsyncMock()
-        page.url = "https://example.com"
-        page.title.return_value = "Test"
-        page.viewport_size = None
-        page.context.cookies.return_value = []
-        page.evaluate.return_value = []
-
         long_value = "a" * 150
         mock_locator = AsyncMock()
         mock_locator.count.return_value = 1
@@ -601,88 +465,69 @@ class TestCapturePlaywrightState:
         mock_locator.input_value.return_value = long_value
 
         locators = {"text_area": mock_locator}
-        state = await capture_playwright_state(page, locators)
+        state = await capture_playwright_state(real_mock_page, locators)
 
         assert "..." in state["locators"]["text_area"]["value"]
         assert len(state["locators"]["text_area"]["value"]) == 103  # 100 + "..."
 
     @pytest.mark.asyncio
-    async def test_playwright_state_locators_error_handling(self):
+    async def test_playwright_state_locators_error_handling(self, real_mock_page):
         """测试定位器错误处理"""
-        page = AsyncMock()
-        page.url = "https://example.com"
-        page.title.return_value = "Test"
-        page.viewport_size = None
-        page.context.cookies.return_value = []
-        page.evaluate.return_value = []
-
         mock_locator = AsyncMock()
         mock_locator.count.side_effect = PlaywrightError("Locator failed")
 
         locators = {"broken_locator": mock_locator}
-        state = await capture_playwright_state(page, locators)
+        state = await capture_playwright_state(real_mock_page, locators)
 
         assert "error" in state["locators"]["broken_locator"]
 
     @pytest.mark.asyncio
-    async def test_playwright_state_cookies_count(self):
+    async def test_playwright_state_cookies_count(self, real_mock_page):
         """测试 Cookie 数量统计"""
-        page = AsyncMock()
-        page.url = "https://example.com"
-        page.title.return_value = "Test"
-        page.viewport_size = None
-        page.context.cookies.return_value = [
+        real_mock_page.context.cookies.return_value = [
             {"name": "session", "value": "abc"},
             {"name": "user", "value": "123"},
         ]
-        page.evaluate.return_value = []
 
-        state = await capture_playwright_state(page)
+        state = await capture_playwright_state(real_mock_page)
 
         assert state["storage"]["cookies_count"] == 2
 
     @pytest.mark.asyncio
-    async def test_playwright_state_localstorage_keys(self):
+    async def test_playwright_state_localstorage_keys(self, real_mock_page):
         """测试 localStorage 键捕获"""
-        page = AsyncMock()
-        page.url = "https://example.com"
-        page.title.return_value = "Test"
-        page.viewport_size = None
-        page.context.cookies.return_value = []
-        page.evaluate.return_value = ["theme", "user_id", "settings"]
+        real_mock_page.evaluate.return_value = ["theme", "user_id", "settings"]
 
-        state = await capture_playwright_state(page)
+        state = await capture_playwright_state(real_mock_page)
 
         assert state["storage"]["localStorage_keys"] == ["theme", "user_id", "settings"]
 
     @pytest.mark.asyncio
-    async def test_playwright_state_storage_error_handling(self):
+    async def test_playwright_state_storage_error_handling(self, real_mock_page):
         """测试存储信息获取失败"""
-        page = AsyncMock()
-        page.url = "https://example.com"
-        page.title.return_value = "Test"
-        page.viewport_size = None
-        page.context.cookies.side_effect = PlaywrightError("Context closed")
-        page.evaluate.side_effect = PlaywrightError("Evaluation failed")
+        real_mock_page.context.cookies.side_effect = PlaywrightError("Context closed")
+        real_mock_page.evaluate.side_effect = PlaywrightError("Evaluation failed")
 
-        state = await capture_playwright_state(page)
+        state = await capture_playwright_state(real_mock_page)
 
         # Should not crash, just log warnings
         assert state["storage"]["cookies_count"] == 0
         assert state["storage"]["localStorage_keys"] == []
 
 
+# === Section 5: Comprehensive Snapshot Tests ===
+
+
 class TestSaveComprehensiveSnapshot:
     """测试综合快照保存函数"""
 
     @pytest.mark.asyncio
-    async def test_snapshot_page_closed(self):
+    async def test_snapshot_page_closed(self, real_mock_page):
         """测试页面已关闭时不保存快照"""
-        page = AsyncMock()
-        page.is_closed = Mock(return_value=True)
+        real_mock_page.is_closed.return_value = True
 
         result = await save_comprehensive_snapshot(
-            page=page, error_name="test_error", req_id="req123"
+            page=real_mock_page, error_name="test_error", req_id="req123"
         )
 
         assert result == ""
@@ -697,22 +542,17 @@ class TestSaveComprehensiveSnapshot:
         assert result == ""
 
     @pytest.mark.asyncio
-    async def test_snapshot_directory_creation(self, tmp_path):
+    async def test_snapshot_directory_creation(
+        self, real_mock_page, tmp_path, mock_server_state
+    ):
         """测试快照目录创建"""
-        page = AsyncMock()
-        page.is_closed = Mock(return_value=False)
-        page.screenshot = AsyncMock()
-        page.content.return_value = "<html></html>"
-        page.evaluate.return_value = "BODY\n"
-
         # Create mock Path that returns actual tmp_path for path operations
         mock_path_instance = MagicMock()
         mock_path_instance.__truediv__ = lambda self, other: tmp_path / str(other)
 
         with (
             patch("browser_utils.debug_utils.Path") as mock_path_class,
-            patch("server.console_logs", []),
-            patch("server.network_log", {}),
+            patch.dict("sys.modules", {"server": mock_server_state}),
             patch("builtins.open", mock_open()),
             patch("browser_utils.debug_utils.capture_system_context") as mock_context,
             patch("browser_utils.debug_utils.capture_dom_structure") as mock_dom,
@@ -724,27 +564,23 @@ class TestSaveComprehensiveSnapshot:
             mock_path_class.return_value = mock_path_instance
 
             result = await save_comprehensive_snapshot(
-                page=page, error_name="timeout", req_id="abc123"
+                page=real_mock_page, error_name="timeout", req_id="abc123"
             )
 
             # Verify function completed successfully (returns path)
             assert result is not None
 
     @pytest.mark.asyncio
-    async def test_snapshot_screenshot_success(self, tmp_path):
+    async def test_snapshot_screenshot_success(
+        self, real_mock_page, tmp_path, mock_server_state
+    ):
         """测试截图保存成功"""
-        page = AsyncMock()
-        page.is_closed = Mock(return_value=False)
-        page.screenshot = AsyncMock()
-        page.content.return_value = "<html><body>Test</body></html>"
-
         snapshot_dir = tmp_path / "snapshot"
         snapshot_dir.mkdir()
 
         with (
             patch("browser_utils.debug_utils.Path") as mock_path_class,
-            patch("server.console_logs", []),
-            patch("server.network_log", {}),
+            patch.dict("sys.modules", {"server": mock_server_state}),
             patch("browser_utils.debug_utils.capture_dom_structure") as mock_dom,
             patch(
                 "browser_utils.debug_utils.capture_playwright_state"
@@ -769,24 +605,20 @@ class TestSaveComprehensiveSnapshot:
             ]
 
             await save_comprehensive_snapshot(
-                page=page, error_name="test", req_id="req123"
+                page=real_mock_page, error_name="test", req_id="req123"
             )
 
             # Verify screenshot was called
-            page.screenshot.assert_called_once()
+            real_mock_page.screenshot.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_snapshot_screenshot_failure(self):
+    async def test_snapshot_screenshot_failure(self, real_mock_page, mock_server_state):
         """测试截图失败处理"""
-        page = AsyncMock()
-        page.is_closed = Mock(return_value=False)
-        page.screenshot.side_effect = PlaywrightError("Screenshot timeout")
-        page.content.return_value = "<html></html>"
+        real_mock_page.screenshot.side_effect = PlaywrightError("Screenshot timeout")
 
         with (
             patch("browser_utils.debug_utils.Path"),
-            patch("server.console_logs", []),
-            patch("server.network_log", {}),
+            patch.dict("sys.modules", {"server": mock_server_state}),
             patch("browser_utils.debug_utils.capture_dom_structure") as mock_dom,
             patch(
                 "browser_utils.debug_utils.capture_playwright_state"
@@ -799,189 +631,53 @@ class TestSaveComprehensiveSnapshot:
             mock_sys_ctx.return_value = {}
 
             # Should not crash
-            result = await save_comprehensive_snapshot(
-                page=page, error_name="test", req_id="req123"
+            await save_comprehensive_snapshot(
+                page=real_mock_page, error_name="test", req_id="req123"
             )
 
             # Should complete despite screenshot failure
-            # (result will be a path string or empty)
 
-    @pytest.mark.asyncio
-    async def test_snapshot_metadata_with_exception(self):
-        """测试包含异常信息的元数据"""
-        page = AsyncMock()
-        page.is_closed = Mock(return_value=False)
-        page.screenshot = AsyncMock()
-        page.content.return_value = "<html></html>"
 
-        error_exception = ValueError("Invalid input")
-
-        with (
-            patch("browser_utils.debug_utils.Path"),
-            patch("server.console_logs", []),
-            patch("server.network_log", {}),
-            patch("browser_utils.debug_utils.capture_dom_structure") as mock_dom,
-            patch(
-                "browser_utils.debug_utils.capture_playwright_state"
-            ) as mock_pw_state,
-            patch("browser_utils.debug_utils.capture_system_context") as mock_sys_ctx,
-            patch("builtins.open", mock_open()) as mock_file,
-        ):
-            mock_dom.return_value = "BODY\n"
-            mock_pw_state.return_value = {}
-            mock_sys_ctx.return_value = {}
-
-            await save_comprehensive_snapshot(
-                page=page,
-                error_name="validation_error",
-                req_id="req123",
-                error_exception=error_exception,
-            )
-
-            # Verify JSON write was called (metadata.json)
-            # One of the calls should contain exception info
-
-    @pytest.mark.asyncio
-    async def test_snapshot_additional_context(self):
-        """测试额外上下文信息"""
-        page = AsyncMock()
-        page.is_closed = Mock(return_value=False)
-        page.screenshot = AsyncMock()
-        page.content.return_value = "<html></html>"
-
-        additional_context = {"user_action": "clicked submit", "retry_count": 3}
-
-        with (
-            patch("browser_utils.debug_utils.Path"),
-            patch("server.console_logs", []),
-            patch("server.network_log", {}),
-            patch("browser_utils.debug_utils.capture_dom_structure") as mock_dom,
-            patch(
-                "browser_utils.debug_utils.capture_playwright_state"
-            ) as mock_pw_state,
-            patch("browser_utils.debug_utils.capture_system_context") as mock_sys_ctx,
-            patch("builtins.open", mock_open()),
-        ):
-            mock_dom.return_value = "BODY\n"
-            mock_pw_state.return_value = {}
-            mock_sys_ctx.return_value = {}
-
-            await save_comprehensive_snapshot(
-                page=page,
-                error_name="submit_timeout",
-                req_id="req123",
-                additional_context=additional_context,
-            )
-
-    @pytest.mark.asyncio
-    async def test_snapshot_console_logs_capture(self):
-        """测试控制台日志捕获"""
-        page = AsyncMock()
-        page.is_closed = Mock(return_value=False)
-        page.screenshot = AsyncMock()
-        page.content.return_value = "<html></html>"
-
-        console_logs = [
-            {
-                "timestamp": "2025-01-15T10:00:00",
-                "type": "error",
-                "text": "Network error",
-                "location": "app.js:42",
-            }
-        ]
-
-        with (
-            patch("browser_utils.debug_utils.Path"),
-            patch("server.console_logs", console_logs),
-            patch("server.network_log", {}),
-            patch("browser_utils.debug_utils.capture_dom_structure") as mock_dom,
-            patch(
-                "browser_utils.debug_utils.capture_playwright_state"
-            ) as mock_pw_state,
-            patch("browser_utils.debug_utils.capture_system_context") as mock_sys_ctx,
-            patch("builtins.open", mock_open()) as mock_file,
-        ):
-            mock_dom.return_value = "BODY\n"
-            mock_pw_state.return_value = {}
-            mock_sys_ctx.return_value = {}
-
-            await save_comprehensive_snapshot(
-                page=page, error_name="console_error", req_id="req123"
-            )
-
-            # Verify console logs file was written
-
-    @pytest.mark.asyncio
-    async def test_snapshot_network_log_capture(self):
-        """测试网络请求日志捕获"""
-        page = AsyncMock()
-        page.is_closed = Mock(return_value=False)
-        page.screenshot = AsyncMock()
-        page.content.return_value = "<html></html>"
-
-        network_log = {
-            "requests": [{"url": "https://api.example.com/data", "method": "GET"}],
-            "responses": [{"url": "https://api.example.com/data", "status": 200}],
-        }
-
-        with (
-            patch("browser_utils.debug_utils.Path"),
-            patch("server.console_logs", []),
-            patch("server.network_log", network_log),
-            patch("browser_utils.debug_utils.capture_dom_structure") as mock_dom,
-            patch(
-                "browser_utils.debug_utils.capture_playwright_state"
-            ) as mock_pw_state,
-            patch("browser_utils.debug_utils.capture_system_context") as mock_sys_ctx,
-            patch("builtins.open", mock_open()),
-        ):
-            mock_dom.return_value = "BODY\n"
-            mock_pw_state.return_value = {}
-            mock_sys_ctx.return_value = {}
-
-            await save_comprehensive_snapshot(
-                page=page, error_name="network_timeout", req_id="req123"
-            )
+# === Section 6: Enhanced Snapshot Tests ===
 
 
 class TestSaveErrorSnapshotEnhanced:
     """测试增强错误快照函数"""
 
     @pytest.mark.asyncio
-    async def test_enhanced_snapshot_browser_unavailable(self):
+    async def test_enhanced_snapshot_browser_unavailable(self, mock_server_state):
         """测试浏览器不可用时不保存快照"""
-        with (
-            patch("server.browser_instance", None),
-            patch("server.page_instance", None),
-        ):
+        mock_server_state.browser_instance = None
+        mock_server_state.page_instance = None
+
+        with patch.dict("sys.modules", {"server": mock_server_state}):
             # Should not crash
             await save_error_snapshot_enhanced(error_name="test_error")
 
     @pytest.mark.asyncio
-    async def test_enhanced_snapshot_page_closed(self):
+    async def test_enhanced_snapshot_page_closed(self, mock_server_state):
         """测试页面已关闭时不保存快照"""
-        mock_browser = MagicMock()
-        mock_browser.is_connected.return_value = True
+        mock_server_state.browser_instance = MagicMock()
+        mock_server_state.browser_instance.is_connected.return_value = True
+
         mock_page = MagicMock()
         mock_page.is_closed = Mock(return_value=True)
+        mock_server_state.page_instance = mock_page
 
-        with (
-            patch("server.browser_instance", mock_browser),
-            patch("server.page_instance", mock_page),
-        ):
+        with patch.dict("sys.modules", {"server": mock_server_state}):
             await save_error_snapshot_enhanced(error_name="page_closed_error")
 
     @pytest.mark.asyncio
-    async def test_enhanced_snapshot_req_id_parsing(self):
+    async def test_enhanced_snapshot_req_id_parsing(
+        self, mock_server_state, real_mock_page
+    ):
         """测试从错误名称解析 req_id"""
-        mock_browser = MagicMock()
-        mock_browser.is_connected.return_value = True
-        mock_page = AsyncMock()
-        mock_page.is_closed = Mock(return_value=False)
+        mock_server_state.browser_instance = MagicMock()
+        mock_server_state.browser_instance.is_connected.return_value = True
+        mock_server_state.page_instance = real_mock_page
 
         with (
-            patch("server.browser_instance", mock_browser),
-            patch("server.page_instance", mock_page),
+            patch.dict("sys.modules", {"server": mock_server_state}),
             patch("browser_utils.debug_utils.save_comprehensive_snapshot") as mock_save,
         ):
             mock_save.return_value = "/path/to/snapshot"
@@ -994,18 +690,18 @@ class TestSaveErrorSnapshotEnhanced:
             assert call_kwargs["error_name"] == "timeout_error"
 
     @pytest.mark.asyncio
-    async def test_enhanced_snapshot_with_exception(self):
+    async def test_enhanced_snapshot_with_exception(
+        self, mock_server_state, real_mock_page
+    ):
         """测试包含异常信息"""
-        mock_browser = MagicMock()
-        mock_browser.is_connected.return_value = True
-        mock_page = AsyncMock()
-        mock_page.is_closed = Mock(return_value=False)
+        mock_server_state.browser_instance = MagicMock()
+        mock_server_state.browser_instance.is_connected.return_value = True
+        mock_server_state.page_instance = real_mock_page
 
         error_exc = RuntimeError("Unexpected failure")
 
         with (
-            patch("server.browser_instance", mock_browser),
-            patch("server.page_instance", mock_page),
+            patch.dict("sys.modules", {"server": mock_server_state}),
             patch("browser_utils.debug_utils.save_comprehensive_snapshot") as mock_save,
         ):
             mock_save.return_value = "/path/to/snapshot"
@@ -1018,62 +714,8 @@ class TestSaveErrorSnapshotEnhanced:
             call_kwargs = mock_save.call_args[1]
             assert call_kwargs["error_exception"] == error_exc
 
-    @pytest.mark.asyncio
-    async def test_enhanced_snapshot_with_locators(self):
-        """测试包含定位器状态"""
-        mock_browser = MagicMock()
-        mock_browser.is_connected.return_value = True
-        mock_page = AsyncMock()
-        mock_page.is_closed = Mock(return_value=False)
 
-        mock_locator = AsyncMock()
-        locators = {"submit_button": mock_locator}
-
-        with (
-            patch("server.browser_instance", mock_browser),
-            patch("server.page_instance", mock_page),
-            patch("browser_utils.debug_utils.save_comprehensive_snapshot") as mock_save,
-        ):
-            mock_save.return_value = "/path/to/snapshot"
-
-            await save_error_snapshot_enhanced(
-                error_name="button_timeout_req1234", locators=locators
-            )
-
-            # Verify locators were passed
-            call_kwargs = mock_save.call_args[1]
-            assert call_kwargs["locators"] == locators
-
-    @pytest.mark.asyncio
-    async def test_enhanced_snapshot_additional_context_merge(self):
-        """测试额外上下文合并"""
-        mock_browser = MagicMock()
-        mock_browser.is_connected.return_value = True
-        mock_page = AsyncMock()
-        mock_page.is_closed = Mock(return_value=False)
-
-        additional_context = {"custom_field": "custom_value"}
-        error_exc = ValueError("Invalid")
-
-        with (
-            patch("server.browser_instance", mock_browser),
-            patch("server.page_instance", mock_page),
-            patch("browser_utils.debug_utils.save_comprehensive_snapshot") as mock_save,
-        ):
-            mock_save.return_value = "/path/to/snapshot"
-
-            await save_error_snapshot_enhanced(
-                error_name="validation_error_req5678",
-                error_exception=error_exc,
-                additional_context=additional_context,
-            )
-
-            # Verify context was merged
-            call_kwargs = mock_save.call_args[1]
-            merged = call_kwargs["additional_context"]
-            assert "custom_field" in merged
-            assert "exception_type" in merged
-            assert merged["exception_type"] == "ValueError"
+# === Section 7: Legacy Snapshot Tests ===
 
 
 class TestSaveErrorSnapshotLegacy:

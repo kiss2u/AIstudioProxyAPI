@@ -46,10 +46,11 @@ static/
 Keep `webui.js` and `webui.css` working, gradually extract modules:
 
 1. Create `static/js/main.js` that imports from both old and new:
+
    ```javascript
    // Import new modules
-   import { state } from './state.js';
-   import { dom, initializeDOMReferences } from './dom.js';
+   import { state } from "./state.js";
+   import { dom, initializeDOMReferences } from "./dom.js";
 
    // Keep old webui.js functions temporarily
    // Gradually move them to modules
@@ -62,20 +63,22 @@ Keep `webui.js` and `webui.css` working, gradually extract modules:
 ### Option 2: Fresh Start (Advanced)
 
 1. Update `index.html`:
+
    ```html
    <!-- OLD -->
-   <link rel="stylesheet" href="webui.css">
+   <link rel="stylesheet" href="webui.css" />
    <script src="webui.js" defer></script>
 
    <!-- NEW -->
-   <link rel="stylesheet" href="static/css/main.css">
+   <link rel="stylesheet" href="static/css/main.css" />
    <script type="module" src="static/js/main.js"></script>
    ```
 
 2. Create `static/css/main.css`:
+
    ```css
-   @import './variables.css';
-   @import './base.css';
+   @import "./variables.css";
+   @import "./base.css";
    /* Import other CSS modules as you create them */
    ```
 
@@ -83,14 +86,14 @@ Keep `webui.js` and `webui.css` working, gradually extract modules:
 
 ## Benefits
 
-| Before | After |
-|--------|-------|
-| 1 file, 1500+ lines | 10-15 files, ~150 lines each |
-| Hard to find things | Clear organization |
-| No IDE autocomplete | Full autocomplete support |
-| Global namespace pollution | Clean imports |
-| Hard to test | Easy unit testing |
-| Merge conflicts | Parallel development |
+| Before                     | After                        |
+| -------------------------- | ---------------------------- |
+| 1 file, 1500+ lines        | 10-15 files, ~150 lines each |
+| Hard to find things        | Clear organization           |
+| No IDE autocomplete        | Full autocomplete support    |
+| Global namespace pollution | Clean imports                |
+| Hard to test               | Easy unit testing            |
+| Merge conflicts            | Parallel development         |
 
 ## Next Steps
 
@@ -105,33 +108,35 @@ Keep `webui.js` and `webui.css` working, gradually extract modules:
 ## Example: Before vs After
 
 ### Before (webui.js - line 500)
+
 ```javascript
 function loadModelList() {
-    // 50 lines of tightly coupled code
-    // Uses global variables
-    // Hard to test
+  // 50 lines of tightly coupled code
+  // Uses global variables
+  // Hard to test
 }
 ```
 
 ### After (models/list.js)
+
 ```javascript
-import { state } from '../state.js';
-import { dom } from '../dom.js';
+import { state } from "../state.js";
+import { dom } from "../dom.js";
 
 export async function loadModelList() {
-    // Same logic, but:
-    // - Clear dependencies
-    // - Easy to test
-    // - Reusable
+  // Same logic, but:
+  // - Clear dependencies
+  // - Easy to test
+  // - Reusable
 }
 ```
 
 ## File Size Comparison
 
-| File | Before | Target After |
-|------|--------|--------------|
-| webui.js | ~1500 lines | Deleted |
-| webui.css | ~1600 lines | Deleted |
+| File      | Before         | Target After                   |
+| --------- | -------------- | ------------------------------ |
+| webui.js  | ~1500 lines    | Deleted                        |
+| webui.css | ~1600 lines    | Deleted                        |
 | **Total** | **3100 lines** | **~150 lines/file × 20 files** |
 
 ## Migration Checklist
@@ -144,11 +149,11 @@ export async function loadModelList() {
 - [x] Create CSS variables.css
 - [x] Create CSS base.css
 - [ ] Create main.js entry point
-- [ ] Extract models/* modules
-- [ ] Extract chat/* modules
-- [ ] Extract ui/* modules
-- [ ] Extract api/* modules
-- [ ] Extract logs/* modules
+- [ ] Extract models/\* modules
+- [ ] Extract chat/\* modules
+- [ ] Extract ui/\* modules
+- [ ] Extract api/\* modules
+- [ ] Extract logs/\* modules
 - [ ] Create remaining CSS modules
 - [ ] Test all functionality
 - [ ] Remove old files

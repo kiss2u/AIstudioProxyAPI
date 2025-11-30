@@ -1,30 +1,28 @@
 {
-    "include": [
-        "."
-    ],
-    "exclude": [
-        "**/__pycache__",
-        "**/*.pyc",
-        ".git",
-        ".venv",
-        "node_modules",
-        "deprecated_javascript_version",
-        "errors_py",
-        "logs"
-    ],
-    "extraPaths": [
-        ".",
-        "./api_utils",
-        "./browser_utils",
-        "./config",
-        "./models",
-        "./logging_utils",
-        "./stream"
-    ],
-    "pythonVersion": "3.9",
-    "pythonPlatform": "Windows",
-    "typeCheckingMode": "strict",
-    "useLibraryCodeForTypes": true,
-    "autoImportCompletions": true,
-    "stubPath": ""
+  "include": ["."],
+  "exclude": [
+    "**/__pycache__",
+    "**/*.pyc",
+    ".git",
+    ".venv",
+    "node_modules",
+    "deprecated_javascript_version",
+    "errors_py",
+    "logs"
+  ],
+  "extraPaths": [
+    ".",
+    "./api_utils",
+    "./browser_utils",
+    "./config",
+    "./models",
+    "./logging_utils",
+    "./stream"
+  ],
+  "pythonVersion": "3.9",
+  "pythonPlatform": "Windows",
+  "typeCheckingMode": "strict",
+  "useLibraryCodeForTypes": true,
+  "autoImportCompletions": true,
+  "stubPath": ""
 }

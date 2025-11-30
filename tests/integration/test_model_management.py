@@ -21,85 +21,54 @@ async def test_concurrent_model_switches_serialized(real_server_state):
     """
     测试场景: 两个并发请求尝试切换到不同模型
     预期: model_switching_lock 序列化操作，第二个请求等待第一个完成
-
-    这是 CRITICAL 测试 - 验证真实的锁行为，而非模拟的锁调用
     """
     from api_utils.model_switching import handle_model_switching
 
-    # 追踪执行顺序
     execution_order = []
-    switch_durations = []
 
-    # Mock page 和 logger
-    mock_page = AsyncMock()
-    mock_logger = MagicMock()
-
-    # Mock switch_ai_studio_model 以引入延迟
     async def mock_switch_model(page, model_id, req_id):
-        start_time = asyncio.get_event_loop().time()
         execution_order.append(f"start_{req_id}")
-        # 模拟真实的模型切换延迟
-        await asyncio.sleep(0.1)
+        await asyncio.sleep(0.1)  # 模拟真实的模型切换延迟
         execution_order.append(f"end_{req_id}")
-        duration = asyncio.get_event_loop().time() - start_time
-        switch_durations.append(duration)
         return True
 
-    # 设置初始模型
     real_server_state.current_ai_studio_model_id = "gemini-1.5-pro"
 
     # 创建两个请求上下文
-    context1 = {
-        "needs_model_switching": True,
-        "model_id_to_use": "gemini-2.0-flash",
-        "page": mock_page,
-        "logger": mock_logger,
-        "model_switching_lock": real_server_state.model_switching_lock,
-        "model_actually_switched": False,
-        "current_ai_studio_model_id": "gemini-1.5-pro",
-    }
+    def create_context(model_id):
+        return {
+            "needs_model_switching": True,
+            "model_id_to_use": model_id,
+            "page": AsyncMock(),
+            "logger": MagicMock(),
+            "model_switching_lock": real_server_state.model_switching_lock,
+            "model_actually_switched": False,
+            "current_ai_studio_model_id": "gemini-1.5-pro",
+        }
 
-    context2 = {
-        "needs_model_switching": True,
-        "model_id_to_use": "gemini-1.5-flash",
-        "page": mock_page,
-        "logger": mock_logger,
-        "model_switching_lock": real_server_state.model_switching_lock,
-        "model_actually_switched": False,
-        "current_ai_studio_model_id": "gemini-1.5-pro",
-    }
+    context1 = create_context("gemini-2.0-flash")
+    context2 = create_context("gemini-1.5-flash")
 
-    with patch(
-        "browser_utils.switch_ai_studio_model",
-        side_effect=mock_switch_model,
-    ):
-        # 并发启动两个模型切换
+    with patch("browser_utils.switch_ai_studio_model", side_effect=mock_switch_model):
         task1 = asyncio.create_task(handle_model_switching("req1", context1))
         task2 = asyncio.create_task(handle_model_switching("req2", context2))
-
-        # 等待两个任务完成
         await asyncio.gather(task1, task2)
 
     # 验证: 执行顺序证明序列化（一个完全完成后另一个才开始）
     assert len(execution_order) == 4
-    # 可能的顺序: [start_req1, end_req1, start_req2, end_req2]
-    # 或者:     [start_req2, end_req2, start_req1, end_req1]
-    # 关键是: start 和 end 成对出现，不会交错
 
     # 找到第一个完成的请求
     first_end_idx = min(
         execution_order.index("end_req1"), execution_order.index("end_req2")
     )
     first_end_req = execution_order[first_end_idx].split("_")[1]
-
-    # 验证: 第一个请求的 start 在其 end 之前
     first_start_idx = execution_order.index(f"start_{first_end_req}")
     assert first_start_idx < first_end_idx
 
     # 验证: 第二个请求的 start 在第一个请求的 end 之后
     second_req = "req2" if first_end_req == "req1" else "req1"
     second_start_idx = execution_order.index(f"start_{second_req}")
-    assert second_start_idx >= first_end_idx, "第二个请求应该在第一个完成后才开始"
+    assert second_start_idx >= first_end_idx
 
     # 验证: 两个请求都成功完成
     assert context1["model_actually_switched"] is True

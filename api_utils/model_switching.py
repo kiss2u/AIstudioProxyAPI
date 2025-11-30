@@ -1,6 +1,7 @@
 from playwright.async_api import Page as AsyncPage
 
 from api_utils.server_state import state
+from logging_utils import set_request_id
 
 from .context_types import RequestContext
 
@@ -8,13 +9,14 @@ from .context_types import RequestContext
 async def analyze_model_requirements(
     req_id: str, context: RequestContext, requested_model: str, proxy_model_name: str
 ) -> RequestContext:
+    set_request_id(req_id)
     logger = context["logger"]
     current_ai_studio_model_id = context["current_ai_studio_model_id"]
     parsed_model_list = context["parsed_model_list"]
 
     if requested_model and requested_model != proxy_model_name:
         requested_model_id = requested_model.split("/")[-1]
-        logger.info(f"[{req_id}] 请求使用模型: {requested_model_id}")
+        logger.info(f"请求使用模型: {requested_model_id}")
 
         if parsed_model_list:
             valid_model_ids = [m.get("id") for m in parsed_model_list]
@@ -30,7 +32,7 @@ async def analyze_model_requirements(
         if current_ai_studio_model_id != requested_model_id:
             context["needs_model_switching"] = True
             logger.info(
-                f"[{req_id}] 需要切换模型: 当前={current_ai_studio_model_id} -> 目标={requested_model_id}"
+                f"需要切换模型: 当前={current_ai_studio_model_id} -> 目标={requested_model_id}"
             )
 
     return context
@@ -39,6 +41,7 @@ async def analyze_model_requirements(
 async def handle_model_switching(
     req_id: str, context: RequestContext
 ) -> RequestContext:
+    set_request_id(req_id)
     if not context["needs_model_switching"]:
         return context
 
@@ -50,7 +53,7 @@ async def handle_model_switching(
     async with model_switching_lock:
         if state.current_ai_studio_model_id != model_id_to_use:
             logger.info(
-                f"[{req_id}] 准备切换模型: {state.current_ai_studio_model_id} -> {model_id_to_use}"
+                f"准备切换模型: {state.current_ai_studio_model_id} -> {model_id_to_use}"
             )
             from browser_utils import switch_ai_studio_model
 
@@ -59,9 +62,7 @@ async def handle_model_switching(
                 state.current_ai_studio_model_id = model_id_to_use
                 context["model_actually_switched"] = True
                 context["current_ai_studio_model_id"] = model_id_to_use
-                logger.info(
-                    f"[{req_id}] 模型切换成功: {state.current_ai_studio_model_id}"
-                )
+                logger.info(f"模型切换成功: {state.current_ai_studio_model_id}")
             else:
                 await _handle_model_switch_failure(
                     req_id,
@@ -77,7 +78,8 @@ async def handle_model_switching(
 async def _handle_model_switch_failure(
     req_id: str, page: AsyncPage, model_id_to_use: str, model_before_switch: str, logger
 ) -> None:
-    logger.warning(f"[{req_id}] 模型切换至 {model_id_to_use} 失败。")
+    set_request_id(req_id)
+    logger.warning(f"模型切换至 {model_id_to_use} 失败。")
     state.current_ai_studio_model_id = model_before_switch
     from .error_utils import http_error
 
@@ -87,6 +89,7 @@ async def _handle_model_switch_failure(
 
 
 async def handle_parameter_cache(req_id: str, context: RequestContext) -> None:
+    set_request_id(req_id)
     logger = context["logger"]
     params_cache_lock = context["params_cache_lock"]
     page_params_cache = context["page_params_cache"]
@@ -100,7 +103,7 @@ async def handle_parameter_cache(req_id: str, context: RequestContext) -> None:
         if model_actually_switched or (
             current_ai_studio_model_id != cached_model_for_params
         ):
-            logger.info(f"[{req_id}] 模型已更改，参数缓存失效。")
+            logger.info("模型已更改，参数缓存失效。")
             page_params_cache.clear()
             page_params_cache["last_known_model_id_for_params"] = (
                 current_ai_studio_model_id

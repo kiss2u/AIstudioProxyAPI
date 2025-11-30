@@ -5,7 +5,7 @@ import multiprocessing
 import sys
 from pathlib import Path
 
-from logging_utils.setup import ColoredFormatter
+from logging_utils import GridFormatter, set_source
 from stream.proxy_server import ProxyServer
 
 
@@ -38,23 +38,22 @@ async def main():
     """Main entry point"""
     args = parse_args()
 
-    # Set up logging with colored output
+    # Set up logging with GridFormatter for consistent output
+    set_source("PROXY")
+
     console_handler = logging.StreamHandler(sys.stderr)
-    console_handler.setFormatter(
-        ColoredFormatter(
-            "%(asctime)s - %(name)s - %(levelname)s - %(message)s", use_color=True
-        )
-    )
+    console_handler.setFormatter(GridFormatter(show_tree=True, colorize=True))
     console_handler.setLevel(logging.INFO)
 
-    root_logger = logging.getLogger()
-    root_logger.setLevel(logging.INFO)
-    root_logger.addHandler(console_handler)
+    # Configure proxy_server logger specifically (not root)
+    logger = logging.getLogger("proxy_server")
+    logger.handlers.clear()  # Remove any existing handlers
+    logger.addHandler(console_handler)
+    logger.setLevel(logging.INFO)
+    logger.propagate = False  # Prevent double logging
 
     logging.getLogger("asyncio").setLevel(logging.ERROR)
     logging.getLogger("websockets").setLevel(logging.ERROR)
-
-    logger = logging.getLogger("main")
 
     # Create certs directory
     cert_dir = Path("certs")
@@ -85,20 +84,19 @@ async def main():
 
 
 async def builtin(queue: multiprocessing.Queue = None, port=None, proxy=None):
-    # Set up logging with colored output
+    # Set up logging with GridFormatter for consistent output
+    set_source("PROXY")
+
     console_handler = logging.StreamHandler(sys.stderr)
-    console_handler.setFormatter(
-        ColoredFormatter(
-            "%(asctime)s - %(name)s - %(levelname)s - %(message)s", use_color=True
-        )
-    )
+    console_handler.setFormatter(GridFormatter(show_tree=True, colorize=True))
     console_handler.setLevel(logging.INFO)
 
-    root_logger = logging.getLogger()
-    root_logger.setLevel(logging.INFO)
-    root_logger.addHandler(console_handler)
-
-    logger = logging.getLogger("main")
+    # Configure proxy_server logger specifically (not root)
+    logger = logging.getLogger("proxy_server")
+    logger.handlers.clear()  # Remove any existing handlers
+    logger.addHandler(console_handler)
+    logger.setLevel(logging.INFO)
+    logger.propagate = False  # Prevent double logging
 
     # Create certs directory
     cert_dir = Path("certs")

@@ -17,6 +17,9 @@ from starlette.types import ASGIApp
 
 import stream
 
+# --- 导入集中状态模块 ---
+from api_utils.server_state import state
+
 # --- browser_utils模块导入 ---
 from browser_utils import (
     _close_page_logic,  # pyright: ignore[reportPrivateUsage]
@@ -34,9 +37,6 @@ from logging_utils import restore_original_streams, setup_server_logging
 
 # --- models模块导入 ---
 from models import WebSocketConnectionManager
-
-# --- 导入集中状态模块 ---
-from api_utils.server_state import state
 
 from . import auth_utils
 
@@ -167,17 +167,23 @@ async def _shutdown_resources() -> None:
     logger = state.logger
     logger.info("Shutting down resources...")
 
+    # Signal all streaming generators to exit immediately
+    state.should_exit = True
+
     if state.STREAM_PROCESS:
         state.STREAM_PROCESS.terminate()
         logger.info("STREAM proxy terminated.")
 
     if state.worker_task and not state.worker_task.done():
+        logger.info("Cancelling worker task...")
         state.worker_task.cancel()
         try:
-            await asyncio.wait_for(state.worker_task, timeout=5.0)
-        except (asyncio.TimeoutError, asyncio.CancelledError):
-            pass
-        logger.info("Worker task stopped.")
+            await asyncio.wait_for(state.worker_task, timeout=2.0)
+            logger.info("Worker task cancelled.")
+        except asyncio.TimeoutError:
+            logger.warning("Worker task did not respond to cancellation within 2s.")
+        except asyncio.CancelledError:
+            logger.info("Worker task cancelled.")
 
     if state.page_instance:
         await _close_page_logic()

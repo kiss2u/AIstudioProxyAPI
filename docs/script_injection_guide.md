@@ -50,6 +50,7 @@ USERSCRIPT_PATH=browser_utils/more_models.js
 ### 1. 启用脚本注入
 
 确保在 `.env` 文件中设置：
+
 ```bash
 ENABLE_SCRIPT_INJECTION=true
 ```

@@ -543,13 +543,8 @@ def test_restore_original_streams(capsys, mock_sys_stderr):
     assert sys.stdout == original_stdout
     assert sys.stderr == original_stderr
 
-    # Verify confirmation message was printed to mocked sys.__stderr__
-    calls = mock_sys_stderr.write.call_args_list
-    message_found = any(
-        "已恢复" in str(call.args[0]) or "original" in str(call.args[0]).lower()
-        for call in calls
-    )
-    assert message_found, f"Message not found in sys.__stderr__ writes: {calls}"
+    # Note: restore_original_streams is now silent (no confirmation message)
+    # This is intentional to reduce shutdown log noise
 
 
 def test_restore_original_streams_with_streamtologger():

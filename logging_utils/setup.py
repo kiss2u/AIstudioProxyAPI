@@ -3,41 +3,46 @@ import logging.handlers
 import os
 import sys
 from datetime import datetime
-from typing import Tuple
+from typing import Any, Optional, Tuple
 from zoneinfo import ZoneInfo
 
 from config import ACTIVE_AUTH_DIR, APP_LOG_FILE_PATH, LOG_DIR, SAVED_AUTH_DIR
 from models import StreamToLogger, WebSocketConnectionManager, WebSocketLogHandler
 
+from .grid_logger import (
+    GridFormatter,
+    PlainGridFormatter,
+)
+
 
 class ColoredFormatter(logging.Formatter):
-    """Cross-platform colored formatter using ANSI codes."""
+    """Cross-platform colored formatter using ANSI codes (legacy, kept for compatibility)."""
 
-    # ANSI color codes (work on Windows 10+, Linux, macOS)
     COLORS = {
-        "DEBUG": "\033[36m",  # Cyan
-        "INFO": "\033[0m",  # Default/White
-        "WARNING": "\033[93m",  # Bright Yellow
-        "ERROR": "\033[91m",  # Bright Red
-        "CRITICAL": "\033[41m\033[97m",  # White text on Red background
+        "DEBUG": "\033[36m",
+        "INFO": "\033[0m",
+        "WARNING": "\033[93m",
+        "ERROR": "\033[91m",
+        "CRITICAL": "\033[41m\033[97m",
     }
     RESET = "\033[0m"
 
-    def __init__(self, fmt=None, datefmt=None, use_color=True):
+    def __init__(
+        self, fmt: Any = None, datefmt: Any = None, use_color: bool = True
+    ) -> None:
         super().__init__(fmt, datefmt)
         self.use_color = use_color
 
-        # Enable Windows 10+ ANSI support
         if use_color and sys.platform == "win32":
             try:
                 import ctypes
 
-                kernel32 = ctypes.windll.kernel32
+                kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
                 kernel32.SetConsoleMode(kernel32.GetStdHandle(-11), 7)
             except Exception:
-                self.use_color = False  # Fallback if enabling fails
+                self.use_color = False
 
-    def formatTime(self, record, datefmt=None):
+    def formatTime(self, record: logging.LogRecord, datefmt: Any = None) -> str:
         dt = datetime.fromtimestamp(record.created, tz=ZoneInfo("America/Chicago"))
         if datefmt:
             s = dt.strftime(datefmt)
@@ -46,15 +51,14 @@ class ColoredFormatter(logging.Formatter):
             s = "%s,%03d" % (s, record.msecs)
         return s
 
-    def format(self, record):
+    def format(self, record: logging.LogRecord) -> str:
         if self.use_color and record.levelname in self.COLORS:
-            # Color the level name
             original_levelname = record.levelname
             record.levelname = (
                 f"{self.COLORS[record.levelname]}{record.levelname}{self.RESET}"
             )
             result = super().format(record)
-            record.levelname = original_levelname  # Restore for other handlers
+            record.levelname = original_levelname
             return result
         return super().format(record)
 
@@ -62,7 +66,7 @@ class ColoredFormatter(logging.Formatter):
 class USCentralFormatter(logging.Formatter):
     """Formatter that enforces US/Central time."""
 
-    def formatTime(self, record, datefmt=None):
+    def formatTime(self, record: logging.LogRecord, datefmt: Any = None) -> str:
         dt = datetime.fromtimestamp(record.created, tz=ZoneInfo("America/Chicago"))
         if datefmt:
             s = dt.strftime(datefmt)
@@ -74,7 +78,7 @@ class USCentralFormatter(logging.Formatter):
 
 def setup_server_logging(
     logger_instance: logging.Logger,
-    log_ws_manager: WebSocketConnectionManager,
+    log_ws_manager: Optional[WebSocketConnectionManager],
     log_level_name: str = "INFO",
     redirect_print_str: str = "false",
 ) -> Tuple[object, object]:
@@ -98,10 +102,8 @@ def setup_server_logging(
     os.makedirs(ACTIVE_AUTH_DIR, exist_ok=True)
     os.makedirs(SAVED_AUTH_DIR, exist_ok=True)
 
-    # 设置文件日志格式器
-    file_log_formatter = USCentralFormatter(
-        "%(asctime)s - %(levelname)s - [%(name)s:%(funcName)s:%(lineno)d] - %(message)s"
-    )
+    # 设置文件日志格式器 (plain grid format, no ANSI codes)
+    file_log_formatter = PlainGridFormatter()
 
     # 清理现有的处理器
     if logger_instance.hasHandlers():
@@ -130,7 +132,7 @@ def setup_server_logging(
     file_handler.setFormatter(file_log_formatter)
     logger_instance.addHandler(file_handler)
 
-    # 添加WebSocket处理器
+    # 添加WebSocket处理器 (使用 PlainGridFormatter, 无 ANSI 代码)
     if log_ws_manager is None:
         print(
             "严重警告 (setup_server_logging): log_ws_manager 未初始化！WebSocket 日志功能将不可用。",
@@ -139,16 +141,20 @@ def setup_server_logging(
     else:
         ws_handler = WebSocketLogHandler(log_ws_manager)
         ws_handler.setLevel(logging.INFO)
+        ws_handler.setFormatter(PlainGridFormatter())
         logger_instance.addHandler(ws_handler)
 
-    # 添加控制台处理器 (使用彩色输出)
-    console_server_log_formatter = ColoredFormatter(
-        "%(asctime)s - %(levelname)s [SERVER] - %(message)s", use_color=True
-    )
+    # 添加控制台处理器 (使用 GridFormatter 彩色输出)
+    console_grid_formatter = GridFormatter(show_tree=True, colorize=True)
     console_handler = logging.StreamHandler(sys.stderr)
-    console_handler.setFormatter(console_server_log_formatter)
+    console_handler.setFormatter(console_grid_formatter)
     console_handler.setLevel(log_level)
     logger_instance.addHandler(console_handler)
+
+    # 添加 AbortError 过滤器 (过滤 Playwright 导航取消产生的良性错误)
+    from logging_utils import AbortErrorFilter
+
+    logger_instance.addFilter(AbortErrorFilter())
 
     # 保存原始流
     original_stdout = sys.stdout
@@ -206,4 +212,4 @@ def restore_original_streams(original_stdout: object, original_stderr: object) -
     """
     sys.stdout = original_stdout
     sys.stderr = original_stderr
-    print("已恢复 server.py 的原始 stdout 和 stderr 流。", file=sys.__stderr__)
+    # 静默恢复，不输出额外日志噪音

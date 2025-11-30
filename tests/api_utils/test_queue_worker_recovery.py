@@ -206,7 +206,7 @@ async def test_refresh_page_cancelled_error():
             await queue_manager._refresh_page("req123")
 
         # 验证日志记录了取消事件
-        queue_manager.logger.info.assert_any_call("[req123] (Recovery) 页面刷新被取消")
+        queue_manager.logger.info.assert_any_call("(Recovery) 页面刷新被取消")
 
 
 @pytest.mark.asyncio
@@ -371,7 +371,7 @@ async def test_profile_switch_under_concurrent_requests():
     mock_browser = AsyncMock()
     mock_browser.is_connected.return_value = True
     mock_browser.version = "Mozilla Firefox 115.0"
-    mock_page = AsyncMock()
+    AsyncMock()
     mock_playwright_mgr = MagicMock()
     mock_playwright_mgr.firefox.connect = AsyncMock(return_value=mock_browser)
 

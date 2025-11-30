@@ -7,8 +7,6 @@ Note: Functions use time.time() but we verify structure/format, not exact timest
 
 import json
 
-import pytest
-
 
 def test_generate_sse_chunk_basic():
     """

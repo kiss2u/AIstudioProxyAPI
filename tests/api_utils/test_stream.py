@@ -15,6 +15,7 @@ def proxy_server():
 
 
 def test_should_intercept(proxy_server):
+    """Test domain interception matching (exact, wildcard, and non-matching cases)."""
     # Exact match
     assert proxy_server.should_intercept("api.test.com") is True
 
@@ -135,6 +136,7 @@ async def test_handle_connect_no_intercept(proxy_server):
 
 
 def test_parse_args():
+    """Test command-line argument parsing for proxy configuration."""
     with patch("argparse.ArgumentParser.parse_args") as mock_parse:
         mock_parse.return_value = argparse.Namespace(
             host="1.2.3.4", port=9999, domains=["*.test.com"], proxy=None

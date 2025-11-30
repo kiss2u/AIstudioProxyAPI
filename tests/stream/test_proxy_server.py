@@ -40,6 +40,7 @@ class TestProxyServer:
         return ProxyServer(intercept_domains=["example.com", "*.google.com"])
 
     def test_should_intercept(self, server):
+        """Test domain interception matching (exact, wildcard, subdomain logic)."""
         # Exact match
         assert server.should_intercept("example.com")
         # No match
@@ -213,6 +214,7 @@ class TestProxyServer:
         s_writer.close.assert_called()
 
     def test_should_intercept_wildcard(self, server):
+        """Test wildcard domain interception (matches subdomains only)."""
         server.intercept_domains = ["*.example.com"]
         assert server.should_intercept("sub.example.com") is True
         assert server.should_intercept("example.com") is False

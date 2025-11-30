@@ -3,9 +3,9 @@ Tests for browser_utils/initialization/debug.py
 Target coverage: >80% (from baseline 10%)
 """
 
+from unittest.mock import Mock, PropertyMock, patch
+
 import pytest
-from datetime import datetime, timezone
-from unittest.mock import Mock, PropertyMock, patch, call
 
 from browser_utils.initialization.debug import setup_debug_listeners
 

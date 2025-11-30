@@ -4,7 +4,6 @@ High-quality tests for api_utils/error_utils.py (zero mocking).
 Focus: Test real error creation logic with no mocks, only pure function testing.
 """
 
-import pytest
 from fastapi import HTTPException
 
 

@@ -6,7 +6,7 @@ Strategy: Mock only external boundaries (execute_tool_call, register_runtime_too
 """
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -317,7 +317,7 @@ async def test_maybe_execute_tools_empty_messages():
     ):
         mock_exec.return_value = "done"
 
-        result = await maybe_execute_tools(messages, tools, tool_choice)
+        await maybe_execute_tools(messages, tools, tool_choice)
 
         # 验证: 参数为空 JSON
         mock_exec.assert_called_once_with("test_tool", "{}")
@@ -377,7 +377,7 @@ Thank you!""",
     ):
         mock_exec.return_value = "ok"
 
-        result = await maybe_execute_tools(messages, tools, tool_choice)
+        await maybe_execute_tools(messages, tools, tool_choice)
 
         # 验证: 提取了完整的多行 JSON
         called_args = mock_exec.call_args[0][1]
@@ -418,7 +418,7 @@ async def test_maybe_execute_tools_list_content_extraction():
     ):
         mock_exec.return_value = "processed"
 
-        result = await maybe_execute_tools(messages, tools, tool_choice)
+        await maybe_execute_tools(messages, tools, tool_choice)
 
         # 验证: 从拼接的文本中提取了 JSON
         # _get_latest_user_text 会拼接: "Before image\n{\"action\": \"process_image\"}"

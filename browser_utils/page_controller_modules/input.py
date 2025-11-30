@@ -12,6 +12,7 @@ from config import (
     RESPONSE_CONTAINER_SELECTOR,
     SUBMIT_BUTTON_SELECTOR,
 )
+from logging_utils import set_request_id
 from models import ClientDisconnectedError
 
 from .base import BaseController
@@ -24,7 +25,8 @@ class InputController(BaseController):
         self, prompt: str, image_list: List, check_client_disconnected: Callable
     ):
         """提交提示到页面。"""
-        self.logger.info(f"[{self.req_id}] 填充并提交提示 ({len(prompt)} chars)...")
+        set_request_id(self.req_id)
+        self.logger.info(f"填充并提交提示 ({len(prompt)} chars)...")
         prompt_textarea_locator = self.page.locator(PROMPT_TEXTAREA_SELECTOR)
         autosize_wrapper_locator = self.page.locator(
             "ms-prompt-input-wrapper ms-autosize-textarea"
@@ -56,14 +58,14 @@ class InputController(BaseController):
 
             # 上传（仅使用菜单 + 隐藏 input 设置文件；处理可能的授权弹窗）
             try:
-                self.logger.info(f"[{self.req_id}] 待上传附件数量: {len(image_list)}")
+                self.logger.info(f" 待上传附件数量: {len(image_list)}")
             except Exception:
                 pass
             if len(image_list) > 0:
                 ok = await self._open_upload_menu_and_choose_file(image_list)
                 if not ok:
                     self.logger.error(
-                        f"[{self.req_id}] 在上传文件时发生错误: 通过菜单方式未能设置文件"
+                        " 在上传文件时发生错误: 通过菜单方式未能设置文件"
                     )
 
             # 等待发送按钮启用 (使用可配置的快速失败超时)
@@ -72,7 +74,7 @@ class InputController(BaseController):
             wait_timeout_ms_submit_enabled = SUBMIT_BUTTON_ENABLE_TIMEOUT_MS
             start_time = asyncio.get_event_loop().time()
             self.logger.info(
-                f"[{self.req_id}] 等待发送按钮启用 (最大 {wait_timeout_ms_submit_enabled}ms)..."
+                f" 等待发送按钮启用 (最大 {wait_timeout_ms_submit_enabled}ms)..."
             )
 
             try:
@@ -84,7 +86,7 @@ class InputController(BaseController):
                     try:
                         # 使用短超时轮询检查，以便能响应中断信号
                         if await submit_button_locator.is_enabled(timeout=500):
-                            self.logger.info(f"[{self.req_id}] 发送按钮已启用。")
+                            self.logger.info(" 发送按钮已启用。")
                             break
                     except Exception:
                         # 忽略临时错误（如元素尚未出现）
@@ -100,9 +102,7 @@ class InputController(BaseController):
                     await asyncio.sleep(0.5)
 
             except Exception as e_pw_enabled:
-                self.logger.error(
-                    f"[{self.req_id}] 等待发送按钮启用超时或错误: {e_pw_enabled}"
-                )
+                self.logger.error(f" 等待发送按钮启用超时或错误: {e_pw_enabled}")
                 await save_error_snapshot(f"submit_button_enable_timeout_{self.req_id}")
                 raise
 
@@ -114,28 +114,28 @@ class InputController(BaseController):
             # 优先点击按钮提交，其次回车提交，最后组合键提交
             button_clicked = False
             try:
-                self.logger.info(f"[{self.req_id}] 尝试点击提交按钮...")
+                self.logger.info(" 尝试点击提交按钮...")
                 # 提交前再处理一次潜在对话框，避免按钮点击被拦截
                 await self._handle_post_upload_dialog()
                 await submit_button_locator.click(timeout=5000)
-                self.logger.info(f"[{self.req_id}] 提交按钮点击完成。")
+                self.logger.info(" 提交按钮点击完成。")
                 button_clicked = True
             except Exception as click_err:
-                self.logger.error(f"[{self.req_id}] 提交按钮点击失败: {click_err}")
+                self.logger.error(f" 提交按钮点击失败: {click_err}")
                 await save_error_snapshot(f"submit_button_click_fail_{self.req_id}")
 
             if not button_clicked:
-                self.logger.info(f"[{self.req_id}] 按钮提交失败，尝试回车键提交...")
+                self.logger.info(" 按钮提交失败，尝试回车键提交...")
                 submitted_successfully = await self._try_enter_submit(
                     prompt_textarea_locator, check_client_disconnected
                 )
                 if not submitted_successfully:
-                    self.logger.info(f"[{self.req_id}] 回车提交失败，尝试组合键提交...")
+                    self.logger.info(" 回车提交失败，尝试组合键提交...")
                     combo_ok = await self._try_combo_submit(
                         prompt_textarea_locator, check_client_disconnected
                     )
                     if not combo_ok:
-                        self.logger.error(f"[{self.req_id}] 组合键提交也失败。")
+                        self.logger.error(" 组合键提交也失败。")
                         raise Exception(
                             "Submit failed: Button, Enter, and Combo key all failed"
                         )
@@ -145,9 +145,7 @@ class InputController(BaseController):
         except Exception as e_input_submit:
             if isinstance(e_input_submit, asyncio.CancelledError):
                 raise
-            self.logger.error(
-                f"[{self.req_id}] 输入和提交过程中发生错误: {e_input_submit}"
-            )
+            self.logger.error(f" 输入和提交过程中发生错误: {e_input_submit}")
             if not isinstance(e_input_submit, ClientDisconnectedError):
                 await save_error_snapshot(f"input_submit_error_{self.req_id}")
             raise
@@ -184,7 +182,7 @@ class InputController(BaseController):
                         menu_container.locator("div[role='menu']").first
                     ).to_be_visible(timeout=3000)
                 except Exception:
-                    self.logger.warning(f"[{self.req_id}] 未能显示上传菜单面板。")
+                    self.logger.warning(" 未能显示上传菜单面板。")
                     return False
 
             # 仅使用 aria-label='Upload File' 的菜单项
@@ -198,9 +196,7 @@ class InputController(BaseController):
                         "div[role='menu'] button[role='menuitem']:has-text('Upload File')"
                     )
                 if await upload_btn.count() == 0:
-                    self.logger.warning(
-                        f"[{self.req_id}] 未找到 'Upload File' 菜单项。"
-                    )
+                    self.logger.warning(" 未找到 'Upload File' 菜单项。")
                     return False
                 btn = upload_btn.first
                 await expect_async(btn).to_be_visible(timeout=2000)
@@ -209,7 +205,7 @@ class InputController(BaseController):
                 if await input_loc.count() > 0:
                     await input_loc.set_input_files(files_list)
                     self.logger.info(
-                        f"[{self.req_id}] 通过菜单项(Upload File) 隐藏 input 设置文件成功: {len(files_list)} 个"
+                        f" 通过菜单项(Upload File) 隐藏 input 设置文件成功: {len(files_list)} 个"
                     )
                 else:
                     # 回退为原生文件选择器
@@ -218,10 +214,10 @@ class InputController(BaseController):
                     file_chooser = await fc_info.value
                     await file_chooser.set_files(files_list)
                     self.logger.info(
-                        f"[{self.req_id}] 通过文件选择器设置文件成功: {len(files_list)} 个"
+                        f" 通过文件选择器设置文件成功: {len(files_list)} 个"
                     )
             except Exception as e_set:
-                self.logger.error(f"[{self.req_id}] 设置文件失败: {e_set}")
+                self.logger.error(f" 设置文件失败: {e_set}")
                 return False
             # 关闭可能残留的菜单遮罩
             try:
@@ -239,7 +235,7 @@ class InputController(BaseController):
         except Exception as e:
             if isinstance(e, asyncio.CancelledError):
                 raise
-            self.logger.error(f"[{self.req_id}] 通过上传菜单设置文件失败: {e}")
+            self.logger.error(f" 通过上传菜单设置文件失败: {e}")
             return False
 
     async def _handle_post_upload_dialog(self):
@@ -269,9 +265,7 @@ class InputController(BaseController):
                         timeout=300
                     ):
                         await btn.first.click()
-                        self.logger.info(
-                            f"[{self.req_id}] 上传后对话框: 点击按钮 '{text}'。"
-                        )
+                        self.logger.info(f" 上传后对话框: 点击按钮 '{text}'。")
                         await asyncio.sleep(0.3)
                         break
                 except Exception:
@@ -287,7 +281,7 @@ class InputController(BaseController):
                 ):
                     await acknow_btn_locator.first.click()
                     self.logger.info(
-                        f"[{self.req_id}] 上传后对话框: 点击版权确认按钮 (aria-label 匹配)。"
+                        " 上传后对话框: 点击版权确认按钮 (aria-label 匹配)。"
                     )
                     await asyncio.sleep(0.3)
             except Exception:
@@ -301,10 +295,10 @@ class InputController(BaseController):
                 if await overlay_backdrop.count() > 0:
                     try:
                         await expect_async(overlay_backdrop).to_be_hidden(timeout=3000)
-                        self.logger.info(f"[{self.req_id}] 上传后对话框遮罩层已隐藏。")
+                        self.logger.info(" 上传后对话框遮罩层已隐藏。")
                     except Exception:
                         self.logger.warning(
-                            f"[{self.req_id}] 上传后对话框遮罩层仍存在，后续提交可能被拦截。"
+                            " 上传后对话框遮罩层仍存在，后续提交可能被拦截。"
                         )
             except Exception:
                 pass
@@ -340,15 +334,13 @@ class InputController(BaseController):
                     )
                 if total >= expected_min:
                     self.logger.info(
-                        f"[{self.req_id}] 已检测到已附加文件: inputs={counts.get('inputs')}, chips={counts.get('chips')}, blobs={counts.get('blobs')} (>= {expected_min})"
+                        f" 已检测到已附加文件: inputs={counts.get('inputs')}, chips={counts.get('chips')}, blobs={counts.get('blobs')} (>= {expected_min})"
                     )
                     return True
             except Exception:
                 pass
             await asyncio.sleep(0.2)
-        self.logger.warning(
-            f"[{self.req_id}] 未能在超时内检测到已附加文件 (期望 >= {expected_min})"
-        )
+        self.logger.warning(f" 未能在超时内检测到已附加文件 (期望 >= {expected_min})")
         return False
 
     async def _simulate_drag_drop_files(
@@ -372,9 +364,7 @@ class InputController(BaseController):
                     }
                 )
             except Exception as e:
-                self.logger.warning(
-                    f"[{self.req_id}] 读取文件失败，跳过拖放: {path} - {e}"
-                )
+                self.logger.warning(f" 读取文件失败，跳过拖放: {path} - {e}")
 
         if not payloads:
             raise Exception("无可用文件用于拖放")
@@ -415,7 +405,7 @@ class InputController(BaseController):
                 )
                 await asyncio.sleep(0.5)
                 self.logger.info(
-                    f"[{self.req_id}] 拖放事件已在候选目标 {idx + 1}/{len(candidates)} 上触发。"
+                    f" 拖放事件已在候选目标 {idx + 1}/{len(candidates)} 上触发。"
                 )
                 return
             except Exception as e_try:
@@ -449,9 +439,7 @@ class InputController(BaseController):
                 payloads,
             )
             await asyncio.sleep(0.5)
-            self.logger.info(
-                f"[{self.req_id}] 拖放事件已在 document.body 上触发（兜底）。"
-            )
+            self.logger.info(" 拖放事件已在 document.body 上触发（兜底）。")
             return
         except Exception:
             pass
@@ -508,7 +496,7 @@ class InputController(BaseController):
                 pass
 
             # 尝试回车键提交
-            self.logger.info(f"[{self.req_id}] 尝试回车键提交")
+            self.logger.info(" 尝试回车键提交")
             try:
                 await self.page.keyboard.press("Enter")
             except Exception:
@@ -528,9 +516,7 @@ class InputController(BaseController):
                     await prompt_textarea_locator.input_value(timeout=2000) or ""
                 )
                 if original_content and not current_content.strip():
-                    self.logger.info(
-                        f"[{self.req_id}] 验证方法1: 输入框已清空，回车键提交成功"
-                    )
+                    self.logger.info(" 验证方法1: 输入框已清空，回车键提交成功")
                     submission_success = True
 
                 # 方法2: 检查提交按钮状态
@@ -542,7 +528,7 @@ class InputController(BaseController):
                         )
                         if is_disabled:
                             self.logger.info(
-                                f"[{self.req_id}] 验证方法2: 提交按钮已禁用，回车键提交成功"
+                                " 验证方法2: 提交按钮已禁用，回车键提交成功"
                             )
                             submission_success = True
                     except Exception:
@@ -561,26 +547,24 @@ class InputController(BaseController):
                             is_vis = await last_container.is_visible(timeout=1000)
                             if is_vis:
                                 self.logger.info(
-                                    f"[{self.req_id}] 验证方法3: 检测到响应容器，回车键提交成功"
+                                    " 验证方法3: 检测到响应容器，回车键提交成功"
                                 )
                                 submission_success = True
                     except Exception:
                         pass
             except Exception as verify_err:
-                self.logger.warning(
-                    f"[{self.req_id}] 回车键提交验证过程出错: {verify_err}"
-                )
+                self.logger.warning(f" 回车键提交验证过程出错: {verify_err}")
                 # 出错时假定提交成功，让后续流程继续
                 submission_success = True
 
             if submission_success:
-                self.logger.info(f"[{self.req_id}] 回车键提交成功")
+                self.logger.info(" 回车键提交成功")
                 return True
             else:
-                self.logger.warning(f"[{self.req_id}] 回车键提交验证失败")
+                self.logger.warning(" 回车键提交验证失败")
                 return False
         except Exception as shortcut_err:
-            self.logger.warning(f"[{self.req_id}] 回车键提交失败: {shortcut_err}")
+            self.logger.warning(f" 回车键提交失败: {shortcut_err}")
             return False
 
     async def _try_combo_submit(
@@ -631,9 +615,7 @@ class InputController(BaseController):
             except Exception:
                 pass
 
-            self.logger.info(
-                f"[{self.req_id}] 尝试组合键提交: {shortcut_modifier}+{shortcut_key}"
-            )
+            self.logger.info(f" 尝试组合键提交: {shortcut_modifier}+{shortcut_key}")
             try:
                 await self.page.keyboard.press(f"{shortcut_modifier}+{shortcut_key}")
             except Exception:
@@ -655,9 +637,7 @@ class InputController(BaseController):
                     await prompt_textarea_locator.input_value(timeout=2000) or ""
                 )
                 if original_content and not current_content.strip():
-                    self.logger.info(
-                        f"[{self.req_id}] 验证方法1: 输入框已清空，组合键提交成功"
-                    )
+                    self.logger.info(" 验证方法1: 输入框已清空，组合键提交成功")
                     submission_success = True
                 if not submission_success:
                     submit_button_locator = self.page.locator(SUBMIT_BUTTON_SELECTOR)
@@ -667,7 +647,7 @@ class InputController(BaseController):
                         )
                         if is_disabled:
                             self.logger.info(
-                                f"[{self.req_id}] 验证方法2: 提交按钮已禁用，组合键提交成功"
+                                " 验证方法2: 提交按钮已禁用，组合键提交成功"
                             )
                             submission_success = True
                     except Exception:
@@ -683,27 +663,25 @@ class InputController(BaseController):
                             is_vis = await last_container.is_visible(timeout=1000)
                             if is_vis:
                                 self.logger.info(
-                                    f"[{self.req_id}] 验证方法3: 检测到响应容器，组合键提交成功"
+                                    " 验证方法3: 检测到响应容器，组合键提交成功"
                                 )
                                 submission_success = True
-                    except Exception as e:
+                    except Exception:
                         pass
             except Exception as verify_err:
                 if isinstance(verify_err, asyncio.CancelledError):
                     raise
-                self.logger.warning(
-                    f"[{self.req_id}] 组合键提交验证过程出错: {verify_err}"
-                )
+                self.logger.warning(f" 组合键提交验证过程出错: {verify_err}")
                 submission_success = True
 
             if submission_success:
-                self.logger.info(f"[{self.req_id}] 组合键提交成功")
+                self.logger.info(" 组合键提交成功")
                 return True
             else:
-                self.logger.warning(f"[{self.req_id}] 组合键提交验证失败")
+                self.logger.warning(" 组合键提交验证失败")
                 return False
         except Exception as combo_err:
             if isinstance(combo_err, asyncio.CancelledError):
                 raise
-            self.logger.warning(f"[{self.req_id}] 组合键提交失败: {combo_err}")
+            self.logger.warning(f" 组合键提交失败: {combo_err}")
             return False

@@ -124,11 +124,13 @@ exit
 ### 脚本注入失败
 
 1. **检查配置文件路径**：
+
    ```bash
    docker compose exec ai-studio-proxy ls -la /app/browser_utils/
    ```
 
 2. **检查文件权限**：
+
    ```bash
    docker compose exec ai-studio-proxy cat /app/browser_utils/more_models.js
    ```
@@ -141,6 +143,7 @@ exit
 ### 脚本文件无效
 
 1. **验证 JavaScript 格式**：
+
    ```bash
    # 在主机上验证 JavaScript 语法
    node -c browser_utils/more_models.js
@@ -199,4 +202,3 @@ docker compose up -d
 3. **重启生效**: 配置更改后需要重启容器
 4. **日志监控**: 通过日志确认脚本注入状态
 5. **备份配置**: 建议备份工作的配置文件
-

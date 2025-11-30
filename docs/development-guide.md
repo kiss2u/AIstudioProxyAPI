@@ -155,17 +155,17 @@ poetry env remove python
 
 ```json
 {
-    "pythonVersion": "3.13",
-    "pythonPlatform": "Darwin",
-    "typeCheckingMode": "off",
-    "extraPaths": [
-        "./api_utils",
-        "./browser_utils",
-        "./config",
-        "./models",
-        "./logging_utils",
-        "./stream"
-    ]
+  "pythonVersion": "3.13",
+  "pythonPlatform": "Darwin",
+  "typeCheckingMode": "off",
+  "extraPaths": [
+    "./api_utils",
+    "./browser_utils",
+    "./config",
+    "./models",
+    "./logging_utils",
+    "./stream"
+  ]
 }
 ```
 
@@ -229,7 +229,7 @@ class ChatRequest(BaseModel):
 本项目严格执行防挂起协议，特别是在 Windows 环境下，以防止测试死锁。
 
 1.  **强制超时**: 所有测试必须有超时限制。项目已配置全局 `timeout = 10` (在 `pytest.ini` 中)。
-    *   对于耗时较长的测试，请使用 `@pytest.mark.timeout(30)` 装饰器。
+    - 对于耗时较长的测试，请使用 `@pytest.mark.timeout(30)` 装饰器。
 2.  **资源清理**: Fixtures 必须在 `yield` 后显式关闭资源（如数据库连接、浏览器上下文）。
 3.  **Async 安全**: 严禁在 `except Exception:` 中吞掉 `asyncio.CancelledError`，否则会导致测试挂起。
 
@@ -319,13 +319,13 @@ git push origin feature-branch
 def process_chat_request(request: ChatRequest) -> ChatResponse:
     """
     处理聊天请求
-    
+
     Args:
         request: 聊天请求对象
-        
+
     Returns:
         ChatResponse: 聊天响应对象
-        
+
     Raises:
         ValidationError: 当请求数据无效时
         ProcessingError: 当处理失败时

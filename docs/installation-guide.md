@@ -194,6 +194,7 @@ poetry run python launch_camoufox.py --debug
 ```
 
 您可以通过添加不同的参数来控制启动行为，例如：
+
 - `--headless`: 在后台运行浏览器，不显示界面。
 - `--debug`: 启动时显示浏览器界面，方便调试。
 - 更多参数请参阅[高级配置指南](advanced-configuration.md)。
@@ -203,6 +204,7 @@ poetry run python launch_camoufox.py --debug
 如果您熟悉 Docker，也可以使用容器化方式部署服务。这种方式可以提供更好的环境隔离。
 
 详细的 Docker 启动指南，请参阅：
+
 - **[Docker 部署指南](../docker/README-Docker.md)**
 
 ## 多平台指南
