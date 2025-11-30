@@ -3,18 +3,18 @@ import datetime
 import json
 import logging
 import sys
-from typing import Dict
+from typing import Dict, List
 
 from fastapi import WebSocket, WebSocketDisconnect
 
 
 class StreamToLogger:
-    def __init__(self, logger_instance, log_level=logging.INFO):
+    def __init__(self, logger_instance: logging.Logger, log_level: int = logging.INFO):
         self.logger = logger_instance
         self.log_level = log_level
         self.linebuf = ""
 
-    def write(self, buf):
+    def write(self, buf: str):
         try:
             temp_linebuf = self.linebuf + buf
             self.linebuf = ""
@@ -70,7 +70,7 @@ class WebSocketConnectionManager:
     async def broadcast(self, message: str):
         if not self.active_connections:
             return
-        disconnected_clients = []
+        disconnected_clients: List[str] = []
         active_conns_copy = list(self.active_connections.items())
         logger = logging.getLogger("AIStudioProxyServer")
         for client_id, connection in active_conns_copy:

@@ -48,7 +48,9 @@ build-backend = "poetry.core.masonry.api"
 asyncio_mode = "auto"
 testpaths = ["tests"]
 python_files = "test_*.py"
-addopts = "-v --cov=api_utils --cov=browser_utils --cov=stream --cov=config --cov=models --cov-report=term-missing"
+# Coverage disabled by default for MonkeyType compatibility (uses same sys.setprofile hook)
+# To re-enable coverage: pytest --cov=api_utils --cov=browser_utils --cov=stream --cov=config --cov=models --cov-report=term-missing
+addopts = "-v"
 timeout = 10
 env = [
     "LAUNCH_MODE=test",
