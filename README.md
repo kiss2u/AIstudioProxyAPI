@@ -35,13 +35,13 @@ This project is generously sponsored by ZMTO. Visit their website: [https://zmto
 | **内存**     | ≥2GB                    | ≥4GB           | 浏览器自动化需要                             |
 | **网络**     | 稳定互联网连接          | -              | 可配置代理访问 Google AI Studio              |
 | **依赖管理** | Poetry                  | 最新版本       | 现代化 Python 依赖管理工具                   |
-| **类型检查** | Pyright (可选)          | 最新版本       | 用于开发时类型检查和 IDE 支持 (需要 Node.js) |
+| **类型检查** | Pyright (可选)          | 最新版本       | 用于开发时类型检查和 IDE 支持|
 
 ## 系统要求
 
 - **Python**: >=3.9, <4.0 (推荐 3.10+ 以获得最佳性能，Docker 环境使用 3.10)
 - **依赖管理**: [Poetry](https://python-poetry.org/) (现代化 Python 依赖管理工具，替代传统 requirements.txt)
-- **类型检查**: [Pyright](https://github.com/microsoft/pyright) (可选，用于开发时类型检查和 IDE 支持，需要 Node.js 环境)
+- **类型检查**: [Pyright](https://github.com/microsoft/pyright) (可选，用于开发时类型检查和 IDE 支持。命令行使用需要 Node.js,IDE 集成通常不需要)
 - **操作系统**: Windows, macOS, Linux (完全跨平台支持，Docker 部署支持 x86_64 和 ARM64)
 - **内存**: 建议 2GB+ 可用内存 (浏览器自动化需要)
 - **网络**: 稳定的互联网连接访问 Google AI Studio (支持代理配置)
