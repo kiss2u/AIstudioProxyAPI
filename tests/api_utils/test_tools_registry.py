@@ -1,5 +1,6 @@
 import json
 import os
+from typing import Any, Dict, List, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -18,10 +19,10 @@ from api_utils.tools_registry import (
 def cleanup_registry():
     """Reset the registry state before and after each test."""
     api_utils.tools_registry._ALLOWED_RUNTIME_TOOLS.clear()
-    api_utils.tools_registry._RUNTIME_MCP_ENDPOINT = None
+    api_utils.tools_registry._runtime_mcp_endpoint = None
     yield
     api_utils.tools_registry._ALLOWED_RUNTIME_TOOLS.clear()
-    api_utils.tools_registry._RUNTIME_MCP_ENDPOINT = None
+    api_utils.tools_registry._runtime_mcp_endpoint = None
 
 
 def test_tool_get_current_time():
@@ -82,7 +83,7 @@ def test_register_runtime_tools_empty():
 def test_register_runtime_tools_malformed():
     """Test registering malformed tool definitions doesn't crash."""
     # Should not crash
-    register_runtime_tools(["not a dict"])
+    register_runtime_tools(cast(List[Dict[str, Any]], ["not a dict"]))
     # Should handle partially malformed
     register_runtime_tools([{"no_name": "foo"}])
 
@@ -91,22 +92,22 @@ def test_register_runtime_tools_mcp_endpoint():
     """Test MCP endpoint registration via argument and tool extensions."""
     # Via argument - needs at least one tool to process
     register_runtime_tools([{"name": "dummy"}], mcp_endpoint="http://mcp")
-    assert api_utils.tools_registry._RUNTIME_MCP_ENDPOINT == "http://mcp"
+    assert api_utils.tools_registry._runtime_mcp_endpoint == "http://mcp"
 
     # Reset
     register_runtime_tools([])
-    assert api_utils.tools_registry._RUNTIME_MCP_ENDPOINT is None
+    assert api_utils.tools_registry._runtime_mcp_endpoint is None
 
     # Via tool extension
     tools = [{"function": {"name": "mcp_tool", "x-mcp-endpoint": "http://tool-mcp"}}]
     register_runtime_tools(tools)
     assert "mcp_tool" in api_utils.tools_registry._ALLOWED_RUNTIME_TOOLS
-    assert api_utils.tools_registry._RUNTIME_MCP_ENDPOINT == "http://tool-mcp"
+    assert api_utils.tools_registry._runtime_mcp_endpoint == "http://tool-mcp"
 
     # Top level x-mcp-endpoint
     tools = [{"name": "mcp_tool_2", "x_mcp_endpoint": "http://tool-mcp-2"}]
     register_runtime_tools(tools)
-    assert api_utils.tools_registry._RUNTIME_MCP_ENDPOINT == "http://tool-mcp-2"
+    assert api_utils.tools_registry._runtime_mcp_endpoint == "http://tool-mcp-2"
 
 
 def test_register_runtime_tools_exceptions():
@@ -117,7 +118,9 @@ def test_register_runtime_tools_exceptions():
     assert "tool_weird" in api_utils.tools_registry._ALLOWED_RUNTIME_TOOLS
 
     # Test line 72-74: Exception handling (e.g. tools is not iterable but truthy)
-    register_runtime_tools(123)  # raises TypeError, caught by except
+    register_runtime_tools(
+        cast(List[Dict[str, Any]], 123)
+    )  # raises TypeError, caught by except
     # Should safely pass without error
 
     # Exception during iteration
@@ -125,7 +128,7 @@ def test_register_runtime_tools_exceptions():
         def __iter__(self):
             raise ValueError("Bad")
 
-    register_runtime_tools(BadTools())
+    register_runtime_tools(cast(List[Dict[str, Any]], BadTools()))
 
 
 @pytest.mark.asyncio
@@ -176,7 +179,7 @@ async def test_execute_tool_call_exception():
 async def test_execute_tool_call_mcp_runtime():
     # Setup runtime tool
     api_utils.tools_registry._ALLOWED_RUNTIME_TOOLS.add("mcp_tool")
-    api_utils.tools_registry._RUNTIME_MCP_ENDPOINT = "http://runtime-mcp"
+    api_utils.tools_registry._runtime_mcp_endpoint = "http://runtime-mcp"
 
     mock_mcp = AsyncMock(return_value=json.dumps({"result": "mcp_ok"}))
     mcp_adapter_mock = MagicMock()
@@ -192,7 +195,7 @@ async def test_execute_tool_call_mcp_runtime():
 async def test_execute_tool_call_mcp_env():
     # Setup runtime tool allowed, but no runtime endpoint, fallback to env
     api_utils.tools_registry._ALLOWED_RUNTIME_TOOLS.add("mcp_env_tool")
-    api_utils.tools_registry._RUNTIME_MCP_ENDPOINT = None
+    api_utils.tools_registry._runtime_mcp_endpoint = None
 
     with patch.dict(os.environ, {"MCP_HTTP_ENDPOINT": "http://env-mcp"}):
         mock_mcp = AsyncMock(return_value=json.dumps({"result": "env_ok"}))
@@ -210,7 +213,7 @@ async def test_execute_tool_call_mcp_env():
 @pytest.mark.asyncio
 async def test_execute_tool_call_mcp_fail():
     api_utils.tools_registry._ALLOWED_RUNTIME_TOOLS.add("fail_tool")
-    api_utils.tools_registry._RUNTIME_MCP_ENDPOINT = "http://fail"
+    api_utils.tools_registry._runtime_mcp_endpoint = "http://fail"
 
     mcp_adapter_mock = MagicMock()
     mcp_adapter_mock.execute_mcp_tool_with_endpoint = AsyncMock(

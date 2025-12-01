@@ -7,7 +7,7 @@ import asyncio
 import base64
 import json
 import os
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union, cast
 from urllib.parse import unquote, urlparse
 
 from logging_utils import set_request_id
@@ -58,9 +58,9 @@ def prepare_combined_prompt(
     _msg_count = len(messages)
     # 不在此处清空 upload_files；由上层在每次请求开始时按需清理，避免历史附件丢失导致“文件不存在”错误。
 
-    combined_parts = []
+    combined_parts: List[str] = []
     system_prompt_content: Optional[str] = None
-    processed_system_message_indices = set()
+    processed_system_message_indices: set[int] = set()
     files_list: List[str] = []  # 收集需要上传的本地文件路径（图片、视频、PDF等）
 
     # 若声明了可用工具，先在提示前注入工具目录，帮助模型知晓可用函数（内部适配，不影响外部协议）
@@ -68,15 +68,24 @@ def prepare_combined_prompt(
         try:
             tool_lines: List[str] = ["可用工具目录:"]
             for t in tools:
-                name = None
-                params_schema = None
-                if isinstance(t, dict):
-                    fn = t.get("function") if "function" in t else t
-                    if isinstance(fn, dict):
-                        name = fn.get("name") or t.get("name")
-                        params_schema = fn.get("parameters")
-                    else:
-                        name = t.get("name")
+                name: Optional[str] = None
+                params_schema: Optional[Dict[str, Any]] = None
+                # t is Dict[str, Any] from List[Dict[str, Any]]
+                fn_val: Any = t.get("function") if "function" in t else t
+                if isinstance(fn_val, dict):
+                    # Type narrowed: fn_val is dict
+                    typed_fn: Dict[str, Any] = cast(Dict[str, Any], fn_val)
+                    name_raw: Any = typed_fn.get("name") or t.get("name")
+                    if isinstance(name_raw, str):
+                        name = name_raw
+                    params_raw: Any = typed_fn.get("parameters")
+                    if isinstance(params_raw, dict):
+                        params_schema = cast(Dict[str, Any], params_raw)
+                else:
+                    # fn_val is not dict, get name directly from t
+                    name_raw: Any = t.get("name")
+                    if isinstance(name_raw, str):
+                        name = name_raw
                 if name:
                     tool_lines.append(f"- 函数: {name}")
                     if params_schema:
@@ -88,12 +97,18 @@ def prepare_combined_prompt(
                             pass
             if tool_choice:
                 # 明确要求或提示可调用的函数名
-                chosen_name = None
+                chosen_name: Optional[str] = None
                 if isinstance(tool_choice, dict):
-                    fn = tool_choice.get("function") if tool_choice else None
-                    if isinstance(fn, dict):
-                        chosen_name = fn.get("name")
-                elif isinstance(tool_choice, str) and tool_choice.lower() not in (
+                    # Type narrowed to dict by isinstance
+                    typed_tool_choice: Dict[str, Any] = tool_choice
+                    fn_val: Any = typed_tool_choice.get("function")
+                    if isinstance(fn_val, dict):
+                        # Type narrowed to dict
+                        typed_fn: Dict[str, Any] = cast(Dict[str, Any], fn_val)
+                        name_raw: Any = typed_fn.get("name")
+                        if isinstance(name_raw, str):
+                            chosen_name = name_raw
+                elif tool_choice.lower() not in (
                     "auto",
                     "none",
                     "no",
@@ -148,19 +163,19 @@ def prepare_combined_prompt(
 
         role = msg.role or "unknown"
         role_prefix_ui = f"{role_map_ui.get(role, role.capitalize())}:\n"
-        current_turn_parts = [role_prefix_ui]
+        current_turn_parts: List[str] = [role_prefix_ui]
 
         content = msg.content or ""
-        content_str = ""
+        content_str: str = ""
 
         if isinstance(content, str):
             content_str = content.strip()
         elif isinstance(content, list):
             # 处理多模态内容（更健壮地识别各类附件项）
-            text_parts = []
+            text_parts: List[str] = []
             for item in content:
                 # 统一获取项类型（可能缺失）
-                item_type = None
+                item_type: Optional[str] = None
                 try:
                     # 使用 hasattr/getattr 时需防范 property抛出异常
                     if hasattr(item, "type"):
@@ -169,14 +184,19 @@ def prepare_combined_prompt(
                     item_type = None
 
                 if item_type is None and isinstance(item, dict):
-                    item_type = item.get("type")
+                    typed_item: Dict[str, Any] = cast(Dict[str, Any], item)
+                    item_type_raw: Any = typed_item.get("type")
+                    if isinstance(item_type_raw, str):
+                        item_type = item_type_raw
 
                 if item_type == "text":
                     # 文本项
                     if hasattr(item, "text"):
                         text_parts.append(getattr(item, "text", "") or "")
                     elif isinstance(item, dict):
-                        text_parts.append(item.get("text", ""))
+                        typed_item: Dict[str, Any] = cast(Dict[str, Any], item)
+                        text_raw: Any = typed_item.get("text", "")
+                        text_parts.append(str(text_raw))
                     continue
 
                 # 图片/文件/媒体 URL 项（类型缺失时也尝试识别）
@@ -196,12 +216,14 @@ def prepare_combined_prompt(
                     )
                 ):
                     try:
-                        url_value = None
+                        url_value: Optional[str] = None
                         # Pydantic 对象属性
                         if hasattr(item, "image_url") and item.image_url:
                             url_value = item.image_url.url
                             try:
-                                detail_val = getattr(item.image_url, "detail", None)
+                                detail_val: Optional[str] = getattr(
+                                    item.image_url, "detail", None
+                                )
                                 if detail_val:
                                     text_parts.append(
                                         f"[图像细节: detail={detail_val}]"
@@ -211,7 +233,9 @@ def prepare_combined_prompt(
                         elif hasattr(item, "input_image") and item.input_image:
                             url_value = item.input_image.url
                             try:
-                                detail_val = getattr(item.input_image, "detail", None)
+                                detail_val: Optional[str] = getattr(
+                                    item.input_image, "detail", None
+                                )
                                 if detail_val:
                                     text_parts.append(
                                         f"[图像细节: detail={detail_val}]"
@@ -224,41 +248,78 @@ def prepare_combined_prompt(
                             url_value = item.media_url.url
                         elif hasattr(item, "url") and item.url:
                             url_value = item.url
-                        # 字典结构
+                        # 字典结构 (backwards compatibility)
                         if url_value is None and isinstance(item, dict):
-                            if isinstance(item.get("image_url"), dict):
-                                url_value = item["image_url"].get("url")
-                                detail_val = item["image_url"].get("detail")
-                                if detail_val:
-                                    text_parts.append(
-                                        f"[图像细节: detail={detail_val}]"
-                                    )
-                            elif isinstance(item.get("image_url"), str):
-                                url_value = item.get("image_url")
-                            elif isinstance(item.get("input_image"), dict):
-                                url_value = item["input_image"].get("url")
-                                detail_val = item["input_image"].get("detail")
-                                if detail_val:
-                                    text_parts.append(
-                                        f"[图像细节: detail={detail_val}]"
-                                    )
-                            elif isinstance(item.get("input_image"), str):
-                                url_value = item.get("input_image")
-                            elif isinstance(item.get("file_url"), dict):
-                                url_value = item["file_url"].get("url")
-                            elif isinstance(item.get("file_url"), str):
-                                url_value = item.get("file_url")
-                            elif isinstance(item.get("media_url"), dict):
-                                url_value = item["media_url"].get("url")
-                            elif isinstance(item.get("media_url"), str):
-                                url_value = item.get("media_url")
-                            elif "url" in item:
-                                url_value = item.get("url")
-                            elif isinstance(item.get("file"), dict):
-                                # 兼容通用 file 字段
-                                url_value = item["file"].get("url") or item["file"].get(
-                                    "path"
+                            typed_item: Dict[str, Any] = cast(Dict[str, Any], item)
+                            image_url_raw: Any = typed_item.get("image_url")
+                            input_image_raw: Any = typed_item.get("input_image")
+
+                            if isinstance(image_url_raw, dict):
+                                typed_img_url: Dict[str, Any] = cast(
+                                    Dict[str, Any], image_url_raw
                                 )
+                                url_raw: Any = typed_img_url.get("url")
+                                if isinstance(url_raw, str):
+                                    url_value = url_raw
+                                detail_raw: Any = typed_img_url.get("detail")
+                                if isinstance(detail_raw, str):
+                                    text_parts.append(
+                                        f"[图像细节: detail={detail_raw}]"
+                                    )
+                            elif isinstance(image_url_raw, str):
+                                url_value = image_url_raw
+                            elif isinstance(input_image_raw, dict):
+                                typed_input_img: Dict[str, Any] = cast(
+                                    Dict[str, Any], input_image_raw
+                                )
+                                url_raw: Any = typed_input_img.get("url")
+                                if isinstance(url_raw, str):
+                                    url_value = url_raw
+                                detail_raw: Any = typed_input_img.get("detail")
+                                if isinstance(detail_raw, str):
+                                    text_parts.append(
+                                        f"[图像细节: detail={detail_raw}]"
+                                    )
+                            elif isinstance(input_image_raw, str):
+                                url_value = input_image_raw
+                            else:
+                                # Check other URL fields
+                                file_url_raw: Any = typed_item.get("file_url")
+                                media_url_raw: Any = typed_item.get("media_url")
+                                file_raw: Any = typed_item.get("file")
+
+                                if isinstance(file_url_raw, dict):
+                                    typed_file_url: Dict[str, Any] = cast(
+                                        Dict[str, Any], file_url_raw
+                                    )
+                                    url_raw: Any = typed_file_url.get("url")
+                                    if isinstance(url_raw, str):
+                                        url_value = url_raw
+                                elif isinstance(file_url_raw, str):
+                                    url_value = file_url_raw
+                                elif isinstance(media_url_raw, dict):
+                                    typed_media_url: Dict[str, Any] = cast(
+                                        Dict[str, Any], media_url_raw
+                                    )
+                                    url_raw: Any = typed_media_url.get("url")
+                                    if isinstance(url_raw, str):
+                                        url_value = url_raw
+                                elif isinstance(media_url_raw, str):
+                                    url_value = media_url_raw
+                                elif "url" in typed_item:
+                                    url_raw: Any = typed_item.get("url")
+                                    if isinstance(url_raw, str):
+                                        url_value = url_raw
+                                elif isinstance(file_raw, dict):
+                                    # 兼容通用 file 字段
+                                    typed_file: Dict[str, Any] = cast(
+                                        Dict[str, Any], file_raw
+                                    )
+                                    url_raw: Any = typed_file.get(
+                                        "url"
+                                    ) or typed_file.get("path")
+                                    if isinstance(url_raw, str):
+                                        url_value = url_raw
 
                         url_value = (url_value or "").strip()
                         if not url_value:
@@ -300,29 +361,50 @@ def prepare_combined_prompt(
                 # 音/视频输入
                 if item_type in ("input_audio", "input_video"):
                     try:
-                        inp = None
+                        inp: Any = None
                         if hasattr(item, "input_audio") and item.input_audio:
                             inp = item.input_audio
                         elif hasattr(item, "input_video") and item.input_video:
                             inp = item.input_video
                         elif isinstance(item, dict):
-                            inp = item.get("input_audio") or item.get("input_video")
+                            typed_item: Dict[str, Any] = cast(Dict[str, Any], item)
+                            inp = typed_item.get("input_audio") or typed_item.get(
+                                "input_video"
+                            )
 
                         if inp:
-                            url_value = None
-                            data_val = None
-                            mime_val = None
-                            fmt_val = None
+                            url_value: Optional[str] = None
+                            data_val: Optional[str] = None
+                            mime_val: Optional[str] = None
+                            fmt_val: Optional[str] = None
                             if isinstance(inp, dict):
-                                url_value = inp.get("url")
-                                data_val = inp.get("data")
-                                mime_val = inp.get("mime_type")
-                                fmt_val = inp.get("format")
+                                typed_inp: Dict[str, Any] = cast(Dict[str, Any], inp)
+                                url_raw: Any = typed_inp.get("url")
+                                if isinstance(url_raw, str):
+                                    url_value = url_raw
+                                data_raw: Any = typed_inp.get("data")
+                                if isinstance(data_raw, str):
+                                    data_val = data_raw
+                                mime_raw: Any = typed_inp.get("mime_type")
+                                if isinstance(mime_raw, str):
+                                    mime_val = mime_raw
+                                fmt_raw: Any = typed_inp.get("format")
+                                if isinstance(fmt_raw, str):
+                                    fmt_val = fmt_raw
                             else:
-                                url_value = getattr(inp, "url", None)
-                                data_val = getattr(inp, "data", None)
-                                mime_val = getattr(inp, "mime_type", None)
-                                fmt_val = getattr(inp, "format", None)
+                                # Pydantic model or object with attributes
+                                url_attr: Any = getattr(inp, "url", None)
+                                if isinstance(url_attr, str):
+                                    url_value = url_attr
+                                data_attr: Any = getattr(inp, "data", None)
+                                if isinstance(data_attr, str):
+                                    data_val = data_attr
+                                mime_attr: Any = getattr(inp, "mime_type", None)
+                                if isinstance(mime_attr, str):
+                                    mime_val = mime_attr
+                                fmt_attr: Any = getattr(inp, "format", None)
+                                if isinstance(fmt_attr, str):
+                                    fmt_val = fmt_attr
 
                             if url_value:
                                 if url_value.startswith("data:"):
@@ -386,24 +468,41 @@ def prepare_combined_prompt(
             content_str = "\n".join(text_parts).strip()
         elif isinstance(content, dict):
             # 兼容字典形式的内容，可能包含 'attachments'/'images'/'media'/'files'
+            typed_content: Dict[str, Any] = cast(Dict[str, Any], content)
             text_parts = []
             attachments_keys = ["attachments", "images", "media", "files"]
             for key in attachments_keys:
-                items = content.get(key)
+                items: Any = typed_content.get(key)
                 if isinstance(items, list):
                     for it in items:
-                        url_value = None
+                        url_value: Optional[str] = None
                         if isinstance(it, str):
                             url_value = it
                         elif isinstance(it, dict):
-                            url_value = it.get("url") or it.get("path")
-                            if not url_value and isinstance(it.get("image_url"), dict):
-                                url_value = it["image_url"].get("url")
-                            elif not url_value and isinstance(
-                                it.get("input_image"), dict
-                            ):
-                                url_value = it["input_image"].get("url")
-                        url_value = (url_value or "").strip()
+                            typed_it: Dict[str, Any] = cast(Dict[str, Any], it)
+                            url_raw: Any = typed_it.get("url") or typed_it.get("path")
+                            if isinstance(url_raw, str):
+                                url_value = url_raw
+                            if not url_value:
+                                image_url_raw: Any = typed_it.get("image_url")
+                                input_image_raw: Any = typed_it.get("input_image")
+                                if isinstance(image_url_raw, dict):
+                                    typed_img_url: Dict[str, Any] = cast(
+                                        Dict[str, Any], image_url_raw
+                                    )
+                                    url_from_image: Any = typed_img_url.get("url")
+                                    if isinstance(url_from_image, str):
+                                        url_value = url_from_image
+                                elif isinstance(input_image_raw, dict):
+                                    typed_input_img: Dict[str, Any] = cast(
+                                        Dict[str, Any], input_image_raw
+                                    )
+                                    url_from_input: Any = typed_input_img.get("url")
+                                    if isinstance(url_from_input, str):
+                                        url_value = url_from_input
+                        if not url_value:
+                            continue
+                        url_value = url_value.strip()
                         if not url_value:
                             continue
                         if url_value.startswith("data:"):
@@ -431,8 +530,9 @@ def prepare_combined_prompt(
                                 f"(准备提示) 忽略字典附件的非本地 URL: {url_value}"
                             )
             # 同时将字典中可能的纯文本说明拼入
-            if isinstance(content.get("text"), str):
-                text_parts.append(content.get("text"))
+            text_field: Any = typed_content.get("text")
+            if isinstance(text_field, str):
+                text_parts.append(text_field)
             content_str = "\n".join(text_parts).strip()
         else:
             logger.warning(
@@ -487,12 +587,20 @@ def prepare_combined_prompt(
             elif isinstance(msg.content, list):
                 # 兼容少数客户端把结果装在列表里
                 try:
-                    merged = "\n".join(
-                        it.get("text")
-                        if isinstance(it, dict) and it.get("type") == "text"
-                        else str(it)
-                        for it in msg.content
-                    )
+                    merged_parts: List[str] = []
+                    for it in msg.content:
+                        if isinstance(it, dict):
+                            if it.get("type") == "text":
+                                text_raw = it.get("text", "")
+                                if isinstance(text_raw, str):
+                                    merged_parts.append(text_raw)
+                                else:
+                                    merged_parts.append(str(text_raw))
+                            else:
+                                merged_parts.append(str(it))
+                        else:
+                            merged_parts.append(str(it))
+                    merged = "\n".join(merged_parts)
                     tool_result_lines.append(merged)
                 except Exception:
                     tool_result_lines.append(str(msg.content))
@@ -554,10 +662,19 @@ def _get_latest_user_text(messages: List[Message]) -> str:
             elif isinstance(content, list):
                 parts: List[str] = []
                 for it in content:
-                    if isinstance(it, dict) and it.get("type") == "text":
-                        parts.append(it.get("text") or "")
+                    if isinstance(it, dict):
+                        if it.get("type") == "text":
+                            text_raw = it.get("text", "")
+                            if isinstance(text_raw, str):
+                                parts.append(text_raw)
+                            else:
+                                parts.append(str(text_raw))
                     elif hasattr(it, "type") and it.type == "text":
-                        parts.append(getattr(it, "text", "") or "")
+                        text_attr = getattr(it, "text", "")
+                        if isinstance(text_attr, str):
+                            parts.append(text_attr)
+                        else:
+                            parts.append(str(text_attr))
                 return "\n".join(p for p in parts if p)
             else:
                 return ""
@@ -578,7 +695,7 @@ async def maybe_execute_tools(
     """
     try:
         # Track runtime-declared tools和可选 MCP 端点
-        mcp_ep = None
+        mcp_ep: Optional[str] = None
         # support per-request MCP endpoint via request-level message or tool spec extension (if present later)
         # current: read from env only in registry when not provided
         register_runtime_tools(tools, mcp_ep)
@@ -588,18 +705,27 @@ async def maybe_execute_tools(
                 return None
         chosen_name: Optional[str] = None
         if isinstance(tool_choice, dict):
-            fn = tool_choice.get("function") if tool_choice else None
-            if isinstance(fn, dict):
-                chosen_name = fn.get("name")
+            fn_raw = tool_choice.get("function")
+            if isinstance(fn_raw, dict):
+                name_raw = fn_raw.get("name")
+                if isinstance(name_raw, str):
+                    chosen_name = name_raw
         elif isinstance(tool_choice, str):
             lc = tool_choice.lower()
             if lc in ("none", "no", "off"):
                 return None
             if lc in ("auto", "required", "any"):
                 if isinstance(tools, list) and len(tools) == 1:
-                    chosen_name = tools[0].get("function", {}).get("name") or tools[
-                        0
-                    ].get("name")
+                    first_tool = tools[0]
+                    func_raw = first_tool.get("function", {})
+                    if isinstance(func_raw, dict):
+                        name_from_func = func_raw.get("name")
+                        if isinstance(name_from_func, str):
+                            chosen_name = name_from_func
+                    if not chosen_name:
+                        name_from_tool = first_tool.get("name")
+                        if isinstance(name_from_tool, str):
+                            chosen_name = name_from_tool
             else:
                 chosen_name = tool_choice
         elif tool_choice is None:
@@ -623,7 +749,7 @@ async def maybe_execute_tools(
 
 
 def generate_sse_stop_chunk_with_usage(
-    req_id: str, model: str, usage_stats: dict, reason: str = "stop"
+    req_id: str, model: str, usage_stats: Dict[str, int], reason: str = "stop"
 ) -> str:
     """生成带usage统计的SSE停止块"""
     return generate_sse_stop_chunk(req_id, model, reason, usage_stats)
@@ -642,9 +768,9 @@ def collect_and_validate_attachments(
     from urllib.parse import unquote, urlparse
 
     # 1. Validate initial list
-    valid_images = []
+    valid_images: List[str] = []
     for p in initial_image_list:
-        if isinstance(p, str) and p and os.path.isabs(p) and os.path.exists(p):
+        if p and os.path.isabs(p) and os.path.exists(p):
             valid_images.append(p)
 
     set_request_id(req_id)
@@ -653,7 +779,7 @@ def collect_and_validate_attachments(
             f"过滤掉不存在的附件路径: {set(initial_image_list) - set(valid_images)}"
         )
 
-    image_list = valid_images
+    image_list: List[str] = valid_images
 
     # 2. Collect from request
     try:
@@ -661,12 +787,17 @@ def collect_and_validate_attachments(
         top_level_atts = getattr(request, "attachments", None)
         if isinstance(top_level_atts, list) and len(top_level_atts) > 0:
             for it in top_level_atts:
-                url_value = None
+                url_value: Optional[str] = None
                 if isinstance(it, str):
                     url_value = it
                 elif isinstance(it, dict):
-                    url_value = it.get("url") or it.get("path")
-                url_value = (url_value or "").strip()
+                    typed_it: Dict[str, Any] = cast(Dict[str, Any], it)
+                    url_raw: Any = typed_it.get("url") or typed_it.get("path")
+                    if isinstance(url_raw, str):
+                        url_value = url_raw
+                if not url_value:
+                    continue
+                url_value = url_value.strip()
                 if not url_value:
                     continue
                 if url_value.startswith("data:"):
@@ -688,12 +819,17 @@ def collect_and_validate_attachments(
                 if not isinstance(arr, list):
                     continue
                 for it in arr:
-                    url_value = None
+                    url_value: Optional[str] = None
                     if isinstance(it, str):
                         url_value = it
                     elif isinstance(it, dict):
-                        url_value = it.get("url") or it.get("path")
-                    url_value = (url_value or "").strip()
+                        typed_it: Dict[str, Any] = cast(Dict[str, Any], it)
+                        url_raw: Any = typed_it.get("url") or typed_it.get("path")
+                        if isinstance(url_raw, str):
+                            url_value = url_raw
+                    if not url_value:
+                        continue
+                    url_value = url_value.strip()
                     if not url_value:
                         continue
                     if url_value.startswith("data:"):

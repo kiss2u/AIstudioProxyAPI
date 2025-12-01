@@ -1,4 +1,5 @@
 # --- browser_utils/operations_modules/parsers.py ---
+import asyncio
 import json
 import logging
 import os
@@ -148,18 +149,18 @@ def _get_injected_models():
 async def _handle_model_list_response(response: Any):
     """处理模型列表响应"""
     # 需要访问全局变量
-    import server
+    from api_utils.server_state import state
 
-    getattr(server, "global_model_list_raw_json", None)
-    getattr(server, "parsed_model_list", [])
-    model_list_fetch_event = getattr(server, "model_list_fetch_event", None)
-    excluded_model_ids = getattr(server, "excluded_model_ids", set())
+    getattr(state, "global_model_list_raw_json", None)
+    getattr(state, "parsed_model_list", [])
+    model_list_fetch_event = getattr(state, "model_list_fetch_event", None)
+    excluded_model_ids = getattr(state, "excluded_model_ids", set())
 
     if MODELS_ENDPOINT_URL_CONTAINS in response.url and response.ok:
         # 检查是否在登录流程中
         launch_mode = os.environ.get("LAUNCH_MODE", "debug")
         is_in_login_flow = launch_mode in ["debug"] and not getattr(
-            server, "is_page_ready", False
+            state, "is_page_ready", False
         )
 
         if is_in_login_flow:
@@ -487,24 +488,24 @@ async def _handle_model_list_response(response: Any):
                     # 因为如果前端没有通过网络拦截注入，说明前端页面上没有这些模型
                     # 后端返回这些模型也无法实际使用，所以只依赖网络拦截注入
 
-                    server.parsed_model_list = sorted(
+                    state.parsed_model_list = sorted(
                         new_parsed_list, key=lambda m: m.get("display_name", "").lower()
                     )
-                    server.global_model_list_raw_json = json.dumps(
-                        {"data": server.parsed_model_list, "object": "list"}
+                    state.global_model_list_raw_json = json.dumps(
+                        {"data": state.parsed_model_list, "object": "list"}
                     )
                     if DEBUG_LOGS_ENABLED:
-                        log_output = f"成功解析和更新模型列表。总共解析模型数: {len(server.parsed_model_list)}.\n"
+                        log_output = f"成功解析和更新模型列表。总共解析模型数: {len(state.parsed_model_list)}.\n"
                         for i, item in enumerate(
-                            server.parsed_model_list[
-                                : min(3, len(server.parsed_model_list))
+                            state.parsed_model_list[
+                                : min(3, len(state.parsed_model_list))
                             ]
                         ):
                             log_output += f"  Model {i + 1}: ID={item.get('id')}, Name={item.get('display_name')}, Temp={item.get('default_temperature')}, MaxTokDef={item.get('default_max_output_tokens')}, MaxTokSup={item.get('supported_max_output_tokens')}, TopP={item.get('default_top_p')}\n"
                         logger.info(log_output)
                     if model_list_fetch_event and not model_list_fetch_event.is_set():
                         model_list_fetch_event.set()
-                elif not server.parsed_model_list:
+                elif not state.parsed_model_list:
                     logger.warning("解析后模型列表仍然为空。")
                     if model_list_fetch_event and not model_list_fetch_event.is_set():
                         model_list_fetch_event.set()
@@ -516,6 +517,8 @@ async def _handle_model_list_response(response: Any):
             logger.error(
                 f"解析模型列表JSON失败: {json_err}. 响应 (前500字): {await response.text()[:500]}"
             )
+        except asyncio.CancelledError:
+            raise
         except Exception as e_handle_list_resp:
             logger.exception(f"处理模型列表响应时发生未知错误: {e_handle_list_resp}")
         finally:

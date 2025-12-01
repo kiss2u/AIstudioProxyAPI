@@ -1,4 +1,4 @@
-from typing import Dict, List
+from typing import Any, Dict, List, Optional
 
 
 def estimate_tokens(text: str) -> int:
@@ -18,7 +18,9 @@ def estimate_tokens(text: str) -> int:
 
 
 def calculate_usage_stats(
-    messages: List[dict], response_content: str, reasoning_content: str = None
+    messages: List[Dict[str, Any]],
+    response_content: str,
+    reasoning_content: Optional[str] = None,
 ) -> Dict[str, int]:
     prompt_text = ""
     for message in messages:

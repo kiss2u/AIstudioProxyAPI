@@ -34,12 +34,14 @@ class TestQueueManagerInitialization:
         """Test that initialize_globals creates objects when server state is None."""
         queue_manager = QueueManager()
 
+        mock_logger = MagicMock()
+
         with (
-            patch("server.request_queue", None),
-            patch("server.processing_lock", None),
-            patch("server.model_switching_lock", None),
-            patch("server.params_cache_lock", None),
-            patch("server.logger", MagicMock()) as mock_logger,
+            patch("api_utils.server_state.state.request_queue", None),
+            patch("api_utils.server_state.state.processing_lock", None),
+            patch("api_utils.server_state.state.model_switching_lock", None),
+            patch("api_utils.server_state.state.params_cache_lock", None),
+            patch("api_utils.server_state.state.logger", mock_logger),
         ):
             queue_manager.initialize_globals()
 
@@ -61,10 +63,10 @@ class TestQueueManagerInitialization:
         mock_lock3 = asyncio.Lock()
 
         with (
-            patch("server.request_queue", mock_queue),
-            patch("server.processing_lock", mock_lock1),
-            patch("server.model_switching_lock", mock_lock2),
-            patch("server.params_cache_lock", mock_lock3),
+            patch("api_utils.server_state.state.request_queue", mock_queue),
+            patch("api_utils.server_state.state.processing_lock", mock_lock1),
+            patch("api_utils.server_state.state.model_switching_lock", mock_lock2),
+            patch("api_utils.server_state.state.params_cache_lock", mock_lock3),
         ):
             queue_manager.initialize_globals()
 
@@ -132,6 +134,7 @@ class TestQueueDisconnectDetection:
         """Test that disconnected requests are marked as cancelled."""
         queue_manager = QueueManager()
         queue_manager.request_queue = real_locks_mock_browser.request_queue
+        assert queue_manager.request_queue is not None
 
         # Create two items: one disconnected, one connected
         item1 = {
@@ -174,6 +177,7 @@ class TestQueueDisconnectDetection:
         """Test that exceptions during disconnect check are handled gracefully."""
         queue_manager = QueueManager()
         queue_manager.request_queue = real_locks_mock_browser.request_queue
+        assert queue_manager.request_queue is not None
         queue_manager.logger = MagicMock()
 
         item = {
@@ -205,6 +209,7 @@ class TestRequestProcessing:
         """Already cancelled requests should be skipped immediately."""
         queue_manager = QueueManager()
         queue_manager.request_queue = real_locks_mock_browser.request_queue
+        assert queue_manager.request_queue is not None
         # Mock task_done since we're not using queue.get()
         queue_manager.request_queue.task_done = MagicMock()
 
@@ -231,6 +236,7 @@ class TestRequestProcessing:
         """Test client disconnect detection before acquiring lock."""
         queue_manager = QueueManager()
         queue_manager.request_queue = real_locks_mock_browser.request_queue
+        assert queue_manager.request_queue is not None
         queue_manager.request_queue.task_done = MagicMock()  # Mock task_done
         queue_manager.processing_lock = real_locks_mock_browser.processing_lock
 
@@ -263,6 +269,7 @@ class TestRequestProcessing:
         """Test failure when processing_lock is not initialized."""
         queue_manager = QueueManager()
         queue_manager.request_queue = real_locks_mock_browser.request_queue
+        assert queue_manager.request_queue is not None
         queue_manager.request_queue.task_done = MagicMock()  # Mock task_done
         queue_manager.processing_lock = None  # Not initialized
 
@@ -293,6 +300,7 @@ class TestRequestProcessing:
         """Test successful request processing flow."""
         queue_manager = QueueManager()
         queue_manager.request_queue = real_locks_mock_browser.request_queue
+        assert queue_manager.request_queue is not None
         queue_manager.request_queue.task_done = MagicMock()  # Mock task_done
         queue_manager.processing_lock = real_locks_mock_browser.processing_lock
         queue_manager.logger = MagicMock()
@@ -335,6 +343,7 @@ class TestRecoveryMechanisms:
         """Test Tier 1 recovery: Page refresh on first failure."""
         queue_manager = QueueManager()
         queue_manager.request_queue = real_locks_mock_browser.request_queue
+        assert queue_manager.request_queue is not None
         queue_manager.request_queue.task_done = MagicMock()  # Mock task_done
         queue_manager.processing_lock = real_locks_mock_browser.processing_lock
         queue_manager.logger = MagicMock()
@@ -378,6 +387,7 @@ class TestRecoveryMechanisms:
         """Test Tier 2 recovery: Profile switch on second failure."""
         queue_manager = QueueManager()
         queue_manager.request_queue = real_locks_mock_browser.request_queue
+        assert queue_manager.request_queue is not None
         queue_manager.request_queue.task_done = MagicMock()  # Mock task_done
         queue_manager.processing_lock = real_locks_mock_browser.processing_lock
         queue_manager.logger = MagicMock()
@@ -430,6 +440,7 @@ class TestRecoveryMechanisms:
         """Test immediate profile switch on quota error (429)."""
         queue_manager = QueueManager()
         queue_manager.request_queue = real_locks_mock_browser.request_queue
+        assert queue_manager.request_queue is not None
         queue_manager.request_queue.task_done = MagicMock()  # Mock task_done
         queue_manager.processing_lock = real_locks_mock_browser.processing_lock
         queue_manager.logger = MagicMock()
@@ -544,13 +555,12 @@ class TestExecuteRequestLogic:
         mock_event = asyncio.Event()
         mock_btn_loc = MagicMock()
         mock_checker = MagicMock()
-        mock_state = {"has_content": True}
 
         with (
             patch(
                 "api_utils._process_request_refactored",
                 new_callable=AsyncMock,
-                return_value=(mock_event, mock_btn_loc, mock_checker, mock_state),
+                return_value=(mock_event, mock_btn_loc, mock_checker),
             ),
             patch.object(
                 queue_manager, "_monitor_completion", new_callable=AsyncMock
@@ -859,7 +869,7 @@ class TestRefreshAndProfileSwitch:
 
         _, _, _, page = mock_playwright_stack
 
-        with patch("server.page_instance", page):
+        with patch("api_utils.server_state.state.page_instance", page):
             await queue_manager._refresh_page("req1")
 
             page.reload.assert_called_once()
@@ -957,6 +967,7 @@ class TestGetNextRequest:
         """Test successful request retrieval."""
         queue_manager = QueueManager()
         queue_manager.request_queue = real_locks_mock_browser.request_queue
+        assert queue_manager.request_queue is not None
 
         item = {"req_id": "req1", "request_data": MagicMock()}
         await queue_manager.request_queue.put(item)

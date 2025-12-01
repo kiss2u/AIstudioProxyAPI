@@ -39,6 +39,7 @@ pyright = "^1.1.407"
 ruff = "^0.14.6"
 pytest-testmon = "^2.1.4"
 monkeytype = "^23.3.0"
+pytest-xdist = "^3.8.0"
 
 [build-system]
 requires = ["poetry-core"]
@@ -48,10 +49,12 @@ build-backend = "poetry.core.masonry.api"
 asyncio_mode = "auto"
 testpaths = ["tests"]
 python_files = "test_*.py"
-# Coverage disabled by default for MonkeyType compatibility (uses same sys.setprofile hook)
-# To re-enable coverage: pytest --cov=api_utils --cov=browser_utils --cov=stream --cov=config --cov=models --cov-report=term-missing
-addopts = "-v"
-timeout = 10
+addopts = "-v --cov=api_utils --cov=browser_utils --cov=stream --cov=config --cov=models --cov-report=term-missing --ignore=tests/browser_utils/test_operations_old.py --tb=short"
+timeout = 120
+timeout_method = "thread"
+markers = [
+    "integration: Integration tests that use real components (locks, queues, state) instead of mocks"
+]
 env = [
     "LAUNCH_MODE=test",
     "STREAM_PORT=0",

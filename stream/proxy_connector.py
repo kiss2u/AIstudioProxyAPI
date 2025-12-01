@@ -1,7 +1,6 @@
 import asyncio
 import ssl as ssl_module
 import urllib.parse
-
 from typing import Any, Optional, Tuple
 
 from aiohttp import TCPConnector

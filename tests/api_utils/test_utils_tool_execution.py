@@ -6,11 +6,12 @@ Strategy: Mock only external boundaries (execute_tool_call, register_runtime_too
 """
 
 import asyncio
+from typing import List, cast
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from models import Message
+from models import Message, MessageContentItem
 
 
 @pytest.mark.asyncio
@@ -198,6 +199,7 @@ async def test_maybe_execute_tools_arguments_from_user_text():
 
         # 验证: 参数是从最后一条用户消息中提取的 JSON
         mock_exec.assert_called_once_with("test_func", '{"key": "value", "num": 42}')
+        assert result is not None
         assert result[0]["arguments"] == '{"key": "value", "num": 42}'
 
 
@@ -223,6 +225,7 @@ async def test_maybe_execute_tools_arguments_fallback_empty():
 
         # 验证: 参数回退到空 JSON
         mock_exec.assert_called_once_with("my_tool", "{}")
+        assert result is not None
         assert result[0]["arguments"] == "{}"
 
 
@@ -399,14 +402,17 @@ async def test_maybe_execute_tools_list_content_extraction():
     messages = [
         Message(
             role="user",
-            content=[
-                {"type": "text", "text": "Before image"},
-                {
-                    "type": "image_url",
-                    "image_url": {"url": "http://example.com/img.jpg"},
-                },
-                {"type": "text", "text": '{"action": "process_image"}'},
-            ],
+            content=cast(
+                List[MessageContentItem],
+                [
+                    {"type": "text", "text": "Before image"},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": "http://example.com/img.jpg"},
+                    },
+                    {"type": "text", "text": '{"action": "process_image"}'},
+                ],
+            ),
         )
     ]
     tools = [{"function": {"name": "image_tool"}}]

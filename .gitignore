@@ -188,6 +188,7 @@ coverage.xml
 *.py,cover
 .hypothesis/
 .pytest_cache/
+.testmondata*
 
 # Environments
 .env
@@ -262,3 +263,10 @@ docker/.env
 docker/my_*.json
 
 monkeytype.sqlite3
+
+# Temporary debug/output files
+pyright_output.txt
+pyright_utils_full.txt
+temp_*.txt
+temp_*.md
+utils_errors.txt

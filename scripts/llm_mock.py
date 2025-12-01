@@ -3,7 +3,7 @@ import json
 import logging
 import sys  # 新增导入
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from typing import Any, Dict
 
 import requests
@@ -70,7 +70,7 @@ ENABLED_MODELS = {
 }
 
 # API 配置
-API_URL = ""  # 将在 main 函数中根据参数设置
+api_url = ""  # 将在 main 函数中根据参数设置
 DEFAULT_MAIN_SERVER_PORT = 2048
 # 请替换为你的 API 密钥（请勿公开分享）
 API_KEY = "123456"
@@ -125,7 +125,9 @@ def tags_endpoint():
             {
                 "name": model_name,
                 "model": model_name,
-                "modified_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+                "modified_at": datetime.now(timezone.utc).strftime(
+                    "%Y-%m-%dT%H:%M:%S.%fZ"
+                ),
                 "size": size,
                 "digest": str(uuid.uuid4()),
                 "details": {
@@ -150,7 +152,7 @@ def generate_ollama_mock_response(prompt: str, model: str) -> Dict[str, Any]:
 
     return {
         "model": model,
-        "created_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "message": {"role": "assistant", "content": response_content},
         "done": True,
         "total_duration": 123456789,
@@ -174,7 +176,7 @@ def convert_api_to_ollama_response(
 
         return {
             "model": model,
-            "created_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "message": {"role": "assistant", "content": content},
             "done": True,
             "total_duration": total_duration,
@@ -255,9 +257,9 @@ def ollama_chat_endpoint():
         }
 
         try:
-            logger.info(f"转发请求到API: {API_URL}")
+            logger.info(f"转发请求到API: {api_url}")
             response = requests.post(
-                API_URL, json=api_request, headers=headers, timeout=300000
+                api_url, json=api_request, headers=headers, timeout=300000
             )
             response.raise_for_status()
             api_response = response.json()
@@ -309,9 +311,9 @@ def api_chat_endpoint():
         }
 
         try:
-            logger.info(f"转发请求到API: {API_URL}")
+            logger.info(f"转发请求到API: {api_url}")
             response = requests.post(
-                API_URL, json=data, headers=headers, timeout=300000
+                api_url, json=data, headers=headers, timeout=300000
             )
             response.raise_for_status()
             api_response = response.json()
@@ -329,7 +331,7 @@ def api_chat_endpoint():
 
 def main():
     """启动模拟服务器"""
-    global API_URL  # 声明我们要修改全局变量
+    global api_url  # 声明我们要修改全局变量
 
     parser = argparse.ArgumentParser(description="LLM Mock Service for AI Studio Proxy")
     parser.add_argument(
@@ -340,9 +342,9 @@ def main():
     )
     args = parser.parse_args()
 
-    API_URL = f"http://localhost:{args.main_server_port}/v1/chat/completions"
+    api_url = f"http://localhost:{args.main_server_port}/v1/chat/completions"
 
-    logger.info(f"模拟 Ollama 和 API 代理服务器将转发请求到: {API_URL}")
+    logger.info(f"模拟 Ollama 和 API 代理服务器将转发请求到: {api_url}")
     logger.info("正在启动模拟 Ollama 和 API 代理服务器，地址: http://localhost:11434")
     app.run(host="0.0.0.0", port=11434, debug=False)
 

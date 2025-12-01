@@ -1,12 +1,20 @@
 import asyncio
 from asyncio import Event, Task
 from logging import Logger
-from typing import Any, Callable, Coroutine, Tuple
+from typing import Any, Callable, Coroutine, Dict, Protocol, Tuple
 
 from fastapi import HTTPException, Request
 
 from logging_utils import set_request_id
 from models import ClientDisconnectedError
+
+
+class SupportsReceive(Protocol):
+    """Protocol for request objects that support _receive method."""
+
+    def _receive(self) -> Coroutine[Any, Any, Dict[str, Any]]:
+        """Internal method to receive messages from ASGI."""
+        ...
 
 
 async def check_client_connection(req_id: str, http_request: Request) -> bool:
@@ -18,9 +26,12 @@ async def check_client_connection(req_id: str, http_request: Request) -> bool:
         if hasattr(http_request, "_receive"):
             try:
                 # Use a very short timeout to check for disconnect message
-                # Cast to Coroutine to satisfy mypy, as _receive is awaitable
-                receive_coro: Coroutine[Any, Any, Any] = http_request._receive()  # type: ignore
-                receive_task: Task[Any] = asyncio.create_task(receive_coro)
+                # _receive is a private Starlette/FastAPI method that returns a coroutine
+                receive_obj = http_request  # type: ignore[misc]
+                receive_coro: Coroutine[Any, Any, Dict[str, Any]] = (
+                    receive_obj._receive()
+                )  # type: ignore[misc]
+                receive_task: Task[Dict[str, Any]] = asyncio.create_task(receive_coro)
                 done, pending = await asyncio.wait([receive_task], timeout=0.01)
 
                 if done:
@@ -34,6 +45,8 @@ async def check_client_connection(req_id: str, http_request: Request) -> bool:
                         await receive_task
                     except asyncio.CancelledError:
                         pass
+            except asyncio.CancelledError:
+                raise
             except Exception:
                 # If checking fails, assume disconnected to be safe, or log and continue?
                 # Usually if _receive fails it might mean connection issues.
@@ -44,6 +57,8 @@ async def check_client_connection(req_id: str, http_request: Request) -> bool:
             return False
 
         return True
+    except asyncio.CancelledError:
+        raise
     except Exception:
         return False
 

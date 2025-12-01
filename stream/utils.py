@@ -1,7 +1,6 @@
 import logging
-from urllib.parse import urlparse
-
 from typing import Optional, Tuple
+from urllib.parse import urlparse
 
 from logging_utils.setup import ColoredFormatter
 

@@ -100,6 +100,7 @@ def test_console_handler_error(mock_page, mock_server_module):
     error_msg.text = "Critical error"
     error_msg.location = {"url": "test.js", "lineNumber": 1}
 
+    assert console_handler is not None
     console_handler(error_msg)
 
     assert len(mock_server_module.console_logs) == 1
@@ -116,6 +117,7 @@ def test_request_handler_xhr(mock_page, mock_server_module, mock_request):
             request_handler = call_args[0][1]
             break
 
+    assert request_handler is not None
     request_handler(mock_request)
 
     assert len(mock_server_module.network_log["requests"]) == 1
@@ -140,6 +142,7 @@ def test_request_handler_image_filtered(mock_page, mock_server_module):
     image_req.method = "GET"
     image_req.resource_type = "image"
 
+    assert request_handler is not None
     request_handler(image_req)
 
     assert len(mock_server_module.network_log["requests"]) == 0
@@ -160,6 +163,7 @@ def test_request_handler_css_filtered(mock_page, mock_server_module):
     css_req.method = "GET"
     css_req.resource_type = "stylesheet"
 
+    assert request_handler is not None
     request_handler(css_req)
 
     assert len(mock_server_module.network_log["requests"]) == 0
@@ -175,6 +179,7 @@ def test_response_handler_success(mock_page, mock_server_module, mock_response):
             response_handler = call_args[0][1]
             break
 
+    assert response_handler is not None
     response_handler(mock_response)
 
     assert len(mock_server_module.network_log["responses"]) == 1
@@ -199,6 +204,7 @@ def test_response_handler_error_status(mock_page, mock_server_module):
     error_resp.status = 404
     error_resp.status_text = "Not Found"
 
+    assert response_handler is not None
     response_handler(error_resp)
 
     assert len(mock_server_module.network_log["responses"]) == 1
@@ -219,6 +225,7 @@ def test_console_handler_exception_caught(mock_page, mock_server_module):
     # Use PropertyMock to raise exception when .text is accessed as property
     type(bad_msg).text = PropertyMock(side_effect=RuntimeError("Extraction failed"))
 
+    assert console_handler is not None
     with patch("browser_utils.initialization.debug.logger") as mock_logger:
         # Should not raise
         console_handler(bad_msg)
@@ -240,6 +247,7 @@ def test_request_handler_exception_caught(mock_page, mock_server_module):
     bad_req = Mock()
     bad_req.url = Mock(side_effect=RuntimeError("URL access failed"))
 
+    assert request_handler is not None
     with patch("browser_utils.initialization.debug.logger") as mock_logger:
         request_handler(bad_req)
         assert mock_logger.error.called

@@ -216,3 +216,181 @@ async def test_interactive_auth_save_manual_no(mock_context, mock_loop):
         await auth._interactive_auth_save(mock_context, "normal", mock_loop)
 
         mock_save_manual.assert_not_called()
+
+
+# ==================== Additional Tests for Coverage Improvement ====================
+
+
+@pytest.mark.asyncio
+async def test_interactive_auth_save_auto_save_debug_mode(mock_context, mock_loop):
+    """Test AUTO_SAVE_AUTH + debug mode auto-saves (lines 65-66)."""
+    with (
+        patch("browser_utils.initialization.auth.AUTO_CONFIRM_LOGIN", False),
+        patch("browser_utils.initialization.auth.AUTO_SAVE_AUTH", True),
+        patch(
+            "browser_utils.initialization.auth._handle_auth_file_save"
+        ) as mock_save_manual,
+        patch("browser_utils.initialization.auth.print"),
+        patch("browser_utils.initialization.auth.logger"),
+    ):
+        await auth._interactive_auth_save(mock_context, "debug", mock_loop)
+
+        # Should auto-select 'y' and call manual save
+        mock_save_manual.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_interactive_auth_save_input_timeout(mock_context, mock_loop):
+    """Test input timeout defaults to 'n' (lines 75-80)."""
+    # Simulate timeout when waiting for user input
+    future = asyncio.Future()
+    future.set_exception(asyncio.TimeoutError())
+    mock_loop.run_in_executor.return_value = future
+
+    with (
+        patch("browser_utils.initialization.auth.AUTO_CONFIRM_LOGIN", False),
+        patch("browser_utils.initialization.auth.AUTO_SAVE_AUTH", False),
+        patch(
+            "browser_utils.initialization.auth._handle_auth_file_save"
+        ) as mock_save_manual,
+        patch("browser_utils.initialization.auth.print"),
+        patch("browser_utils.initialization.auth.logger"),
+    ):
+        await auth._interactive_auth_save(mock_context, "normal", mock_loop)
+
+        # Should default to 'n' and not save
+        mock_save_manual.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_handle_auth_file_save_filename_timeout(
+    mock_context, mock_loop, tmp_path
+):
+    """Test filename input timeout uses default filename (lines 106-111)."""
+    # Simulate timeout when waiting for filename input
+    future = asyncio.Future()
+    future.set_exception(asyncio.TimeoutError())
+    mock_loop.run_in_executor.return_value = future
+
+    with (
+        patch("browser_utils.initialization.auth.SAVED_AUTH_DIR", str(tmp_path)),
+        patch("browser_utils.initialization.auth.print"),
+        patch("browser_utils.initialization.auth.logger"),
+    ):
+        await auth._handle_auth_file_save(mock_context, mock_loop)
+
+        # Should use default filename
+        mock_context.storage_state.assert_called_once()
+        kwargs = mock_context.storage_state.call_args[1]
+        assert "auth_state_" in kwargs["path"]
+
+
+@pytest.mark.asyncio
+async def test_handle_auth_file_save_storage_exception(
+    mock_context, mock_loop, tmp_path
+):
+    """Test exception handling in manual save (lines 131-133)."""
+    # Simulate successful filename input
+    future = asyncio.Future()
+    future.set_result("test_auth")
+    mock_loop.run_in_executor.return_value = future
+
+    # Make storage_state raise an exception
+    mock_context.storage_state.side_effect = Exception("Storage failed")
+
+    with (
+        patch("browser_utils.initialization.auth.SAVED_AUTH_DIR", str(tmp_path)),
+        patch("browser_utils.initialization.auth.print"),
+        patch("browser_utils.initialization.auth.logger") as mock_logger,
+    ):
+        # Should not raise, just log error
+        await auth._handle_auth_file_save(mock_context, mock_loop)
+
+        # Verify error was logged
+        mock_logger.error.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_handle_auth_file_save_cancelled_error(mock_context, mock_loop, tmp_path):
+    """Test CancelledError is re-raised in manual save (lines 129-130)."""
+    # Simulate successful filename input
+    future = asyncio.Future()
+    future.set_result("test_auth")
+    mock_loop.run_in_executor.return_value = future
+
+    # Make storage_state raise CancelledError
+    mock_context.storage_state.side_effect = asyncio.CancelledError()
+
+    with (
+        patch("browser_utils.initialization.auth.SAVED_AUTH_DIR", str(tmp_path)),
+        patch("browser_utils.initialization.auth.print"),
+    ):
+        # Should re-raise CancelledError
+        with pytest.raises(asyncio.CancelledError):
+            await auth._handle_auth_file_save(mock_context, mock_loop)
+
+
+@pytest.mark.asyncio
+async def test_handle_auth_file_save_with_filename_exception(mock_context, tmp_path):
+    """Test exception handling in save_with_filename (lines 153-155)."""
+    # Make storage_state raise an exception
+    mock_context.storage_state.side_effect = Exception("Save failed")
+
+    with (
+        patch("browser_utils.initialization.auth.SAVED_AUTH_DIR", str(tmp_path)),
+        patch("browser_utils.initialization.auth.print"),
+        patch("browser_utils.initialization.auth.logger") as mock_logger,
+    ):
+        # Should not raise, just log error
+        await auth._handle_auth_file_save_with_filename(mock_context, "test_file")
+
+        # Verify error was logged
+        mock_logger.error.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_handle_auth_file_save_with_filename_cancelled(mock_context, tmp_path):
+    """Test CancelledError is re-raised in save_with_filename (lines 151-152)."""
+    # Make storage_state raise CancelledError
+    mock_context.storage_state.side_effect = asyncio.CancelledError()
+
+    with (
+        patch("browser_utils.initialization.auth.SAVED_AUTH_DIR", str(tmp_path)),
+        patch("browser_utils.initialization.auth.print"),
+    ):
+        # Should re-raise CancelledError
+        with pytest.raises(asyncio.CancelledError):
+            await auth._handle_auth_file_save_with_filename(mock_context, "test_file")
+
+
+@pytest.mark.asyncio
+async def test_handle_auth_file_save_auto_exception(mock_context, tmp_path):
+    """Test exception handling in auto save (lines 173-175)."""
+    # Make storage_state raise an exception
+    mock_context.storage_state.side_effect = Exception("Auto save failed")
+
+    with (
+        patch("browser_utils.initialization.auth.SAVED_AUTH_DIR", str(tmp_path)),
+        patch("browser_utils.initialization.auth.print"),
+        patch("browser_utils.initialization.auth.logger") as mock_logger,
+    ):
+        # Should not raise, just log error
+        await auth._handle_auth_file_save_auto(mock_context)
+
+        # Verify error was logged
+        mock_logger.error.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_handle_auth_file_save_auto_cancelled(mock_context, tmp_path):
+    """Test CancelledError is re-raised in auto save (lines 171-172)."""
+    # Make storage_state raise CancelledError
+    mock_context.storage_state.side_effect = asyncio.CancelledError()
+
+    with (
+        patch("browser_utils.initialization.auth.SAVED_AUTH_DIR", str(tmp_path)),
+        patch("browser_utils.initialization.auth.print"),
+    ):
+        # Should re-raise CancelledError
+        with pytest.raises(asyncio.CancelledError):
+            await auth._handle_auth_file_save_auto(mock_context)

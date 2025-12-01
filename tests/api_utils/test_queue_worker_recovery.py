@@ -29,8 +29,7 @@ async def test_switch_auth_profile_missing_ws_endpoint():
     mock_browser.is_connected.return_value = True
 
     with (
-        patch("server.browser_instance", mock_browser),
-        patch("server.playwright_manager", MagicMock()),
+        patch("api_utils.server_state.state") as mock_state,
         patch("api_utils.auth_manager.auth_manager") as mock_auth_mgr,
         patch(
             "browser_utils.initialization.core.close_page_logic", new_callable=AsyncMock
@@ -40,6 +39,8 @@ async def test_switch_auth_profile_missing_ws_endpoint():
             return_value=None,  # WS_ENDPOINT 缺失
         ),
     ):
+        mock_state.browser_instance = mock_browser
+        mock_state.playwright_manager = MagicMock()
         mock_auth_mgr.get_next_profile = AsyncMock(return_value="profile2.json")
 
         with pytest.raises(
@@ -65,8 +66,7 @@ async def test_switch_auth_profile_missing_playwright_manager():
     mock_browser.is_connected.return_value = True
 
     with (
-        patch("server.browser_instance", mock_browser),
-        patch("server.playwright_manager", None),  # playwright_manager 缺失
+        patch("api_utils.server_state.state") as mock_state,
         patch("api_utils.auth_manager.auth_manager") as mock_auth_mgr,
         patch(
             "browser_utils.initialization.core.close_page_logic", new_callable=AsyncMock
@@ -76,6 +76,8 @@ async def test_switch_auth_profile_missing_playwright_manager():
             return_value="ws://127.0.0.1:9222/devtools/browser/test",
         ),
     ):
+        mock_state.browser_instance = mock_browser
+        mock_state.playwright_manager = None  # playwright_manager 缺失
         mock_auth_mgr.get_next_profile = AsyncMock(return_value="profile2.json")
 
         with pytest.raises(RuntimeError, match="Playwright manager not available"):
@@ -102,10 +104,7 @@ async def test_switch_auth_profile_page_init_failure():
     mock_playwright_mgr.firefox.connect = AsyncMock(return_value=mock_browser)
 
     with (
-        patch("server.browser_instance", mock_browser),
-        patch("server.playwright_manager", mock_playwright_mgr),
-        patch("server.page_instance", None),
-        patch("server.is_page_ready", False),
+        patch("api_utils.server_state.state") as mock_state,
         patch("api_utils.auth_manager.auth_manager") as mock_auth_mgr,
         patch(
             "browser_utils.initialization.core.close_page_logic", new_callable=AsyncMock
@@ -119,6 +118,10 @@ async def test_switch_auth_profile_page_init_failure():
             return_value="ws://127.0.0.1:9222/devtools/browser/test",
         ),
     ):
+        mock_state.browser_instance = mock_browser
+        mock_state.playwright_manager = mock_playwright_mgr
+        mock_state.page_instance = None
+        mock_state.is_page_ready = False
         mock_auth_mgr.get_next_profile = AsyncMock(return_value="profile2.json")
         # 模拟页面初始化失败
         mock_init.return_value = (None, False)
@@ -148,10 +151,7 @@ async def test_switch_auth_profile_browser_not_connected():
     mock_playwright_mgr.firefox.connect = AsyncMock(return_value=mock_browser)
 
     with (
-        patch("server.browser_instance", mock_browser),
-        patch("server.playwright_manager", mock_playwright_mgr),
-        patch("server.page_instance", None),
-        patch("server.is_page_ready", False),
+        patch("api_utils.server_state.state") as mock_state,
         patch("api_utils.auth_manager.auth_manager") as mock_auth_mgr,
         patch(
             "browser_utils.initialization.core.close_page_logic", new_callable=AsyncMock
@@ -173,6 +173,10 @@ async def test_switch_auth_profile_browser_not_connected():
             return_value="ws://127.0.0.1:9222/devtools/browser/test",
         ),
     ):
+        mock_state.browser_instance = mock_browser
+        mock_state.playwright_manager = mock_playwright_mgr
+        mock_state.page_instance = None
+        mock_state.is_page_ready = False
         mock_auth_mgr.get_next_profile = AsyncMock(return_value="profile2.json")
         mock_init.return_value = (mock_page, True)
 
@@ -198,10 +202,10 @@ async def test_refresh_page_cancelled_error():
     # 模拟 reload 被取消
     mock_page.reload.side_effect = asyncio.CancelledError()
 
-    with (
-        patch("server.page_instance", mock_page),
-        patch("server.is_page_ready", True),
-    ):
+    with patch("api_utils.server_state.state") as mock_state:
+        mock_state.page_instance = mock_page
+        mock_state.is_page_ready = True
+
         with pytest.raises(asyncio.CancelledError):
             await queue_manager._refresh_page("req123")
 
@@ -221,10 +225,10 @@ async def test_refresh_page_generic_error():
     mock_page = AsyncMock()
     mock_page.reload.side_effect = Exception("Navigation timeout")
 
-    with (
-        patch("server.page_instance", mock_page),
-        patch("server.is_page_ready", True),
-    ):
+    with patch("api_utils.server_state.state") as mock_state:
+        mock_state.page_instance = mock_page
+        mock_state.is_page_ready = True
+
         with pytest.raises(Exception, match="Navigation timeout"):
             await queue_manager._refresh_page("req123")
 
@@ -330,8 +334,7 @@ async def test_switch_auth_profile_browser_reconnect_error():
     )
 
     with (
-        patch("server.browser_instance", mock_browser),
-        patch("server.playwright_manager", mock_playwright_mgr),
+        patch("api_utils.server_state.state") as mock_state,
         patch("api_utils.auth_manager.auth_manager") as mock_auth_mgr,
         patch(
             "browser_utils.initialization.core.close_page_logic", new_callable=AsyncMock
@@ -341,6 +344,8 @@ async def test_switch_auth_profile_browser_reconnect_error():
             return_value="ws://127.0.0.1:9222/devtools/browser/test",
         ),
     ):
+        mock_state.browser_instance = mock_browser
+        mock_state.playwright_manager = mock_playwright_mgr
         mock_auth_mgr.get_next_profile = AsyncMock(return_value="profile2.json")
 
         with pytest.raises(Exception, match="Connection refused"):

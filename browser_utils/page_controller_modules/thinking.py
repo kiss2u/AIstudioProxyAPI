@@ -187,8 +187,12 @@ class ThinkingController(BaseController):
             try:
                 await expect_async(locator.first).to_be_visible(timeout=2000)
                 return True
+            except asyncio.CancelledError:
+                raise
             except Exception:
                 return True
+        except asyncio.CancelledError:
+            raise
         except Exception:
             return False
 
@@ -236,6 +240,8 @@ class ThinkingController(BaseController):
                         '[role="listbox"][aria-label="Thinking Level"], [role="listbox"][aria-label="Thinking level"]'
                     ).first
                 ).to_be_hidden(timeout=2000)
+            except asyncio.CancelledError:
+                raise
             except Exception:
                 try:
                     await self.page.keyboard.press("Escape")
@@ -327,6 +333,8 @@ class ThinkingController(BaseController):
                     "}",
                     [THINKING_BUDGET_INPUT_SELECTOR, adjusted_budget],
                 )
+            except asyncio.CancelledError:
+                raise
             except Exception:
                 pass
 
@@ -378,6 +386,8 @@ class ThinkingController(BaseController):
                                 "}",
                                 [THINKING_BUDGET_INPUT_SELECTOR, page_max_val],
                             )
+                        except asyncio.CancelledError:
+                            raise
                         except Exception:
                             pass
                         await budget_input_locator.fill(str(page_max_val), timeout=5000)
@@ -385,6 +395,8 @@ class ThinkingController(BaseController):
                             await expect_async(budget_input_locator).to_have_value(
                                 str(page_max_val), timeout=2000
                             )
+                        except asyncio.CancelledError:
+                            raise
                         except Exception:
                             pass
                     else:
@@ -422,6 +434,8 @@ class ThinkingController(BaseController):
             await expect_async(toggle_locator).to_be_visible(timeout=5000)
             try:
                 await toggle_locator.scroll_into_view_if_needed()
+            except asyncio.CancelledError:
+                raise
             except Exception:
                 pass
             await self._check_disconnect(
@@ -440,6 +454,8 @@ class ThinkingController(BaseController):
 
                 try:
                     await toggle_locator.click(timeout=CLICK_TIMEOUT_MS)
+                except asyncio.CancelledError:
+                    raise
                 except Exception:
                     try:
                         root = self.page.locator(
@@ -503,6 +519,8 @@ class ThinkingController(BaseController):
             await expect_async(toggle_locator).to_be_visible(timeout=5000)
             try:
                 await toggle_locator.scroll_into_view_if_needed()
+            except asyncio.CancelledError:
+                raise
             except Exception:
                 pass
             await self._check_disconnect(
@@ -522,6 +540,8 @@ class ThinkingController(BaseController):
                 )
                 try:
                     await toggle_locator.click(timeout=CLICK_TIMEOUT_MS)
+                except asyncio.CancelledError:
+                    raise
                 except Exception:
                     try:
                         root = self.page.locator(

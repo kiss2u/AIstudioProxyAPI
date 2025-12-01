@@ -1,3 +1,5 @@
+import logging
+
 from playwright.async_api import Page as AsyncPage
 
 from api_utils.server_state import state
@@ -19,7 +21,9 @@ async def analyze_model_requirements(
         logger.info(f"请求使用模型: {requested_model_id}")
 
         if parsed_model_list:
-            valid_model_ids = [m.get("id") for m in parsed_model_list]
+            valid_model_ids = [
+                str(m.get("id")) for m in parsed_model_list if m.get("id")
+            ]
             if requested_model_id not in valid_model_ids:
                 from .error_utils import bad_request
 
@@ -50,6 +54,10 @@ async def handle_model_switching(
     model_switching_lock = context["model_switching_lock"]
     model_id_to_use = context["model_id_to_use"]
 
+    # Assert non-None values required for model switching
+    assert page is not None, "Page must be ready for model switching"
+    assert model_id_to_use is not None, "Target model ID must be set"
+
     async with model_switching_lock:
         if state.current_ai_studio_model_id != model_id_to_use:
             logger.info(
@@ -64,11 +72,13 @@ async def handle_model_switching(
                 context["current_ai_studio_model_id"] = model_id_to_use
                 logger.info(f"模型切换成功: {state.current_ai_studio_model_id}")
             else:
+                # Current model ID should exist when switching fails
+                current_model = state.current_ai_studio_model_id or "unknown"
                 await _handle_model_switch_failure(
                     req_id,
                     page,
                     model_id_to_use,
-                    state.current_ai_studio_model_id,
+                    current_model,
                     logger,
                 )
 
@@ -76,7 +86,11 @@ async def handle_model_switching(
 
 
 async def _handle_model_switch_failure(
-    req_id: str, page: AsyncPage, model_id_to_use: str, model_before_switch: str, logger
+    req_id: str,
+    page: AsyncPage,
+    model_id_to_use: str,
+    model_before_switch: str,
+    logger: logging.Logger,
 ) -> None:
     set_request_id(req_id)
     logger.warning(f"模型切换至 {model_id_to_use} 失败。")

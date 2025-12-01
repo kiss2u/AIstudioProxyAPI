@@ -419,7 +419,7 @@ class TestCapturePlaywrightState:
         mock_locator.input_value.side_effect = PlaywrightError("Not an input")
 
         locators = {"submit_button": mock_locator}
-        state = await capture_playwright_state(real_mock_page, locators)
+        state = await capture_playwright_state(real_mock_page, locators)  # type: ignore[arg-type]
 
         assert state["locators"]["submit_button"]["exists"] is True
         assert state["locators"]["submit_button"]["count"] == 1
@@ -433,7 +433,7 @@ class TestCapturePlaywrightState:
         mock_locator.count.return_value = 0
 
         locators = {"missing_element": mock_locator}
-        state = await capture_playwright_state(real_mock_page, locators)
+        state = await capture_playwright_state(real_mock_page, locators)  # type: ignore[arg-type]
 
         assert state["locators"]["missing_element"]["exists"] is False
         assert state["locators"]["missing_element"]["count"] == 0
@@ -448,7 +448,7 @@ class TestCapturePlaywrightState:
         mock_locator.input_value.return_value = "test input value"
 
         locators = {"input_field": mock_locator}
-        state = await capture_playwright_state(real_mock_page, locators)
+        state = await capture_playwright_state(real_mock_page, locators)  # type: ignore[arg-type]
 
         assert state["locators"]["input_field"]["value"] == "test input value"
 
@@ -465,7 +465,7 @@ class TestCapturePlaywrightState:
         mock_locator.input_value.return_value = long_value
 
         locators = {"text_area": mock_locator}
-        state = await capture_playwright_state(real_mock_page, locators)
+        state = await capture_playwright_state(real_mock_page, locators)  # type: ignore[arg-type]
 
         assert "..." in state["locators"]["text_area"]["value"]
         assert len(state["locators"]["text_area"]["value"]) == 103  # 100 + "..."
@@ -477,7 +477,7 @@ class TestCapturePlaywrightState:
         mock_locator.count.side_effect = PlaywrightError("Locator failed")
 
         locators = {"broken_locator": mock_locator}
-        state = await capture_playwright_state(real_mock_page, locators)
+        state = await capture_playwright_state(real_mock_page, locators)  # type: ignore[arg-type]
 
         assert "error" in state["locators"]["broken_locator"]
 
@@ -536,7 +536,9 @@ class TestSaveComprehensiveSnapshot:
     async def test_snapshot_page_none(self):
         """测试页面为 None 时不保存快照"""
         result = await save_comprehensive_snapshot(
-            page=None, error_name="test_error", req_id="req123"
+            page=None,  # type: ignore[arg-type]
+            error_name="test_error",
+            req_id="req123",
         )
 
         assert result == ""

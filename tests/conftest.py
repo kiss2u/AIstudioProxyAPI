@@ -5,12 +5,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-# @pytest.fixture(scope="session")
-# def event_loop():
-#     """Create an instance of the default event loop for each test case."""
-#     loop = asyncio.get_event_loop_policy().new_event_loop()
-#     yield loop
-#     loop.close()
+# Note: Session-level cleanup hooks removed as they cause recursion issues on Windows
+# Rely on pytest-asyncio's natural cleanup and explicit fixture teardown instead
 
 
 @pytest.fixture(autouse=True)
@@ -21,32 +17,40 @@ def mock_server_module():
     # Create a mock module
     mock_module = types.ModuleType(module_name)
 
-    # Set up required attributes
-    mock_module.logger = MagicMock()
-    mock_module.request_queue = asyncio.Queue()
-    mock_module.processing_lock = asyncio.Lock()
-    mock_module.model_switching_lock = asyncio.Lock()
-    mock_module.params_cache_lock = asyncio.Lock()
-    mock_module.page_instance = AsyncMock()
-    mock_module.browser_instance = AsyncMock()
-    mock_module.parsed_model_list = []
-    mock_module.log_ws_manager = MagicMock()
-    mock_module.STREAM_QUEUE = MagicMock()
-    mock_module.STREAM_PROCESS = AsyncMock()
-    mock_module.PLAYWRIGHT_PROXY_SETTINGS = {}
-    mock_module.is_initializing = False
-    mock_module.is_page_ready = True
-    mock_module.is_browser_connected = True
-    mock_module.model_list_fetch_event = asyncio.Event()
-    mock_module.worker_task = MagicMock()
-    mock_module.queue_worker = AsyncMock()
-    mock_module.playwright_manager = AsyncMock()
-    mock_module.global_model_list_raw_json = None
-    mock_module.current_ai_studio_model_id = None
-    mock_module.is_playwright_ready = True
-    mock_module.excluded_model_ids = []
-    mock_module.console_logs = []
-    mock_module.network_log = {"requests": [], "responses": []}
+    # Set up required attributes (using setattr for dynamic module attributes)
+    setattr(mock_module, "logger", MagicMock())
+    setattr(mock_module, "request_queue", asyncio.Queue())
+    setattr(mock_module, "processing_lock", asyncio.Lock())
+    setattr(mock_module, "model_switching_lock", asyncio.Lock())
+    setattr(mock_module, "params_cache_lock", asyncio.Lock())
+
+    # page_instance needs is_closed() as sync method
+    page_mock = AsyncMock()
+    page_mock.is_closed = MagicMock(return_value=False)
+    setattr(mock_module, "page_instance", page_mock)
+
+    # browser_instance needs is_connected() as sync method
+    browser_mock = AsyncMock()
+    browser_mock.is_connected = MagicMock(return_value=True)
+    setattr(mock_module, "browser_instance", browser_mock)
+    setattr(mock_module, "parsed_model_list", [])
+    setattr(mock_module, "log_ws_manager", MagicMock())
+    setattr(mock_module, "STREAM_QUEUE", MagicMock())
+    setattr(mock_module, "STREAM_PROCESS", AsyncMock())
+    setattr(mock_module, "PLAYWRIGHT_PROXY_SETTINGS", {})
+    setattr(mock_module, "is_initializing", False)
+    setattr(mock_module, "is_page_ready", True)
+    setattr(mock_module, "is_browser_connected", True)
+    setattr(mock_module, "model_list_fetch_event", asyncio.Event())
+    setattr(mock_module, "worker_task", MagicMock())
+    setattr(mock_module, "queue_worker", AsyncMock())
+    setattr(mock_module, "playwright_manager", AsyncMock())
+    setattr(mock_module, "global_model_list_raw_json", None)
+    setattr(mock_module, "current_ai_studio_model_id", None)
+    setattr(mock_module, "is_playwright_ready", True)
+    setattr(mock_module, "excluded_model_ids", [])
+    setattr(mock_module, "console_logs", [])
+    setattr(mock_module, "network_log", {"requests": [], "responses": []})
 
     # Save original if it exists
     original_module = sys.modules.get(module_name)
@@ -73,14 +77,46 @@ def mock_env(monkeypatch):
 
 @pytest.fixture
 def mock_page():
-    """Mock Playwright Page object."""
+    """Mock Playwright Page object with proper locator setup.
+
+    NOTE: page.locator() is SYNC and returns a Locator object.
+    Locator methods like .click(), .hover(), .wait_for() are ASYNC.
+    Locator chaining methods like .get_by_label(), .get_by_role() are SYNC.
+    """
     page = AsyncMock()
     page.goto = AsyncMock()
     page.wait_for_selector = AsyncMock()
     page.click = AsyncMock()
     page.fill = AsyncMock()
     page.evaluate = AsyncMock()
-    page.locator = MagicMock()
+
+    # Create a default locator with proper async/sync method setup
+    default_locator = MagicMock()
+    # Async action methods
+    default_locator.hover = AsyncMock()
+    default_locator.click = AsyncMock()
+    default_locator.fill = AsyncMock()
+    default_locator.wait_for = AsyncMock()
+    default_locator.inner_text = AsyncMock()
+    default_locator.text_content = AsyncMock()
+    default_locator.get_attribute = AsyncMock()
+    default_locator.input_value = AsyncMock()
+    default_locator.is_visible = AsyncMock()
+    default_locator.is_disabled = AsyncMock()
+    default_locator.count = AsyncMock(return_value=1)  # Default to element exists
+    # Sync chaining methods (these should return new locators but we'll keep it simple)
+    default_locator.get_by_label = MagicMock(return_value=default_locator)
+    default_locator.get_by_role = MagicMock(return_value=default_locator)
+    default_locator.locator = MagicMock(return_value=default_locator)
+    # .first and .last properties return the same locator
+    default_locator.first = default_locator
+    default_locator.last = default_locator
+
+    # page.locator() is SYNC (returns Locator immediately) - use return_value so tests can override
+    page.locator = MagicMock(return_value=default_locator)
+    # page.get_by_role() is also SYNC
+    page.get_by_role = MagicMock(return_value=default_locator)
+
     return page
 
 

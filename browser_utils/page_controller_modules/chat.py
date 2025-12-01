@@ -46,6 +46,8 @@ class ChatController(BaseController):
                 except Exception:
                     pass
                 self.logger.info(" 发送按钮点击完成。")
+            except asyncio.CancelledError:
+                raise
             except Exception:
                 # 如果发送按钮不可用、超时或发生Playwright相关错误，记录日志并继续
                 self.logger.info(
@@ -95,9 +97,10 @@ class ChatController(BaseController):
             if isinstance(e_clear, asyncio.CancelledError):
                 raise
             self.logger.error(f" 清空聊天过程中发生错误: {e_clear}")
+            error_name = getattr(e_clear, "name", "")
             if not (
                 isinstance(e_clear, ClientDisconnectedError)
-                or (hasattr(e_clear, "name") and "Disconnect" in e_clear.name)
+                or (error_name and "Disconnect" in error_name)
             ):
                 # Capture locator states for debugging
                 clear_btn_loc = self.page.locator(CLEAR_CHAT_BUTTON_SELECTOR)
@@ -158,26 +161,36 @@ class ChatController(BaseController):
             # 若存在透明遮罩层拦截指针事件，先尝试清理
             try:
                 await self._dismiss_backdrops()
+            except asyncio.CancelledError:
+                raise
             except Exception:
                 pass
             try:
                 try:
                     await clear_chat_button_locator.scroll_into_view_if_needed()
+                except asyncio.CancelledError:
+                    raise
                 except Exception:
                     pass
                 await clear_chat_button_locator.click(timeout=CLICK_TIMEOUT_MS)
+            except asyncio.CancelledError:
+                raise
             except Exception as first_click_err:
                 self.logger.warning(
                     f" 清空按钮第一次点击失败，尝试清理遮罩并强制点击: {first_click_err}"
                 )
                 try:
                     await self._dismiss_backdrops()
+                except asyncio.CancelledError:
+                    raise
                 except Exception:
                     pass
                 try:
                     await clear_chat_button_locator.click(
                         timeout=CLICK_TIMEOUT_MS, force=True
                     )
+                except asyncio.CancelledError:
+                    raise
                 except Exception as force_click_err:
                     self.logger.error(f" 清空按钮强制点击仍失败: {force_click_err}")
                     raise
@@ -205,10 +218,14 @@ class ChatController(BaseController):
             )
             try:
                 await confirm_button_locator.scroll_into_view_if_needed()
+            except asyncio.CancelledError:
+                raise
             except Exception:
                 pass
             try:
                 await confirm_button_locator.click(timeout=CLICK_TIMEOUT_MS)
+            except asyncio.CancelledError:
+                raise
             except Exception as confirm_err:
                 self.logger.warning(
                     f' 首次点击"继续"失败，尝试 force 点击: {confirm_err}'
@@ -217,6 +234,8 @@ class ChatController(BaseController):
                     await confirm_button_locator.click(
                         timeout=CLICK_TIMEOUT_MS, force=True
                     )
+                except asyncio.CancelledError:
+                    raise
                 except Exception as confirm_force_err:
                     self.logger.error(
                         f' "继续"按钮 force 点击仍失败: {confirm_force_err}'
@@ -286,6 +305,8 @@ class ChatController(BaseController):
                 cnt = 0
                 try:
                     cnt = await backdrop.count()
+                except asyncio.CancelledError:
+                    raise
                 except Exception:
                     cnt = 0
                 if cnt and cnt > 0:
@@ -296,12 +317,18 @@ class ChatController(BaseController):
                         await self.page.keyboard.press("Escape")
                         try:
                             await expect_async(backdrop).to_be_hidden(timeout=500)
+                        except asyncio.CancelledError:
+                            raise
                         except Exception:
                             pass
+                    except asyncio.CancelledError:
+                        raise
                     except Exception:
                         pass
                 else:
                     break
+        except asyncio.CancelledError:
+            raise
         except Exception:
             pass
 
@@ -316,6 +343,8 @@ class ChatController(BaseController):
                 timeout=CLEAR_CHAT_VERIFY_TIMEOUT_MS - 500
             )
             self.logger.info(" 聊天已成功清空 (验证通过 - 最后响应容器隐藏)。")
+        except asyncio.CancelledError:
+            raise
         except Exception as verify_err:
             self.logger.warning(
                 f" 警告: 清空聊天验证失败 (最后响应容器未隐藏): {verify_err}"

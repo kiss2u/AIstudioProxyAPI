@@ -1,6 +1,7 @@
 # --- browser_utils/script_manager.py ---
 # 油猴脚本管理模块 - 动态挂载和注入脚本功能
 
+import asyncio
 import json
 import logging
 import os
@@ -140,6 +141,8 @@ class ScriptManager:
             logger.info(f"成功注入脚本到页面: {script_name}")
             return True
 
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             logger.error(f"注入脚本到页面失败 {script_name}: {e}")
             return False

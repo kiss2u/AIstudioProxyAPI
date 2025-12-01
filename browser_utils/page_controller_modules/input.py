@@ -64,9 +64,7 @@ class InputController(BaseController):
             if len(image_list) > 0:
                 ok = await self._open_upload_menu_and_choose_file(image_list)
                 if not ok:
-                    self.logger.error(
-                        " 在上传文件时发生错误: 通过菜单方式未能设置文件"
-                    )
+                    self.logger.error(" 在上传文件时发生错误: 通过菜单方式未能设置文件")
 
             # 等待发送按钮启用 (使用可配置的快速失败超时)
             from config.timeouts import SUBMIT_BUTTON_ENABLE_TIMEOUT_MS
@@ -302,6 +300,8 @@ class InputController(BaseController):
                         )
             except Exception:
                 pass
+        except asyncio.CancelledError:
+            raise
         except Exception:
             pass
 
@@ -337,6 +337,8 @@ class InputController(BaseController):
                         f" 已检测到已附加文件: inputs={counts.get('inputs')}, chips={counts.get('chips')}, blobs={counts.get('blobs')} (>= {expected_min})"
                     )
                     return True
+            except asyncio.CancelledError:
+                raise
             except Exception:
                 pass
             await asyncio.sleep(0.2)
@@ -408,6 +410,8 @@ class InputController(BaseController):
                     f" 拖放事件已在候选目标 {idx + 1}/{len(candidates)} 上触发。"
                 )
                 return
+            except asyncio.CancelledError:
+                raise
             except Exception as e_try:
                 last_err = e_try
                 continue
@@ -441,6 +445,8 @@ class InputController(BaseController):
             await asyncio.sleep(0.5)
             self.logger.info(" 拖放事件已在 document.body 上触发（兜底）。")
             return
+        except asyncio.CancelledError:
+            raise
         except Exception:
             pass
 
@@ -461,25 +467,8 @@ class InputController(BaseController):
             elif host_os_from_launcher in ["Windows", "Linux"]:
                 pass
             else:
-                # 使用浏览器检测
-                try:
-                    user_agent_data_platform = await self.page.evaluate(
-                        "() => navigator.userAgentData?.platform || ''"
-                    )
-                except Exception:
-                    user_agent_string = await self.page.evaluate(
-                        "() => navigator.userAgent || ''"
-                    )
-                    user_agent_string_lower = user_agent_string.lower()
-                    if (
-                        "macintosh" in user_agent_string_lower
-                        or "mac os x" in user_agent_string_lower
-                    ):
-                        user_agent_data_platform = "macOS"
-                    else:
-                        user_agent_data_platform = "Other"
-
-                "mac" in user_agent_data_platform.lower()
+                # 浏览器环境，无需特殊OS检测
+                pass
 
             await prompt_textarea_locator.focus(timeout=5000)
             await self._check_disconnect(check_client_disconnected, "After Input Focus")
@@ -499,6 +488,8 @@ class InputController(BaseController):
             self.logger.info(" 尝试回车键提交")
             try:
                 await self.page.keyboard.press("Enter")
+            except asyncio.CancelledError:
+                raise
             except Exception:
                 try:
                     await prompt_textarea_locator.press("Enter")
@@ -563,6 +554,8 @@ class InputController(BaseController):
             else:
                 self.logger.warning(" 回车键提交验证失败")
                 return False
+        except asyncio.CancelledError:
+            raise
         except Exception as shortcut_err:
             self.logger.warning(f" 回车键提交失败: {shortcut_err}")
             return False
@@ -618,6 +611,8 @@ class InputController(BaseController):
             self.logger.info(f" 尝试组合键提交: {shortcut_modifier}+{shortcut_key}")
             try:
                 await self.page.keyboard.press(f"{shortcut_modifier}+{shortcut_key}")
+            except asyncio.CancelledError:
+                raise
             except Exception:
                 try:
                     await self.page.keyboard.down(shortcut_modifier)

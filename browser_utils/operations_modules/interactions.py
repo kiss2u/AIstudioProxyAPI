@@ -60,6 +60,8 @@ async def get_raw_text_content(
     except PlaywrightAsyncError as e_parent:
         if DEBUG_LOGS_ENABLED:
             logger.debug(f" (获取原始文本) 响应元素未准备好: {e_parent}")
+    except asyncio.CancelledError:
+        raise
     except Exception as e_unexpected:
         logger.warning(f" (获取原始文本) 意外错误: {e_unexpected}")
 
@@ -92,6 +94,10 @@ async def get_response_via_edit_button(
             )  # 使用一半的点击超时作为悬停超时
             await asyncio.sleep(0.3)  # 等待悬停效果生效
             check_client_disconnected("编辑响应 - 悬停后: ")
+        except asyncio.CancelledError:
+            raise
+        except ClientDisconnectedError:
+            raise
         except Exception as hover_err:
             logger.warning(
                 f"   - (get_response_via_edit_button) 悬停最后一条消息失败 (忽略): {type(hover_err).__name__}"
@@ -106,6 +112,8 @@ async def get_response_via_edit_button(
             check_client_disconnected("编辑响应 - 'Edit' 按钮可见后: ")
             await edit_button.click(timeout=CLICK_TIMEOUT_MS)
             logger.info("   - 'Edit' 按钮已点击。")
+        except asyncio.CancelledError:
+            raise
         except Exception as edit_btn_err:
             logger.error(f"   - 'Edit' 按钮不可见或点击失败: {edit_btn_err}")
             await save_error_snapshot(f"edit_response_edit_button_failed_{req_id}")
@@ -133,6 +141,8 @@ async def get_response_via_edit_button(
                 if data_value_content is not None:
                     response_content = str(data_value_content)
                     logger.info("   - 从 data-value 获取内容成功。")
+            except asyncio.CancelledError:
+                raise
             except Exception as data_val_err:
                 logger.warning(f"   - 获取 data-value 失败: {data_val_err}")
                 check_client_disconnected(
@@ -151,9 +161,10 @@ async def get_response_via_edit_button(
                         timeout=CLICK_TIMEOUT_MS / 2
                     )
                     check_client_disconnected("编辑响应 - input_value 后: ")
-                    if input_val_content is not None:
-                        response_content = str(input_val_content)
-                        logger.info("   - 从 input_value 获取内容成功。")
+                    response_content = str(input_val_content)
+                    logger.info("   - 从 input_value 获取内容成功。")
+                except asyncio.CancelledError:
+                    raise
                 except Exception as input_val_err:
                     logger.warning(f"   - 获取 input_value 也失败: {input_val_err}")
                     check_client_disconnected("编辑响应 - input_value 错误后: ")
@@ -170,6 +181,8 @@ async def get_response_via_edit_button(
                 )
                 textarea_failed = True
 
+        except asyncio.CancelledError:
+            raise
         except Exception as textarea_err:
             logger.error(f"   - 定位或处理文本区域时失败: {textarea_err}")
             textarea_failed = True
@@ -185,6 +198,8 @@ async def get_response_via_edit_button(
                 check_client_disconnected("编辑响应 - 'Stop editing' 按钮可见后: ")
                 await finish_edit_button.click(timeout=CLICK_TIMEOUT_MS)
                 logger.info("   - 'Stop editing' 按钮已点击。")
+            except asyncio.CancelledError:
+                raise
             except Exception as finish_btn_err:
                 logger.warning(
                     f"   - 'Stop editing' 按钮不可见或点击失败: {finish_btn_err}"
@@ -202,6 +217,8 @@ async def get_response_via_edit_button(
 
     except ClientDisconnectedError:
         logger.info(" (Helper Edit) 客户端断开连接。")
+        raise
+    except asyncio.CancelledError:
         raise
     except Exception:
         logger.exception(" 通过编辑按钮获取响应过程中发生意外错误")
@@ -236,6 +253,8 @@ async def get_response_via_copy_button(
             check_client_disconnected("复制响应 - 更多选项按钮可见后: ")
             await more_options_button.click(timeout=CLICK_TIMEOUT_MS)
             logger.info("   - '更多选项' 已点击 (通过 get_by_label)。")
+        except asyncio.CancelledError:
+            raise
         except Exception as more_opts_err:
             logger.error(
                 f"   - '更多选项' 按钮 (通过 get_by_label) 不可见或点击失败: {more_opts_err}"
@@ -257,6 +276,8 @@ async def get_response_via_copy_button(
             await copy_markdown_button.click(timeout=CLICK_TIMEOUT_MS, force=True)
             copy_success = True
             logger.info("   - 已点击 '复制 Markdown' (通过 get_by_role)。")
+        except asyncio.CancelledError:
+            raise
         except Exception as copy_err:
             logger.error(
                 f"   - '复制 Markdown' 按钮 (通过 get_by_role) 点击失败: {copy_err}"
@@ -285,6 +306,8 @@ async def get_response_via_copy_button(
             else:
                 logger.error("   - 剪贴板内容为空。")
                 return None
+        except asyncio.CancelledError:
+            raise
         except Exception as clipboard_err:
             if "clipboard-read" in str(clipboard_err):
                 logger.error(
@@ -297,6 +320,8 @@ async def get_response_via_copy_button(
 
     except ClientDisconnectedError:
         logger.info(" (Helper Copy) 客户端断开连接。")
+        raise
+    except asyncio.CancelledError:
         raise
     except Exception:
         logger.exception(" 复制响应过程中发生意外错误")

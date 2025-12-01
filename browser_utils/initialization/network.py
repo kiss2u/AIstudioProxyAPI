@@ -1,4 +1,5 @@
 # --- browser_utils/initialization/network.py ---
+import asyncio
 import json
 import logging
 
@@ -24,6 +25,8 @@ async def setup_network_interception_and_scripts(context: AsyncBrowserContext):
         # 可选：仍然注入脚本作为备用方案
         await add_init_scripts_to_context(context)
 
+    except asyncio.CancelledError:
+        raise
     except Exception as e:
         logger.error(f"设置网络拦截和脚本注入时发生错误: {e}")
 
@@ -61,6 +64,8 @@ async def _setup_model_list_interception(context: AsyncBrowserContext):
         await context.route("**/*", handle_model_list_route)
         logger.info("已设置模型列表网络拦截")
 
+    except asyncio.CancelledError:
+        raise
     except Exception as e:
         logger.error(f"设置模型列表网络拦截时发生错误: {e}")
 
@@ -94,6 +99,8 @@ async def _modify_model_list_response(original_body: bytes, url: str) -> bytes:
         logger.info("成功修改模型列表响应")
         return modified_text.encode("utf-8")
 
+    except asyncio.CancelledError:
+        raise
     except Exception as e:
         logger.error(f"修改模型列表响应时发生错误: {e}")
         return original_body

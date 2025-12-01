@@ -58,6 +58,8 @@ class WebSocketConnectionManager:
                     }
                 )
             )
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             logger.warning(f"向 WebSocket 客户端 {client_id} 发送欢迎消息失败: {e}")
 
@@ -86,6 +88,8 @@ class WebSocketConnectionManager:
                 else:
                     logger.error(f"广播到 WebSocket {client_id} 时发生运行时错误: {e}")
                     disconnected_clients.append(client_id)
+            except asyncio.CancelledError:
+                raise
             except Exception as e:
                 logger.error(f"广播到 WebSocket {client_id} 时发生未知错误: {e}")
                 disconnected_clients.append(client_id)

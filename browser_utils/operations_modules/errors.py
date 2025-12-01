@@ -1,4 +1,5 @@
 # --- browser_utils/operations_modules/errors.py ---
+import asyncio
 import logging
 from typing import Optional
 
@@ -27,6 +28,8 @@ async def detect_and_extract_page_error(page: AsyncPage, req_id: str) -> Optiona
             return "检测到错误提示框，但无法提取特定消息。"
     except PlaywrightAsyncError:
         return None
+    except asyncio.CancelledError:
+        raise
     except Exception as e:
         logger.warning(f"    检查页面错误时出错: {e}")
         return None

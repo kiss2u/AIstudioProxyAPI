@@ -360,8 +360,10 @@ def test_kill_process_exception(mock_run, mock_platform):
 @patch("launcher.utils.sys.stdin")
 def test_input_with_timeout_windows_success(mock_stdin):
     """Test timed input on Windows with user input."""
+    from typing import List, Optional
+
     # Create a container that will be modified by the thread
-    user_input_container = [None]
+    user_input_container: List[Optional[str]] = [None]
 
     def fake_get_input():
         user_input_container[0] = "user input"

@@ -80,7 +80,7 @@ async def test_cancel_request_endpoint_success():
 
     assert isinstance(response, JSONResponse)
     assert response.status_code == 200
-    body = response.body.decode()
+    body = bytes(response.body).decode()
     assert "success" in body
     assert "marked as cancelled" in body
 
@@ -96,7 +96,7 @@ async def test_cancel_request_endpoint_not_found():
 
     assert isinstance(response, JSONResponse)
     assert response.status_code == 404
-    body = response.body.decode()
+    body = bytes(response.body).decode()
     assert "not found" in body
 
 
@@ -136,7 +136,7 @@ async def test_get_queue_status():
 
     import json
 
-    data = json.loads(response.body)
+    data = json.loads(bytes(response.body))
 
     assert data["queue_length"] == 2
     assert data["is_processing_locked"] is True
@@ -156,7 +156,7 @@ async def test_get_queue_status_empty():
 
     response = await get_queue_status(queue, lock)
 
-    data = json.loads(response.body)
+    data = json.loads(bytes(response.body))
     assert data["queue_length"] == 0
     assert data["items"] == []
     assert data["is_processing_locked"] is False
@@ -170,8 +170,6 @@ Strategy: Test exception handling when accessing queue._queue fails.
 """
 
 from unittest.mock import PropertyMock
-
-import pytest
 
 
 @pytest.mark.asyncio
@@ -194,7 +192,7 @@ async def test_get_queue_status_queue_access_exception():
     assert response.status_code == 200
     import json
 
-    data = json.loads(response.body)
+    data = json.loads(bytes(response.body))
 
     # 验证: queue_length 为 0 (因为 queue_items = [])
     assert data["queue_length"] == 0

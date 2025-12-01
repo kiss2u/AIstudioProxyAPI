@@ -74,7 +74,8 @@ async def chat_completions(
     except asyncio.TimeoutError:
         raise HTTPException(status_code=504, detail=f"[{req_id}] 请求处理超时。")
     except asyncio.CancelledError:
-        raise HTTPException(status_code=499, detail=f"[{req_id}] 请求被客户端取消。")
+        logger.info(f"请求被客户端取消: {req_id}")
+        raise
     except HTTPException as http_exc:
         if http_exc.status_code == 499:
             logger.info(f"客户端断开连接: {http_exc.detail}")

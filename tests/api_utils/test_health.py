@@ -29,7 +29,7 @@ async def test_health_check_ok():
     assert isinstance(response, JSONResponse)
     assert response.status_code == 200
 
-    content = response.body.decode()
+    content = bytes(response.body).decode()
     assert "OK" in content
     assert "服务运行中" in content
     assert "queueLength" in content
@@ -48,10 +48,10 @@ async def test_health_check_initializing():
     worker_task = None
     request_queue = None
 
-    response = await health_check(server_state, worker_task, request_queue)
+    response = await health_check(server_state, worker_task, request_queue)  # type: ignore[arg-type]
 
     assert response.status_code == 503
-    content = response.body.decode()
+    content = bytes(response.body).decode()
     assert "Error" in content
     assert "初始化进行中" in content
 
@@ -75,7 +75,7 @@ async def test_health_check_worker_stopped():
     response = await health_check(server_state, worker_task, request_queue)
 
     assert response.status_code == 503
-    content = response.body.decode()
+    content = bytes(response.body).decode()
     assert "Worker 未运行" in content
 
 
@@ -98,6 +98,6 @@ async def test_health_check_no_browser():
     response = await health_check(server_state, worker_task, request_queue)
 
     assert response.status_code == 503
-    content = response.body.decode()
+    content = bytes(response.body).decode()
     assert "浏览器未连接" in content
     assert "页面未就绪" in content

@@ -55,7 +55,7 @@ async def test_get_api_keys_success_with_keys(mock_auth_utils, mock_logger):
 
     # 验证: Response structure (lines 23-26)
     assert response.status_code == 200
-    content = response.body.decode()
+    content = bytes(response.body).decode()
     assert '"success":true' in content.lower()
     assert '"total_count":3' in content.lower()
 
@@ -72,7 +72,7 @@ async def test_get_api_keys_success_empty(mock_auth_utils, mock_logger):
 
     # 验证: Empty keys list
     assert response.status_code == 200
-    content = response.body.decode()
+    content = bytes(response.body).decode()
     assert '"total_count":0' in content.lower()
 
 
@@ -126,7 +126,7 @@ async def test_add_api_key_success(mock_auth_utils, mock_logger):
 
     # 验证: Response (lines 55-61)
     assert response.status_code == 200
-    content = response.body.decode()
+    content = bytes(response.body).decode()
     assert '"success":true' in content.lower()
     assert '"message":"api密钥添加成功"' in content.lower()
 
@@ -249,7 +249,7 @@ async def test_test_api_key_valid(mock_auth_utils, mock_logger):
 
     # 验证: Response (lines 81-87)
     assert response.status_code == 200
-    content = response.body.decode()
+    content = bytes(response.body).decode()
     assert '"valid":true' in content.lower()
     assert '"message":"密钥有效"' in content.lower()
 
@@ -270,7 +270,7 @@ async def test_test_api_key_invalid(mock_auth_utils, mock_logger):
 
     # 验证: Response
     assert response.status_code == 200
-    content = response.body.decode()
+    content = bytes(response.body).decode()
     assert '"valid":false' in content.lower()
     assert '"message":"密钥无效或不存在"' in content.lower()
 
@@ -317,7 +317,7 @@ async def test_delete_api_key_success(mock_auth_utils, mock_logger):
 
     # 验证: Response (lines 113-119)
     assert response.status_code == 200
-    content = response.body.decode()
+    content = bytes(response.body).decode()
     assert '"success":true' in content.lower()
     assert '"message":"api密钥删除成功"' in content.lower()
 

@@ -92,11 +92,12 @@ class ParameterController(BaseController):
         else:
             self.logger.info(" URL Context 功能已禁用，跳过调整。")
 
-        # 调整“思考预算” - handled by ThinkingController but called here to maintain flow?
+        # 调整"思考预算" - handled by ThinkingController but called here to maintain flow?
         # Ideally adjust_parameters should coordinate, but if we split, we need to ensure method availability.
         # We will assume the final class inherits from all mixins.
-        if hasattr(self, "_handle_thinking_budget"):
-            await self._handle_thinking_budget(
+        thinking_handler = getattr(self, "_handle_thinking_budget", None)
+        if thinking_handler:
+            await thinking_handler(
                 request_params, model_id_to_use, check_client_disconnected
             )
 
@@ -348,6 +349,8 @@ class ParameterController(BaseController):
 
             self.logger.info(f" 当前页面读取到的停止序列: {current_stops}")
             return current_stops
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             self.logger.warning(f" 读取当前停止序列失败: {e}")
             return set()
@@ -429,6 +432,8 @@ class ParameterController(BaseController):
                                     0, timeout=3000
                                 )
                                 self.logger.debug(f"Removed: {text_to_remove}")
+                            except asyncio.CancelledError:
+                                raise
                             except Exception:
                                 self.logger.debug(
                                     f"Chip may not be fully removed: {text_to_remove}"
@@ -659,6 +664,8 @@ class ParameterController(BaseController):
             )
             try:
                 await toggle_locator.scroll_into_view_if_needed()
+            except asyncio.CancelledError:
+                raise
             except Exception:
                 pass
             await toggle_locator.click(timeout=CLICK_TIMEOUT_MS)

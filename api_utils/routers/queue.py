@@ -61,13 +61,24 @@ async def get_queue_status(
     request_queue: Queue = Depends(get_request_queue),
     processing_lock: Lock = Depends(get_processing_lock),
 ):
+    # Extract all items temporarily to inspect queue contents
+    queue_items = []
     try:
-        queue_items = list(request_queue._queue)
+        while not request_queue.empty():
+            item = request_queue.get_nowait()
+            queue_items.append(item)
     except Exception:
-        queue_items = []
+        pass
+    finally:
+        # Put all items back in original order
+        for item in queue_items:
+            await request_queue.put(item)
+
+    queue_length = len(queue_items)
+
     return JSONResponse(
         content={
-            "queue_length": len(queue_items),
+            "queue_length": queue_length,
             "is_processing_locked": processing_lock.locked(),
             "items": sorted(
                 [

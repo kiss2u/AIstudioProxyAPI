@@ -6,6 +6,8 @@ import logging
 from asyncio import Event, Lock, Queue
 from typing import Any, Dict, List, Set
 
+from api_utils.context_types import QueueItem
+
 
 def get_logger() -> logging.Logger:
     from server import logger
@@ -19,7 +21,7 @@ def get_log_ws_manager():
     return log_ws_manager
 
 
-def get_request_queue() -> Queue:
+def get_request_queue() -> "Queue[QueueItem]":
     from server import request_queue
 
     return request_queue

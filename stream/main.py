@@ -78,6 +78,8 @@ async def main() -> None:
         await proxy_server.start()
     except KeyboardInterrupt:
         logger.info("Shutting down proxy server")
+    except asyncio.CancelledError:
+        raise
     except Exception as e:
         logger.error(f"Error starting proxy server: {e}")
         sys.exit(1)
@@ -120,6 +122,8 @@ async def builtin(
         await proxy_server.start()
     except KeyboardInterrupt:
         logger.info("Shutting down proxy server")
+    except asyncio.CancelledError:
+        raise
     except Exception as e:
         logger.error(f"Error starting proxy server: {e}")
         sys.exit(1)

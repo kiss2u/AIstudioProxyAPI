@@ -6,7 +6,7 @@
 """
 
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 from config import DEFAULT_THINKING_BUDGET, ENABLE_THINKING_BUDGET
 
@@ -28,7 +28,9 @@ class ThinkingDirective:
     original_value: Any
 
 
-def normalize_reasoning_effort(reasoning_effort: Optional[Any]) -> ThinkingDirective:
+def normalize_reasoning_effort(
+    reasoning_effort: Optional[Union[int, str]],
+) -> ThinkingDirective:
     """将 reasoning_effort 参数归一化为标准化的思考指令
 
     参数:

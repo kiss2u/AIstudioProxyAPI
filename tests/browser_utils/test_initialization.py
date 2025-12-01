@@ -29,7 +29,7 @@ async def test_initialize_page_logic_success(
     ):
         import server
 
-        server.PLAYWRIGHT_PROXY_SETTINGS = None
+        setattr(server, "PLAYWRIGHT_PROXY_SETTINGS", None)
 
         # Mock page finding logic
         mock_page.url = "https://aistudio.google.com/prompts/new_chat"
@@ -68,7 +68,7 @@ async def test_initialize_page_logic_new_page(
     ):
         import server
 
-        server.PLAYWRIGHT_PROXY_SETTINGS = None
+        setattr(server, "PLAYWRIGHT_PROXY_SETTINGS", None)
 
         mock_browser_context.pages = []
         mock_browser_context.new_page.return_value = mock_page
@@ -96,38 +96,42 @@ async def test_close_page_logic_success():
     mock_page = AsyncMock()
     mock_page.is_closed = MagicMock(return_value=False)
 
-    import server
+    from api_utils.server_state import state
 
-    original_page = getattr(server, "page_instance", None)
-    original_ready = getattr(server, "is_page_ready", False)
+    original_page = state.page_instance
+    original_ready = state.is_page_ready
 
     try:
-        server.page_instance = mock_page
-        server.is_page_ready = True
+        state.page_instance = mock_page
+        state.is_page_ready = True
 
         await _close_page_logic()
 
         mock_page.close.assert_called()
-        assert server.page_instance is None
-        assert server.is_page_ready is False
+        assert state.page_instance is None
+        assert state.is_page_ready is False
     finally:
-        server.page_instance = original_page
-        server.is_page_ready = original_ready
+        state.page_instance = original_page
+        state.is_page_ready = original_ready
 
 
 @pytest.mark.asyncio
 async def test_close_page_logic_already_closed():
-    with patch.dict("sys.modules", {"server": MagicMock()}):
-        import server
+    from api_utils.server_state import state
 
+    original_page = state.page_instance
+
+    try:
         mock_page = AsyncMock()
         mock_page.is_closed.return_value = True
-        server.page_instance = mock_page
+        state.page_instance = mock_page
 
         await _close_page_logic()
 
         mock_page.close.assert_not_called()
-        assert server.page_instance is None
+        assert state.page_instance is None
+    finally:
+        state.page_instance = original_page
 
 
 @pytest.mark.asyncio
@@ -157,7 +161,7 @@ async def test_initialize_page_logic_proxy_settings(
     ):
         import server
 
-        server.PLAYWRIGHT_PROXY_SETTINGS = {"server": "http://proxy:8080"}
+        setattr(server, "PLAYWRIGHT_PROXY_SETTINGS", {"server": "http://proxy:8080"})
 
         mock_browser_context.pages = [mock_page]
         mock_page.url = "https://aistudio.google.com/prompts/new_chat"
@@ -700,10 +704,18 @@ async def test_init_model_name_error(mock_browser, mock_browser_context, mock_pa
         mock_expect = MagicMock()
         mock_expect.return_value.to_be_visible = AsyncMock()
 
-        # Model name locator fails
-        mock_page.locator.return_value.first.inner_text.side_effect = (
-            PlaywrightAsyncError("Locator Fail")
-        )
+        # Override the locator to fail for model-name
+        original_locator = mock_page.locator.side_effect
+
+        def failing_locator_factory(selector):
+            loc = original_locator()
+            if '[data-test-id="model-name"]' in selector:
+                loc.first.inner_text = AsyncMock(
+                    side_effect=PlaywrightAsyncError("Locator Fail")
+                )
+            return loc
+
+        mock_page.locator = MagicMock(side_effect=failing_locator_factory)
 
         with patch("browser_utils.initialization.core.expect_async", mock_expect):
             # The PlaywrightAsyncError is caught and re-raised as RuntimeError
@@ -791,32 +803,37 @@ async def test_init_generic_exception_cleanup(mock_browser, mock_browser_context
 
 @pytest.mark.asyncio
 async def test_close_page_logic_errors():
-    import server
+    from api_utils.server_state import state
 
-    mock_page = AsyncMock()
-    # is_closed must be a MagicMock returning bool, not AsyncMock returning coroutine
-    mock_page.is_closed = MagicMock(return_value=False)
+    original_page = state.page_instance
 
-    # 1. PlaywrightAsyncError
-    mock_page.close.side_effect = PlaywrightAsyncError("PW Error")
-    server.page_instance = mock_page
-    await _close_page_logic()  # Should not raise
+    try:
+        mock_page = AsyncMock()
+        # is_closed must be a MagicMock returning bool, not AsyncMock returning coroutine
+        mock_page.is_closed = MagicMock(return_value=False)
 
-    # 2. TimeoutError
-    mock_page.close.side_effect = asyncio.TimeoutError("Timeout")
-    server.page_instance = mock_page
-    await _close_page_logic()  # Should not raise
+        # 1. PlaywrightAsyncError
+        mock_page.close.side_effect = PlaywrightAsyncError("PW Error")
+        state.page_instance = mock_page
+        await _close_page_logic()  # Should not raise
 
-    # 3. Generic Exception
-    mock_page.close.side_effect = Exception("Generic")
-    server.page_instance = mock_page
-    await _close_page_logic()  # Should not raise
+        # 2. TimeoutError
+        mock_page.close.side_effect = asyncio.TimeoutError("Timeout")
+        state.page_instance = mock_page
+        await _close_page_logic()  # Should not raise
 
-    # 4. CancelledError
-    mock_page.close.side_effect = asyncio.CancelledError()
-    server.page_instance = mock_page
-    with pytest.raises(asyncio.CancelledError):
-        await _close_page_logic()
+        # 3. Generic Exception
+        mock_page.close.side_effect = Exception("Generic")
+        state.page_instance = mock_page
+        await _close_page_logic()  # Should not raise
+
+        # 4. CancelledError
+        mock_page.close.side_effect = asyncio.CancelledError()
+        state.page_instance = mock_page
+        with pytest.raises(asyncio.CancelledError):
+            await _close_page_logic()
+    finally:
+        state.page_instance = original_page
 
 
 # 7. Signal Camoufox Shutdown
@@ -837,7 +854,7 @@ async def test_signal_camoufox_shutdown_no_browser():
     ):
         import server
 
-        server.browser_instance = None
+        setattr(server, "browser_instance", None)
         await signal_camoufox_shutdown()
         # Should just return
 
@@ -851,8 +868,9 @@ async def test_signal_camoufox_shutdown_success():
     ):
         import server
 
-        server.browser_instance = MagicMock()
-        server.browser_instance.is_connected.return_value = True
+        mock_browser = MagicMock()
+        mock_browser.is_connected.return_value = True
+        setattr(server, "browser_instance", mock_browser)
 
         await signal_camoufox_shutdown()
 
@@ -866,8 +884,9 @@ async def test_signal_camoufox_shutdown_exception():
     ):
         import server
 
-        server.browser_instance = MagicMock()
-        server.browser_instance.is_connected.return_value = True
+        mock_browser = MagicMock()
+        mock_browser.is_connected.return_value = True
+        setattr(server, "browser_instance", mock_browser)
 
         # Should catch exception and log error
         await signal_camoufox_shutdown()
@@ -892,9 +911,11 @@ async def test_enable_temporary_chat_mode_already_active(mock_page):
 async def test_enable_temporary_chat_mode_activate_success(mock_page):
     locator = MagicMock()
     locator.wait_for = AsyncMock()
+    locator.click = AsyncMock()
     # First inactive, then active
     locator.get_attribute = AsyncMock(side_effect=["", "ms-button-active"])
-    mock_page.locator.return_value = locator
+    # Use side_effect to override the factory
+    mock_page.locator = MagicMock(return_value=locator)
 
     await enable_temporary_chat_mode(mock_page)
 
@@ -905,9 +926,11 @@ async def test_enable_temporary_chat_mode_activate_success(mock_page):
 async def test_enable_temporary_chat_mode_activate_fail(mock_page):
     locator = MagicMock()
     locator.wait_for = AsyncMock()
+    locator.click = AsyncMock()
     # Always inactive
     locator.get_attribute = AsyncMock(return_value="")
-    mock_page.locator.return_value = locator
+    # Use side_effect to override the factory
+    mock_page.locator = MagicMock(return_value=locator)
 
     await enable_temporary_chat_mode(mock_page)
 

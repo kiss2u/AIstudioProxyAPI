@@ -9,6 +9,7 @@ import signal
 import sys
 import threading
 import time
+from typing import Optional
 
 import uvicorn
 
@@ -51,8 +52,8 @@ class Launcher:
         self.args = parse_args()
         self.camoufox_manager = CamoufoxProcessManager()
         atexit.register(self.camoufox_manager.cleanup)
-        self.final_launch_mode = None
-        self.effective_active_auth_json_path = None
+        self.final_launch_mode: str = "headless"  # Default, will be determined later
+        self.effective_active_auth_json_path: Optional[str] = None
         self.simulated_os_for_camoufox = "linux"
 
     def run(self):
@@ -70,7 +71,7 @@ class Launcher:
         logger.info("Camoufox 启动器开始运行")
         logger.info("=================================================")
         ensure_auth_dirs_exist()
-        check_dependencies(launch_server, DefaultAddons)
+        check_dependencies(launch_server is not None, DefaultAddons is not None)
         logger.info("=================================================")
 
         self._check_deprecated_auth_file()
@@ -642,6 +643,10 @@ class Launcher:
         logger.info(
             f"--- 步骤 5: 启动集成的 FastAPI 服务器 (监听端口: {self.args.server_port}) ---"
         )
+
+        if app is None:
+            logger.error("无法导入 FastAPI app。请检查 server.py 是否存在且可导入。")
+            sys.exit(1)
 
         if not self.args.exit_on_auth_save:
             try:

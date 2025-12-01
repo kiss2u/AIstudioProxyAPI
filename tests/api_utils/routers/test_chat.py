@@ -5,13 +5,13 @@ import pytest
 from fastapi import HTTPException
 
 from api_utils.routers.chat import chat_completions
-from models import ChatCompletionRequest
+from models import ChatCompletionRequest, Message
 
 
 @pytest.mark.asyncio
 async def test_chat_completions_success():
     request = ChatCompletionRequest(
-        messages=[{"role": "user", "content": "hello"}], model="gpt-4"
+        messages=[Message(role="user", content="hello")], model="gpt-4"
     )
     http_request = MagicMock()
     logger = MagicMock()
@@ -47,7 +47,7 @@ async def test_chat_completions_success():
 @pytest.mark.asyncio
 async def test_chat_completions_service_unavailable():
     request = ChatCompletionRequest(
-        messages=[{"role": "user", "content": "hello"}], model="gpt-4"
+        messages=[Message(role="user", content="hello")], model="gpt-4"
     )
     http_request = MagicMock()
     logger = MagicMock()
@@ -80,7 +80,7 @@ async def test_chat_completions_timeout():
         raise asyncio.TimeoutError()
 
     request = ChatCompletionRequest(
-        messages=[{"role": "user", "content": "hello"}], model="gpt-4"
+        messages=[Message(role="user", content="hello")], model="gpt-4"
     )
     http_request = MagicMock()
     logger = MagicMock()
@@ -110,7 +110,7 @@ async def test_chat_completions_timeout():
 @pytest.mark.asyncio
 async def test_chat_completions_cancelled():
     request = ChatCompletionRequest(
-        messages=[{"role": "user", "content": "hello"}], model="gpt-4"
+        messages=[Message(role="user", content="hello")], model="gpt-4"
     )
     http_request = MagicMock()
     logger = MagicMock()
@@ -131,7 +131,7 @@ async def test_chat_completions_cancelled():
 
     asyncio.create_task(cancel_request())
 
-    with pytest.raises(HTTPException) as excinfo:
+    with pytest.raises(asyncio.CancelledError):
         await chat_completions(
             request=request,
             http_request=http_request,
@@ -140,7 +140,6 @@ async def test_chat_completions_cancelled():
             server_state=server_state,
             worker_task=worker_task,
         )
-    assert excinfo.value.status_code == 499
 
 
 """
@@ -151,9 +150,6 @@ Strategy: Mock result_future to raise exceptions when awaited.
 """
 
 
-import pytest
-
-
 @pytest.mark.asyncio
 async def test_chat_completions_http_exception_499():
     """
@@ -161,7 +157,7 @@ async def test_chat_completions_http_exception_499():
     预期: 记录客户端断开日志,重新抛出异常 (lines 71-76, 72-73)
     """
     request = ChatCompletionRequest(
-        messages=[{"role": "user", "content": "hello"}], model="gpt-4"
+        messages=[Message(role="user", content="hello")], model="gpt-4"
     )
     http_request = MagicMock()
     logger = MagicMock()
@@ -212,7 +208,7 @@ async def test_chat_completions_http_exception_non_499():
     预期: 记录 HTTP 异常警告,重新抛出异常 (lines 71-76, 74-75)
     """
     request = ChatCompletionRequest(
-        messages=[{"role": "user", "content": "hello"}], model="gpt-4"
+        messages=[Message(role="user", content="hello")], model="gpt-4"
     )
     http_request = MagicMock()
     logger = MagicMock()
@@ -264,7 +260,7 @@ async def test_chat_completions_generic_exception():
     预期: 记录异常,转换为 500 错误 (lines 77-79)
     """
     request = ChatCompletionRequest(
-        messages=[{"role": "user", "content": "hello"}], model="gpt-4"
+        messages=[Message(role="user", content="hello")], model="gpt-4"
     )
     http_request = MagicMock()
     logger = MagicMock()

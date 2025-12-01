@@ -22,7 +22,7 @@ from models import Message
 def test_estimate_tokens():
     """Test token estimation for empty, English, Chinese, and mixed text."""
     assert estimate_tokens("") == 0
-    assert estimate_tokens(None) == 0
+    assert estimate_tokens(None) == 0  # type: ignore[arg-type]
 
     # English: 1 char = 0.25 tokens -> 4 chars = 1 token
     assert estimate_tokens("abcd") == 1
@@ -92,7 +92,7 @@ def test_extension_for_mime():
     assert _extension_for_mime("image/png") == ".png"
     assert _extension_for_mime("application/unknown") == ".unknown"
     assert _extension_for_mime("plain") == ".bin"
-    assert _extension_for_mime(None) == ".bin"
+    assert _extension_for_mime(None) == ".bin"  # type: ignore[arg-type]
 
 
 def test_extract_data_url_to_local_success():
@@ -124,9 +124,11 @@ def test_extract_data_url_to_local_invalid_format():
 
 def test_extract_data_url_to_local_bad_b64():
     """Test data URL extraction handles base64 decode errors."""
+    import binascii
+
     with (
         patch("server.logger") as mock_logger,
-        patch("base64.b64decode", side_effect=base64.binascii.Error("Invalid")),
+        patch("base64.b64decode", side_effect=binascii.Error("Invalid")),
     ):
         assert extract_data_url_to_local("data:text/plain;base64,!!!") is None
         mock_logger.error.assert_called()
@@ -157,14 +159,17 @@ def test_save_blob_to_local():
     ):
         # Test with mime
         path = save_blob_to_local(data, mime_type="image/png")
+        assert path is not None
         assert path.endswith(".png")
 
         # Test with ext
         path = save_blob_to_local(data, fmt_ext=".jpg")
+        assert path is not None
         assert path.endswith(".jpg")
 
         # Test fallback
         path = save_blob_to_local(data)
+        assert path is not None
         assert path.endswith(".bin")
 
 
@@ -375,9 +380,6 @@ Extended tests for api_utils/utils_ext/stream.py - Edge case coverage.
 Focus: Cover uncovered error paths, exception handling, and edge cases.
 Strategy: Test None signal, error detection, dict stale data, exceptions.
 """
-
-
-import pytest
 
 from models.exceptions import QuotaExceededError, UpstreamError
 
@@ -620,8 +622,6 @@ Focus: Cover lines 78-80 (IOError in extract_data_url_to_local),
        114-116 (IOError in save_blob_to_local).
 Strategy: Mock file operations to trigger error paths.
 """
-
-
 
 
 def test_extract_data_url_to_local_write_failure():

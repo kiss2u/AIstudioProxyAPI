@@ -218,6 +218,8 @@ async def _verify_and_apply_ui_state(page: AsyncPage, req_id: str = "unknown") -
             logger.info(" UI状态已正确设置，无需更新")
             return True
 
+    except asyncio.CancelledError:
+        raise
     except Exception as e:
         logger.error(f" 验证并应用UI状态设置时发生错误: {e}")
         return False
@@ -313,9 +315,7 @@ async def switch_ai_studio_model(page: AsyncPage, model_id: str, req_id: str) ->
                 final_prefs_obj = json.loads(final_prefs_str)
                 final_prompt_model_in_storage = final_prefs_obj.get("promptModel")
             except json.JSONDecodeError:
-                logger.warning(
-                    " 无法解析刷新后的 aiStudioUserPreference JSON 字符串。"
-                )
+                logger.warning(" 无法解析刷新后的 aiStudioUserPreference JSON 字符串。")
 
         if final_prompt_model_in_storage == full_model_path:
             logger.info(
@@ -325,9 +325,9 @@ async def switch_ai_studio_model(page: AsyncPage, model_id: str, req_id: str) ->
             page_display_match = False
 
             # 获取parsed_model_list
-            import server
+            from api_utils.server_state import state
 
-            parsed_model_list = getattr(server, "parsed_model_list", [])
+            parsed_model_list = getattr(state, "parsed_model_list", [])
 
             if parsed_model_list:
                 for m_obj in parsed_model_list:
@@ -357,6 +357,8 @@ async def switch_ai_studio_model(page: AsyncPage, model_id: str, req_id: str) ->
                         f" 页面显示模型ID ('{actual_displayed_model_id_on_page}') 与期望ID ('{target_model_id}') 不一致。"
                     )
 
+            except asyncio.CancelledError:
+                raise
             except Exception as e_disp:
                 page_display_match = False  # 读取失败则认为不匹配
                 logger.warning(
@@ -395,6 +397,8 @@ async def switch_ai_studio_model(page: AsyncPage, model_id: str, req_id: str) ->
                                 " 点击后 '临时聊天' 模式状态验证失败，可能未成功重新开启。"
                             )
 
+                except asyncio.CancelledError:
+                    raise
                 except Exception as e:
                     logger.warning(f" 模型切换后重新启用 '临时聊天' 模式失败: {e}")
                 return True
@@ -422,6 +426,8 @@ async def switch_ai_studio_model(page: AsyncPage, model_id: str, req_id: str) ->
             logger.info(
                 f" 恢复：页面当前显示的模型名称 (原始: '{current_displayed_name_for_revert_raw}', 清理后: '{current_displayed_name_for_revert_stripped}')"
             )
+        except asyncio.CancelledError:
+            raise
         except Exception as e_read_disp_revert:
             logger.warning(
                 f" 恢复：读取页面当前显示模型名称失败: {e_read_disp_revert}。将尝试回退到原始localStorage。"
@@ -547,6 +553,8 @@ async def switch_ai_studio_model(page: AsyncPage, model_id: str, req_id: str) ->
 
         return False
 
+    except asyncio.CancelledError:
+        raise
     except Exception:
         logger.exception(" 切换模型过程中发生严重错误")
         # 导入save_error_snapshot函数
@@ -571,6 +579,8 @@ async def switch_ai_studio_model(page: AsyncPage, model_id: str, req_id: str) ->
                 await expect_async(page.locator(INPUT_SELECTOR)).to_be_visible(
                     timeout=15000
                 )
+        except asyncio.CancelledError:
+            raise
         except Exception as recovery_err:
             logger.error(f" 异常后恢复 localStorage 失败: {recovery_err}")
         return False
@@ -578,9 +588,9 @@ async def switch_ai_studio_model(page: AsyncPage, model_id: str, req_id: str) ->
 
 def load_excluded_models(filename: str):
     """加载排除的模型列表"""
-    import server
+    from api_utils.server_state import state
 
-    excluded_model_ids = getattr(server, "excluded_model_ids", set())
+    excluded_model_ids = getattr(state, "excluded_model_ids", set())
 
     excluded_file_path = os.path.join(os.path.dirname(__file__), "..", filename)
     try:
@@ -589,7 +599,7 @@ def load_excluded_models(filename: str):
                 loaded_ids = {line.strip() for line in f if line.strip()}
             if loaded_ids:
                 excluded_model_ids.update(loaded_ids)
-                server.excluded_model_ids = excluded_model_ids
+                state.excluded_model_ids = excluded_model_ids
                 logger.info(
                     f"从 '{filename}' 加载了 {len(loaded_ids)} 个模型到排除列表: {excluded_model_ids}"
                 )
@@ -605,11 +615,11 @@ def load_excluded_models(filename: str):
 
 async def _handle_initial_model_state_and_storage(page: AsyncPage):
     """处理初始模型状态和存储"""
-    import server
+    from api_utils.server_state import state
 
-    getattr(server, "current_ai_studio_model_id", None)
-    getattr(server, "parsed_model_list", [])
-    getattr(server, "model_list_fetch_event", None)
+    getattr(state, "current_ai_studio_model_id", None)
+    getattr(state, "parsed_model_list", [])
+    getattr(state, "model_list_fetch_event", None)
 
     logger.info("--- (新) 处理初始模型状态, localStorage 和 isAdvancedOpen ---")
     needs_reload_and_storage_update = False
@@ -645,11 +655,11 @@ async def _handle_initial_model_state_and_storage(page: AsyncPage):
                         reason_for_reload = f"UI状态需要更新: isAdvancedOpen={ui_state['isAdvancedOpen']}, areToolsOpen={ui_state['areToolsOpen']} (期望: True)"
                         logger.info(f"   判定需要刷新和存储更新: {reason_for_reload}")
                     else:
-                        server.current_ai_studio_model_id = prompt_model_path.split(
-                            "/"
-                        )[-1]
+                        state.current_ai_studio_model_id = prompt_model_path.split("/")[
+                            -1
+                        ]
                         logger.info(
-                            f"   localStorage 有效且UI状态正确。初始模型 ID 从 localStorage 设置为: {server.current_ai_studio_model_id}"
+                            f"   localStorage 有效且UI状态正确。初始模型 ID 从 localStorage 设置为: {state.current_ai_studio_model_id}"
                         )
             except json.JSONDecodeError:
                 needs_reload_and_storage_update = True
@@ -694,6 +704,8 @@ async def _handle_initial_model_state_and_storage(page: AsyncPage):
                         logger.warning("   重新加载后UI状态验证失败")
 
                     break  # 成功则跳出循环
+                except asyncio.CancelledError:
+                    raise
                 except Exception as reload_err:
                     logger.warning(
                         f"   页面重新加载尝试 {attempt + 1}/{max_retries} 失败: {reload_err}"
@@ -717,12 +729,14 @@ async def _handle_initial_model_state_and_storage(page: AsyncPage):
             )
             await _set_model_from_page_display(page, set_storage=False)
             logger.info(
-                f"   刷新和存储更新流程完成。最终全局模型 ID: {server.current_ai_studio_model_id}"
+                f"   刷新和存储更新流程完成。最终全局模型 ID: {state.current_ai_studio_model_id}"
             )
         else:
             logger.info(
                 "   localStorage 状态良好 (isAdvancedOpen=true, promptModel有效)，无需刷新页面。"
             )
+    except asyncio.CancelledError:
+        raise
     except Exception as e:
         logger.error(
             f"(新) 处理初始模型状态和 localStorage 时发生严重错误: {e}",
@@ -733,17 +747,19 @@ async def _handle_initial_model_state_and_storage(page: AsyncPage):
                 "   由于发生错误，尝试回退仅从页面显示设置全局模型 ID (不写入localStorage)..."
             )
             await _set_model_from_page_display(page, set_storage=False)
+        except asyncio.CancelledError:
+            raise
         except Exception as fallback_err:
             logger.error(f"   回退设置模型ID也失败: {fallback_err}")
 
 
 async def _set_model_from_page_display(page: AsyncPage, set_storage: bool = False):
     """从页面显示设置模型"""
-    import server
+    from api_utils.server_state import state
 
-    getattr(server, "current_ai_studio_model_id", None)
-    getattr(server, "parsed_model_list", [])
-    model_list_fetch_event = getattr(server, "model_list_fetch_event", None)
+    getattr(state, "current_ai_studio_model_id", None)
+    getattr(state, "parsed_model_list", [])
+    model_list_fetch_event = getattr(state, "model_list_fetch_event", None)
 
     try:
         logger.info("   尝试从页面显示元素读取当前模型名称...")
@@ -768,14 +784,14 @@ async def _set_model_from_page_display(page: AsyncPage, set_storage: bool = Fals
         logger.info(f"   页面显示的直接是模型ID: '{found_model_id_from_display}'")
 
         new_model_value = found_model_id_from_display
-        if server.current_ai_studio_model_id != new_model_value:
-            server.current_ai_studio_model_id = new_model_value
+        if state.current_ai_studio_model_id != new_model_value:
+            state.current_ai_studio_model_id = new_model_value
             logger.info(
-                f"   全局 current_ai_studio_model_id 已更新为: {server.current_ai_studio_model_id}"
+                f"   全局 current_ai_studio_model_id 已更新为: {state.current_ai_studio_model_id}"
             )
         else:
             logger.info(
-                f"   全局 current_ai_studio_model_id ('{server.current_ai_studio_model_id}') 与从页面获取的值一致，未更改。"
+                f"   全局 current_ai_studio_model_id ('{state.current_ai_studio_model_id}') 与从页面获取的值一致，未更改。"
             )
 
         if set_storage:
@@ -842,5 +858,7 @@ async def _set_model_from_page_display(page: AsyncPage, set_storage: bool = Fals
             logger.info(
                 f"   localStorage.aiStudioUserPreference 已更新。isAdvancedOpen: {prefs_to_set.get('isAdvancedOpen')}, areToolsOpen: {prefs_to_set.get('areToolsOpen')} (期望: True), promptModel: '{prefs_to_set.get('promptModel', '未设置/保留原样')}'。"
             )
+    except asyncio.CancelledError:
+        raise
     except Exception as e_set_disp:
         logger.error(f"   尝试从页面显示设置模型时出错: {e_set_disp}", exc_info=True)

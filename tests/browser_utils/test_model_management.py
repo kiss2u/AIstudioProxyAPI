@@ -38,7 +38,8 @@ def mock_server():
     mock.excluded_model_ids = set()
     mock.current_ai_studio_model_id = "initial-model"
     mock.parsed_model_list = []
-    mock.model_list_fetch_event = MagicMock()
+    # Use AsyncMock for async event, not MagicMock
+    mock.model_list_fetch_event = AsyncMock(spec=asyncio.Event)
     mock.model_list_fetch_event.is_set.return_value = True
     return mock
 
@@ -274,12 +275,12 @@ async def test_load_excluded_models(tmp_path):
     p = d / "excluded_models.txt"
     p.write_text("model-a\nmodel-b\n", encoding="utf-8")
 
-    # Mock server module
-    mock_server = MagicMock()
-    mock_server.excluded_model_ids = set()
+    # Mock server state
+    mock_state = MagicMock()
+    mock_state.excluded_model_ids = set()
 
     with (
-        patch.dict(sys.modules, {"server": mock_server}),
+        patch("api_utils.server_state.state", mock_state),
         patch("os.path.exists") as mock_exists,
         patch("builtins.open", new_callable=MagicMock) as mock_open,
         patch("browser_utils.model_management.logger"),
@@ -291,8 +292,8 @@ async def test_load_excluded_models(tmp_path):
 
         load_excluded_models("excluded_models.txt")
 
-        assert "model-a" in mock_server.excluded_model_ids
-        assert "model-b" in mock_server.excluded_model_ids
+        assert "model-a" in mock_state.excluded_model_ids
+        assert "model-b" in mock_state.excluded_model_ids
 
 
 @pytest.mark.asyncio
@@ -388,11 +389,15 @@ async def test_switch_ai_studio_model_success(mock_page):
 @pytest.mark.asyncio
 @pytest.mark.timeout(5)
 async def test_set_model_from_page_display(mock_page):
-    # Mock server module
-    mock_server = MagicMock()
-    mock_server.current_ai_studio_model_id = "old-model"
-    mock_server.model_list_fetch_event = MagicMock()
-    mock_server.model_list_fetch_event.is_set.return_value = True
+    # Mock server state
+    mock_state = MagicMock()
+    mock_state.current_ai_studio_model_id = "old-model"
+
+    # CRITICAL: Use AsyncMock for async event, not MagicMock
+    mock_event = AsyncMock(spec=asyncio.Event)
+    mock_event.is_set.return_value = True  # Event is already set, no wait needed
+    mock_state.model_list_fetch_event = mock_event
+    mock_state.parsed_model_list = []
 
     # Mock locator
     mock_locator = MagicMock()
@@ -400,12 +405,12 @@ async def test_set_model_from_page_display(mock_page):
     mock_page.locator.return_value = mock_locator
 
     with (
-        patch.dict(sys.modules, {"server": mock_server}),
+        patch("api_utils.server_state.state", mock_state),
         patch("browser_utils.model_management.logger"),
     ):
         await _set_model_from_page_display(mock_page, set_storage=False)
 
-    assert mock_server.current_ai_studio_model_id == "new-model"
+    assert mock_state.current_ai_studio_model_id == "new-model"
 
 
 @pytest.mark.asyncio
@@ -767,10 +772,14 @@ async def test_handle_initial_model_state_reload_retry_logic(mock_page):
 @pytest.mark.timeout(5)
 async def test_set_model_from_page_display_timeout(mock_page):
     """Test timeout when waiting for model list"""
-    mock_server = MagicMock()
-    mock_server.model_list_fetch_event = MagicMock()
-    # is_set returns False, then wait raises TimeoutError
-    mock_server.model_list_fetch_event.is_set.return_value = False
+    mock_state = MagicMock()
+    mock_state.current_ai_studio_model_id = None
+    mock_state.parsed_model_list = []
+
+    # Use AsyncMock for async event
+    mock_event = AsyncMock(spec=asyncio.Event)
+    mock_event.is_set.return_value = False  # Event not set, will wait
+    mock_state.model_list_fetch_event = mock_event
 
     # Mock locator
     mock_locator = MagicMock()
@@ -778,7 +787,7 @@ async def test_set_model_from_page_display_timeout(mock_page):
     mock_page.locator.return_value = mock_locator
 
     with (
-        patch.dict(sys.modules, {"server": mock_server}),
+        patch("api_utils.server_state.state", mock_state),
         patch("browser_utils.model_management.logger") as mock_logger,
         patch("asyncio.wait_for", side_effect=asyncio.TimeoutError),
     ):
@@ -790,15 +799,20 @@ async def test_set_model_from_page_display_timeout(mock_page):
             for arg in mock_logger.warning.call_args_list[0][0]
         )
         # Should still update global ID using display name as fallback
-        assert mock_server.current_ai_studio_model_id == "displayed-model"
+        assert mock_state.current_ai_studio_model_id == "displayed-model"
 
 
 @pytest.mark.asyncio
 @pytest.mark.timeout(5)
 async def test_set_model_from_page_display_storage_logic(mock_page):
     """Test storage update logic in _set_model_from_page_display"""
-    mock_server = MagicMock()
-    mock_server.current_ai_studio_model_id = "old"
+    mock_state = MagicMock()
+    mock_state.current_ai_studio_model_id = "old"
+    # Create a set event to avoid hanging on wait()
+    mock_event = asyncio.Event()
+    mock_event.set()
+    mock_state.model_list_fetch_event = mock_event
+    mock_state.parsed_model_list = []
 
     mock_locator = MagicMock()
     mock_locator.first.inner_text = AsyncMock(return_value="new-model")
@@ -809,7 +823,7 @@ async def test_set_model_from_page_display_storage_logic(mock_page):
     mock_page.evaluate.return_value = json.dumps(existing_prefs)
 
     with (
-        patch.dict(sys.modules, {"server": mock_server}),
+        patch("api_utils.server_state.state", mock_state),
         patch(
             "browser_utils.model_management._verify_and_apply_ui_state",
             return_value=True,

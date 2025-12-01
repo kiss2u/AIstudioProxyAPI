@@ -63,9 +63,9 @@ async def test_init_storage_state_explicit_exists(temp_auth_file):
         ),
         patch.dict("sys.modules", {"server": MagicMock()}),
     ):
-        import server
+        from api_utils.server_state import state
 
-        server.PLAYWRIGHT_PROXY_SETTINGS = None
+        state.PLAYWRIGHT_PROXY_SETTINGS = None
 
         # 调用真实逻辑，传入真实文件路径
         await initialize_page_logic(
@@ -149,9 +149,9 @@ async def test_init_headless_auth_exists(temp_auth_file):
         ),
         patch.dict("sys.modules", {"server": MagicMock()}),
     ):
-        import server
+        from api_utils.server_state import state
 
-        server.PLAYWRIGHT_PROXY_SETTINGS = None
+        state.PLAYWRIGHT_PROXY_SETTINGS = None
 
         await initialize_page_logic(mock_browser)
 
@@ -205,9 +205,9 @@ async def test_init_debug_auth_exists(temp_auth_file):
         ),
         patch.dict("sys.modules", {"server": MagicMock()}),
     ):
-        import server
+        from api_utils.server_state import state
 
-        server.PLAYWRIGHT_PROXY_SETTINGS = None
+        state.PLAYWRIGHT_PROXY_SETTINGS = None
 
         await initialize_page_logic(mock_browser)
 
@@ -263,9 +263,9 @@ async def test_init_debug_auth_missing_falls_back(temp_auth_file_missing):
         ),
         patch.dict("sys.modules", {"server": MagicMock()}),
     ):
-        import server
+        from api_utils.server_state import state
 
-        server.PLAYWRIGHT_PROXY_SETTINGS = None
+        state.PLAYWRIGHT_PROXY_SETTINGS = None
 
         await initialize_page_logic(mock_browser)
 
@@ -302,6 +302,10 @@ async def test_init_proxy_settings_applied():
 
     proxy_config = {"server": "http://127.0.0.1:8080"}
 
+    # Create mock server with proper proxy settings
+    mock_server = MagicMock()
+    mock_server.PLAYWRIGHT_PROXY_SETTINGS = proxy_config
+
     with (
         patch.dict("os.environ", {"LAUNCH_MODE": "debug"}),
         patch("browser_utils.initialization.core.expect_async", mock_expect),
@@ -314,12 +318,8 @@ async def test_init_proxy_settings_applied():
             "browser_utils.initialization.auth.wait_for_model_list_and_handle_auth_save",
             new_callable=AsyncMock,
         ),
-        patch.dict("sys.modules", {"server": MagicMock()}),
+        patch.dict("sys.modules", {"server": mock_server}),
     ):
-        import server
-
-        server.PLAYWRIGHT_PROXY_SETTINGS = proxy_config
-
         await initialize_page_logic(mock_browser)
 
         # 验证: proxy 参数被正确传递
@@ -368,9 +368,9 @@ async def test_init_page_discovery_existing_page():
         ),
         patch.dict("sys.modules", {"server": MagicMock()}),
     ):
-        import server
+        from api_utils.server_state import state
 
-        server.PLAYWRIGHT_PROXY_SETTINGS = None
+        state.PLAYWRIGHT_PROXY_SETTINGS = None
 
         page, _ = await initialize_page_logic(mock_browser)
 
@@ -434,9 +434,9 @@ async def test_init_login_url_transition():
         patch("builtins.print"),
         patch.dict("sys.modules", {"server": MagicMock()}),
     ):
-        import server
+        from api_utils.server_state import state
 
-        server.PLAYWRIGHT_PROXY_SETTINGS = None
+        state.PLAYWRIGHT_PROXY_SETTINGS = None
 
         await initialize_page_logic(mock_browser)
 
@@ -488,10 +488,10 @@ async def test_init_model_name_extraction():
         ),
         patch.dict("sys.modules", {"server": MagicMock()}),
     ):
-        import server
+        from api_utils.server_state import state
 
-        server.PLAYWRIGHT_PROXY_SETTINGS = None
-        server.current_ai_studio_model_id = None
+        state.PLAYWRIGHT_PROXY_SETTINGS = None
+        state.current_ai_studio_model_id = None
 
         _, is_new_page = await initialize_page_logic(mock_browser)
 
@@ -544,9 +544,9 @@ async def test_init_page_readiness_verification():
         ),
         patch.dict("sys.modules", {"server": MagicMock()}),
     ):
-        import server
+        from api_utils.server_state import state
 
-        server.PLAYWRIGHT_PROXY_SETTINGS = None
+        state.PLAYWRIGHT_PROXY_SETTINGS = None
 
         await initialize_page_logic(mock_browser)
 

@@ -166,7 +166,9 @@ async def test_create_connection_socks_no_ssl():
     mock_proxy.connect = AsyncMock(return_value=mock_sock)
 
     with (
-        patch("stream.proxy_connector.Proxy.from_url", return_value=mock_proxy),
+        patch(
+            "stream.proxy_connector.Proxy.from_url", return_value=mock_proxy
+        ) as mock_from_url,
         patch("asyncio.open_connection", new_callable=AsyncMock) as mock_open,
     ):
         mock_open.return_value = (mock_reader, mock_writer)
@@ -174,9 +176,7 @@ async def test_create_connection_socks_no_ssl():
         reader, writer = await connector.create_connection("example.com", 80, ssl=None)
 
         # 验证: Proxy.from_url 被调用
-        from stream.proxy_connector import Proxy
-
-        Proxy.from_url.assert_called_once_with("socks5://localhost:1080")
+        mock_from_url.assert_called_once_with("socks5://localhost:1080")
 
         # 验证: proxy.connect 被调用
         mock_proxy.connect.assert_called_once_with(
@@ -282,7 +282,9 @@ async def test_create_connection_http_proxy():
     mock_proxy.connect = AsyncMock(return_value=mock_sock)
 
     with (
-        patch("stream.proxy_connector.Proxy.from_url", return_value=mock_proxy),
+        patch(
+            "stream.proxy_connector.Proxy.from_url", return_value=mock_proxy
+        ) as mock_from_url,
         patch("asyncio.open_connection", new_callable=AsyncMock) as mock_open,
     ):
         mock_open.return_value = (mock_reader, mock_writer)
@@ -290,9 +292,7 @@ async def test_create_connection_http_proxy():
         reader, writer = await connector.create_connection("target.com", 80)
 
         # 验证: Proxy.from_url 使用 HTTP 代理 URL
-        from stream.proxy_connector import Proxy
-
-        Proxy.from_url.assert_called_once_with("http://proxy.example.com:8080")
+        mock_from_url.assert_called_once_with("http://proxy.example.com:8080")
 
         # 验证: 连接到目标主机
         mock_proxy.connect.assert_called_once_with(dest_host="target.com", dest_port=80)
@@ -311,7 +311,9 @@ async def test_create_connection_socks_proxy_with_auth():
     mock_proxy.connect = AsyncMock(return_value=mock_sock)
 
     with (
-        patch("stream.proxy_connector.Proxy.from_url", return_value=mock_proxy),
+        patch(
+            "stream.proxy_connector.Proxy.from_url", return_value=mock_proxy
+        ) as mock_from_url,
         patch("asyncio.open_connection", new_callable=AsyncMock) as mock_open,
     ):
         mock_open.return_value = (mock_reader, mock_writer)
@@ -319,9 +321,7 @@ async def test_create_connection_socks_proxy_with_auth():
         reader, writer = await connector.create_connection("example.com", 80)
 
         # 验证: Proxy.from_url 接收带认证的 URL
-        from stream.proxy_connector import Proxy
-
-        Proxy.from_url.assert_called_once_with(proxy_url)
+        mock_from_url.assert_called_once_with(proxy_url)
 
         mock_proxy.connect.assert_called_once_with(
             dest_host="example.com", dest_port=80
