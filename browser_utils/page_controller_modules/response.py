@@ -24,7 +24,9 @@ from .base import BaseController
 class ResponseController(BaseController):
     """Handles retrieval of AI responses."""
 
-    async def get_response(self, check_client_disconnected: Callable) -> str:
+    async def get_response(
+        self, check_client_disconnected: Callable[[str], bool]
+    ) -> str:
         """获取响应内容。"""
         set_request_id(self.req_id)
         self.logger.info("等待并获取响应...")

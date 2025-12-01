@@ -95,8 +95,6 @@ Strategy: Test page reload scenarios, event waiting, exception handling.
 
 import asyncio
 
-import pytest
-
 
 @pytest.mark.asyncio
 async def test_list_models_event_not_set_reload_success(mock_env):
@@ -155,9 +153,11 @@ async def test_list_models_reload_timeout(mock_env):
     page_instance.is_closed.return_value = False
     page_instance.reload = AsyncMock()
 
-    # Mock wait() 永远挂起,导致 wait_for 超时
+    # Mock wait() 挂起足够长时间,导致 wait_for 超时 (wait_for timeout is 10s)
     async def mock_wait_forever():
-        await asyncio.sleep(999)  # 永远不会完成
+        await asyncio.sleep(
+            15
+        )  # Longer than wait_for timeout (10s) but shorter than pytest timeout
 
     model_list_fetch_event.wait = mock_wait_forever
 
@@ -276,7 +276,7 @@ async def test_list_models_page_none(mock_env):
     response = await list_models(
         logger=logger,
         model_list_fetch_event=model_list_fetch_event,
-        page_instance=page_instance,
+        page_instance=page_instance,  # type: ignore[arg-type]
         parsed_model_list=parsed_model_list,
         excluded_model_ids=excluded_model_ids,
     )

@@ -1,4 +1,5 @@
 import base64
+import binascii
 import hashlib
 import os
 import re
@@ -56,7 +57,7 @@ def extract_data_url_to_local(
 
     try:
         decoded_bytes = base64.b64decode(encoded_data)
-    except base64.binascii.Error as e:
+    except binascii.Error as e:
         logger.error(f"错误: Base64 解码失败 - {e}")
         return None
 

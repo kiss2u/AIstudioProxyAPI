@@ -36,6 +36,8 @@ async def list_models(
         try:
             await page_instance.reload(wait_until="domcontentloaded", timeout=20000)
             await asyncio.wait_for(model_list_fetch_event.wait(), timeout=10.0)
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             logger.error(f"/v1/models: 刷新或等待模型列表时出错: {e}")
         finally:

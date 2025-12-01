@@ -27,7 +27,7 @@ def test_extract_json_none_input():
     """
     from api_utils.utils import _extract_json_from_text
 
-    result = _extract_json_from_text(None)
+    result = _extract_json_from_text(None)  # type: ignore[arg-type]
 
     assert result is None
 

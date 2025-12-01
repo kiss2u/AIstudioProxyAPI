@@ -271,9 +271,6 @@ Strategy: Trigger exception paths and boundary conditions not covered by main te
 """
 
 
-import pytest
-
-
 class TestHttpInterceptorEdgeCases:
     @pytest.fixture
     def interceptor(self):
@@ -553,8 +550,6 @@ Targets:
 """
 
 from unittest.mock import patch
-
-import pytest
 
 
 class TestInterceptorExceptionPaths:

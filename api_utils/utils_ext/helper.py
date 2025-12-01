@@ -1,3 +1,4 @@
+import asyncio
 from typing import AsyncGenerator
 
 
@@ -23,5 +24,7 @@ async def use_helper_get_response(
                             yield chunk.decode("utf-8", errors="ignore")
                 else:
                     logger.error(f"Helper端点返回错误状态: {response.status}")
+    except asyncio.CancelledError:
+        raise
     except Exception as e:
         logger.error(f"使用Helper端点时出错: {e}")

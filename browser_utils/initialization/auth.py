@@ -126,6 +126,8 @@ async def _handle_auth_file_save(temp_context, loop):
         await temp_context.storage_state(path=auth_save_path)
         logger.info(f"   认证状态已成功保存到: {auth_save_path}")
         print(f"   认证状态已成功保存到: {auth_save_path}", flush=True)
+    except asyncio.CancelledError:
+        raise
     except Exception as save_state_err:
         logger.error(f"   保存认证状态失败: {save_state_err}", exc_info=True)
         print(f"   保存认证状态失败: {save_state_err}", flush=True)
@@ -146,6 +148,8 @@ async def _handle_auth_file_save_with_filename(temp_context, filename: str):
         await temp_context.storage_state(path=auth_save_path)
         print(f"   认证状态已自动保存到: {auth_save_path}", flush=True)
         logger.info(f"   自动保存认证状态成功: {auth_save_path}")
+    except asyncio.CancelledError:
+        raise
     except Exception as save_state_err:
         logger.error(f"   自动保存认证状态失败: {save_state_err}", exc_info=True)
         print(f"   自动保存认证状态失败: {save_state_err}", flush=True)
@@ -164,6 +168,8 @@ async def _handle_auth_file_save_auto(temp_context):
         await temp_context.storage_state(path=auth_save_path)
         logger.info(f"   认证状态已成功保存到: {auth_save_path}")
         print(f"   认证状态已成功保存到: {auth_save_path}", flush=True)
+    except asyncio.CancelledError:
+        raise
     except Exception as save_state_err:
         logger.error(f"   自动保存认证状态失败: {save_state_err}", exc_info=True)
         print(f"   自动保存认证状态失败: {save_state_err}", flush=True)

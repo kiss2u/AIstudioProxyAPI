@@ -29,6 +29,9 @@ if TYPE_CHECKING:
         Playwright as AsyncPlaywright,
     )
 
+    from api_utils.context_types import QueueItem
+    from models.logging import WebSocketConnectionManager
+
 
 class ServerState:
     """
@@ -46,7 +49,7 @@ class ServerState:
         """Reset all state to initial values. Useful for testing."""
         # --- Stream Queue ---
         self.STREAM_QUEUE: Optional[multiprocessing.Queue] = None
-        self.STREAM_PROCESS: Optional[Any] = None
+        self.STREAM_PROCESS: Optional[multiprocessing.Process] = None
 
         # --- Playwright/Browser State ---
         self.playwright_manager: Optional["AsyncPlaywright"] = None
@@ -61,7 +64,7 @@ class ServerState:
         self.PLAYWRIGHT_PROXY_SETTINGS: Optional[Dict[str, str]] = None
 
         # --- Model State ---
-        self.global_model_list_raw_json: Optional[List[Any]] = None
+        self.global_model_list_raw_json: Optional[str] = None
         self.parsed_model_list: List[Dict[str, Any]] = []
         self.model_list_fetch_event: Event = asyncio.Event()
         self.current_ai_studio_model_id: Optional[str] = None
@@ -69,9 +72,9 @@ class ServerState:
         self.excluded_model_ids: Set[str] = set()
 
         # --- Request Processing State ---
-        self.request_queue: Optional[Queue] = None
+        self.request_queue: "Optional[Queue[QueueItem]]" = None
         self.processing_lock: Optional[Lock] = None
-        self.worker_task: Optional[Task] = None
+        self.worker_task: "Optional[Task[None]]" = None
 
         # --- Parameter Cache ---
         self.page_params_cache: Dict[str, Any] = {}
@@ -86,7 +89,7 @@ class ServerState:
 
         # --- Logging ---
         self.logger: logging.Logger = logging.getLogger("AIStudioProxyServer")
-        self.log_ws_manager: Optional[Any] = None
+        self.log_ws_manager: Optional["WebSocketConnectionManager"] = None
 
         # --- Control Flags ---
         self.should_exit: bool = False
@@ -105,10 +108,7 @@ class ServerState:
             "is_page_ready": self.is_page_ready,
             "current_model": self.current_ai_studio_model_id,
             "queue_size": self.request_queue.qsize() if self.request_queue else 0,
-            "worker_running": self.worker_task is not None
-            and not self.worker_task.done()
-            if self.worker_task
-            else False,
+            "worker_running": bool(self.worker_task and not self.worker_task.done()),
         }
 
 

@@ -17,7 +17,7 @@ Usage:
 """
 
 import time
-from typing import Any, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException
 
@@ -63,7 +63,7 @@ class AIStudioProxyError(Exception):
         Returns:
             HTTPException with appropriate status code and headers
         """
-        headers = {}
+        headers: Dict[str, str] = {}
         if self.retry_after is not None:
             headers["Retry-After"] = str(self.retry_after)
 
@@ -165,7 +165,7 @@ class InvalidModelError(ModelError):
     """Requested model does not exist or is not available."""
 
     def __init__(
-        self, model_id: str, available_models: Optional[list] = None, **kwargs: Any
+        self, model_id: str, available_models: Optional[List[str]] = None, **kwargs: Any
     ):
         message = f"Invalid model '{model_id}'"
         if available_models:

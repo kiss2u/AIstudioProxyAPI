@@ -51,7 +51,7 @@ fetch_success = False
 try:
     # The exact way to trigger fetch programmatically might differ.
     # This tries to import the CLI module and run the fetch command.
-    from camoufox import cli
+    from camoufox import cli  # type: ignore[attr-defined]
 
     # Simulate command line arguments: ['fetch']
     # Note: cli.cli() might exit the process directly on completion or error.

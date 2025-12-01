@@ -1,4 +1,5 @@
 # --- browser_utils/initialization/scripts.py ---
+import asyncio
 import logging
 import os
 
@@ -30,6 +31,8 @@ async def add_init_scripts_to_context(context: AsyncBrowserContext):
             f"已将脚本添加到浏览器上下文初始化脚本: {os.path.basename(USERSCRIPT_PATH)}"
         )
 
+    except asyncio.CancelledError:
+        raise
     except Exception as e:
         logger.error(f"添加初始化脚本到上下文时发生错误: {e}")
 

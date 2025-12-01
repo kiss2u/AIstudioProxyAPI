@@ -5,8 +5,9 @@ Focus: Test _get_latest_user_text with pure function testing (no mocks).
 Strategy: Comprehensive edge case coverage for message content extraction.
 """
 
+from typing import List, cast
 
-from models import Message
+from models import Message, MessageContentItem
 
 
 def test_get_latest_user_text_empty_messages():
@@ -103,11 +104,14 @@ def test_get_latest_user_text_list_content_with_text_items():
     messages = [
         Message(
             role="user",
-            content=[
-                {"type": "text", "text": "First part"},
-                {"type": "text", "text": "Second part"},
-                {"type": "text", "text": "Third part"},
-            ],
+            content=cast(
+                List[MessageContentItem],
+                [
+                    {"type": "text", "text": "First part"},
+                    {"type": "text", "text": "Second part"},
+                    {"type": "text", "text": "Third part"},
+                ],
+            ),
         )
     ]
 
@@ -126,14 +130,17 @@ def test_get_latest_user_text_list_content_with_mixed_types():
     messages = [
         Message(
             role="user",
-            content=[
-                {"type": "text", "text": "Text before image"},
-                {
-                    "type": "image_url",
-                    "image_url": {"url": "http://example.com/img.jpg"},
-                },
-                {"type": "text", "text": "Text after image"},
-            ],
+            content=cast(
+                List[MessageContentItem],
+                [
+                    {"type": "text", "text": "Text before image"},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": "http://example.com/img.jpg"},
+                    },
+                    {"type": "text", "text": "Text after image"},
+                ],
+            ),
         )
     ]
 
@@ -152,11 +159,14 @@ def test_get_latest_user_text_list_content_empty_text():
     messages = [
         Message(
             role="user",
-            content=[
-                {"type": "text", "text": ""},
-                {"type": "text", "text": "Non-empty"},
-                {"type": "text", "text": ""},
-            ],
+            content=cast(
+                List[MessageContentItem],
+                [
+                    {"type": "text", "text": ""},
+                    {"type": "text", "text": "Non-empty"},
+                    {"type": "text", "text": ""},
+                ],
+            ),
         )
     ]
 
@@ -175,12 +185,15 @@ def test_get_latest_user_text_list_content_no_text_items():
     messages = [
         Message(
             role="user",
-            content=[
-                {
-                    "type": "image_url",
-                    "image_url": {"url": "http://example.com/img.jpg"},
-                },
-            ],
+            content=cast(
+                List[MessageContentItem],
+                [
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": "http://example.com/img.jpg"},
+                    },
+                ],
+            ),
         )
     ]
 
@@ -219,7 +232,7 @@ def test_get_latest_user_text_content_is_none():
 
     messages = [MockMessage()]
 
-    result = _get_latest_user_text(messages)
+    result = _get_latest_user_text(cast(List[Message], messages))
 
     # 函数会进入 else 分支，返回 ""
     assert result == ""

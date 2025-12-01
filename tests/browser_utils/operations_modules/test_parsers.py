@@ -238,7 +238,7 @@ def test_parse_userscript_models_exception_handling():
     # Invalid script content that will cause regex to fail
     script = None
 
-    models = _parse_userscript_models(script)
+    models = _parse_userscript_models(script)  # type: ignore[arg-type]
 
     assert models == []
 
@@ -436,13 +436,18 @@ async def test_handle_model_list_response_not_ok(mock_server_module):
 @patch(
     "browser_utils.operations_modules.parsers.MODELS_ENDPOINT_URL_CONTAINS", "models"
 )
-async def test_handle_model_list_response_simple_list(mock_server_module):
+@patch("api_utils.server_state.state")
+async def test_handle_model_list_response_simple_list(mock_state):
     """Test processing simple list of model dicts."""
     # Reset server state
-    mock_server_module.global_model_list_raw_json = None
-    mock_server_module.parsed_model_list = []
-    mock_server_module.excluded_model_ids = set()
-    mock_server_module.is_page_ready = True
+    import asyncio
+
+    mock_state.global_model_list_raw_json = None
+    mock_state.parsed_model_list = []
+    mock_state.excluded_model_ids = set()
+    mock_state.is_page_ready = True
+    mock_state.model_list_fetch_event = AsyncMock(spec=asyncio.Event)
+    mock_state.model_list_fetch_event.is_set.return_value = False
 
     response = AsyncMock()
     response.url = "https://example.com/models"
@@ -454,20 +459,25 @@ async def test_handle_model_list_response_simple_list(mock_server_module):
 
     await _handle_model_list_response(response)
 
-    assert len(mock_server_module.parsed_model_list) == 1
-    assert mock_server_module.parsed_model_list[0]["id"] == "gemini-pro"
-    assert mock_server_module.parsed_model_list[0]["display_name"] == "Gemini Pro"
+    assert len(mock_state.parsed_model_list) == 1
+    assert mock_state.parsed_model_list[0]["id"] == "gemini-pro"
+    assert mock_state.parsed_model_list[0]["display_name"] == "Gemini Pro"
 
 
 @pytest.mark.asyncio
 @patch(
     "browser_utils.operations_modules.parsers.MODELS_ENDPOINT_URL_CONTAINS", "models"
 )
-async def test_handle_model_list_response_dict_with_data_key(mock_server_module):
+@patch("api_utils.server_state.state")
+async def test_handle_model_list_response_dict_with_data_key(mock_state):
     """Test processing dict response with 'data' key."""
-    mock_server_module.parsed_model_list = []
-    mock_server_module.excluded_model_ids = set()
-    mock_server_module.is_page_ready = True
+    import asyncio
+
+    mock_state.parsed_model_list = []
+    mock_state.excluded_model_ids = set()
+    mock_state.is_page_ready = True
+    mock_state.model_list_fetch_event = AsyncMock(spec=asyncio.Event)
+    mock_state.model_list_fetch_event.is_set.return_value = False
 
     response = AsyncMock()
     response.url = "https://example.com/models"
@@ -476,19 +486,24 @@ async def test_handle_model_list_response_dict_with_data_key(mock_server_module)
 
     await _handle_model_list_response(response)
 
-    assert len(mock_server_module.parsed_model_list) == 1
-    assert mock_server_module.parsed_model_list[0]["id"] == "model-1"
+    assert len(mock_state.parsed_model_list) == 1
+    assert mock_state.parsed_model_list[0]["id"] == "model-1"
 
 
 @pytest.mark.asyncio
 @patch(
     "browser_utils.operations_modules.parsers.MODELS_ENDPOINT_URL_CONTAINS", "models"
 )
-async def test_handle_model_list_response_dict_with_models_key(mock_server_module):
+@patch("api_utils.server_state.state")
+async def test_handle_model_list_response_dict_with_models_key(mock_state):
     """Test processing dict response with 'models' key."""
-    mock_server_module.parsed_model_list = []
-    mock_server_module.excluded_model_ids = set()
-    mock_server_module.is_page_ready = True
+    import asyncio
+
+    mock_state.parsed_model_list = []
+    mock_state.excluded_model_ids = set()
+    mock_state.is_page_ready = True
+    mock_state.model_list_fetch_event = AsyncMock(spec=asyncio.Event)
+    mock_state.model_list_fetch_event.is_set.return_value = False
 
     response = AsyncMock()
     response.url = "https://example.com/models"
@@ -499,19 +514,24 @@ async def test_handle_model_list_response_dict_with_models_key(mock_server_modul
 
     await _handle_model_list_response(response)
 
-    assert len(mock_server_module.parsed_model_list) == 1
-    assert mock_server_module.parsed_model_list[0]["id"] == "model-2"
+    assert len(mock_state.parsed_model_list) == 1
+    assert mock_state.parsed_model_list[0]["id"] == "model-2"
 
 
 @pytest.mark.asyncio
 @patch(
     "browser_utils.operations_modules.parsers.MODELS_ENDPOINT_URL_CONTAINS", "models"
 )
-async def test_handle_model_list_response_list_based_model_fields(mock_server_module):
+@patch("api_utils.server_state.state")
+async def test_handle_model_list_response_list_based_model_fields(mock_state):
     """Test processing list-based model fields."""
-    mock_server_module.parsed_model_list = []
-    mock_server_module.excluded_model_ids = set()
-    mock_server_module.is_page_ready = True
+    import asyncio
+
+    mock_state.parsed_model_list = []
+    mock_state.excluded_model_ids = set()
+    mock_state.is_page_ready = True
+    mock_state.model_list_fetch_event = AsyncMock(spec=asyncio.Event)
+    mock_state.model_list_fetch_event.is_set.return_value = False
 
     response = AsyncMock()
     response.url = "https://example.com/models"
@@ -523,22 +543,27 @@ async def test_handle_model_list_response_list_based_model_fields(mock_server_mo
 
     await _handle_model_list_response(response)
 
-    assert len(mock_server_module.parsed_model_list) == 1
-    assert mock_server_module.parsed_model_list[0]["id"] == "test-list"
-    assert mock_server_module.parsed_model_list[0]["display_name"] == "Test List Model"
-    assert mock_server_module.parsed_model_list[0]["default_max_output_tokens"] == 8192
-    assert mock_server_module.parsed_model_list[0]["default_top_p"] == 0.95
+    assert len(mock_state.parsed_model_list) == 1
+    assert mock_state.parsed_model_list[0]["id"] == "test-list"
+    assert mock_state.parsed_model_list[0]["display_name"] == "Test List Model"
+    assert mock_state.parsed_model_list[0]["default_max_output_tokens"] == 8192
+    assert mock_state.parsed_model_list[0]["default_top_p"] == 0.95
 
 
 @pytest.mark.asyncio
 @patch(
     "browser_utils.operations_modules.parsers.MODELS_ENDPOINT_URL_CONTAINS", "models"
 )
-async def test_handle_model_list_response_excluded_model(mock_server_module):
+@patch("api_utils.server_state.state")
+async def test_handle_model_list_response_excluded_model(mock_state):
     """Test that excluded models are skipped."""
-    mock_server_module.parsed_model_list = []
-    mock_server_module.excluded_model_ids = {"excluded-model"}
-    mock_server_module.is_page_ready = True
+    import asyncio
+
+    mock_state.parsed_model_list = []
+    mock_state.excluded_model_ids = {"excluded-model"}
+    mock_state.is_page_ready = True
+    mock_state.model_list_fetch_event = AsyncMock(spec=asyncio.Event)
+    mock_state.model_list_fetch_event.is_set.return_value = False
 
     response = AsyncMock()
     response.url = "https://example.com/models"
@@ -550,19 +575,24 @@ async def test_handle_model_list_response_excluded_model(mock_server_module):
 
     await _handle_model_list_response(response)
 
-    assert len(mock_server_module.parsed_model_list) == 1
-    assert mock_server_module.parsed_model_list[0]["id"] == "included-model"
+    assert len(mock_state.parsed_model_list) == 1
+    assert mock_state.parsed_model_list[0]["id"] == "included-model"
 
 
 @pytest.mark.asyncio
 @patch(
     "browser_utils.operations_modules.parsers.MODELS_ENDPOINT_URL_CONTAINS", "models"
 )
-async def test_handle_model_list_response_empty_list(mock_server_module):
+@patch("api_utils.server_state.state")
+async def test_handle_model_list_response_empty_list(mock_state):
     """Test handling of empty model list."""
-    mock_server_module.parsed_model_list = []
-    mock_server_module.excluded_model_ids = set()
-    mock_server_module.is_page_ready = True
+    import asyncio
+
+    mock_state.parsed_model_list = []
+    mock_state.excluded_model_ids = set()
+    mock_state.is_page_ready = True
+    mock_state.model_list_fetch_event = AsyncMock(spec=asyncio.Event)
+    mock_state.model_list_fetch_event.is_set.return_value = False
 
     response = AsyncMock()
     response.url = "https://example.com/models"
@@ -572,18 +602,23 @@ async def test_handle_model_list_response_empty_list(mock_server_module):
     await _handle_model_list_response(response)
 
     # Event should still be set
-    assert mock_server_module.model_list_fetch_event.is_set()
+    assert mock_state.model_list_fetch_event.set.called
 
 
 @pytest.mark.asyncio
 @patch(
     "browser_utils.operations_modules.parsers.MODELS_ENDPOINT_URL_CONTAINS", "models"
 )
-async def test_handle_model_list_response_invalid_model_id(mock_server_module):
+@patch("api_utils.server_state.state")
+async def test_handle_model_list_response_invalid_model_id(mock_state):
     """Test skipping models with invalid IDs."""
-    mock_server_module.parsed_model_list = []
-    mock_server_module.excluded_model_ids = set()
-    mock_server_module.is_page_ready = True
+    import asyncio
+
+    mock_state.parsed_model_list = []
+    mock_state.excluded_model_ids = set()
+    mock_state.is_page_ready = True
+    mock_state.model_list_fetch_event = AsyncMock(spec=asyncio.Event)
+    mock_state.model_list_fetch_event.is_set.return_value = False
 
     response = AsyncMock()
     response.url = "https://example.com/models"
@@ -596,8 +631,8 @@ async def test_handle_model_list_response_invalid_model_id(mock_server_module):
 
     await _handle_model_list_response(response)
 
-    assert len(mock_server_module.parsed_model_list) == 1
-    assert mock_server_module.parsed_model_list[0]["id"] == "valid-id"
+    assert len(mock_state.parsed_model_list) == 1
+    assert mock_state.parsed_model_list[0]["id"] == "valid-id"
 
 
 @pytest.mark.asyncio
@@ -605,11 +640,16 @@ async def test_handle_model_list_response_invalid_model_id(mock_server_module):
 @patch(
     "browser_utils.operations_modules.parsers.MODELS_ENDPOINT_URL_CONTAINS", "models"
 )
-async def test_handle_model_list_response_login_flow(mock_env, mock_server_module):
+@patch("api_utils.server_state.state")
+async def test_handle_model_list_response_login_flow(mock_state, mock_env):
     """Test silent handling during login flow."""
-    mock_server_module.is_page_ready = False  # Triggers login flow
-    mock_server_module.parsed_model_list = []
-    mock_server_module.excluded_model_ids = set()
+    import asyncio
+
+    mock_state.is_page_ready = False  # Triggers login flow
+    mock_state.parsed_model_list = []
+    mock_state.excluded_model_ids = set()
+    mock_state.model_list_fetch_event = AsyncMock(spec=asyncio.Event)
+    mock_state.model_list_fetch_event.is_set.return_value = False
 
     response = AsyncMock()
     response.url = "https://example.com/models"
@@ -619,18 +659,23 @@ async def test_handle_model_list_response_login_flow(mock_env, mock_server_modul
     await _handle_model_list_response(response)
 
     # Should still process but silently (no logger.info calls in login flow)
-    assert len(mock_server_module.parsed_model_list) == 1
+    assert len(mock_state.parsed_model_list) == 1
 
 
 @pytest.mark.asyncio
 @patch(
     "browser_utils.operations_modules.parsers.MODELS_ENDPOINT_URL_CONTAINS", "models"
 )
-async def test_handle_model_list_response_three_layer_list(mock_server_module):
+@patch("api_utils.server_state.state")
+async def test_handle_model_list_response_three_layer_list(mock_state):
     """Test three-layer list structure."""
-    mock_server_module.parsed_model_list = []
-    mock_server_module.excluded_model_ids = set()
-    mock_server_module.is_page_ready = True
+    import asyncio
+
+    mock_state.parsed_model_list = []
+    mock_state.excluded_model_ids = set()
+    mock_state.is_page_ready = True
+    mock_state.model_list_fetch_event = AsyncMock(spec=asyncio.Event)
+    mock_state.model_list_fetch_event.is_set.return_value = False
 
     response = AsyncMock()
     response.url = "https://example.com/models"
@@ -645,18 +690,23 @@ async def test_handle_model_list_response_three_layer_list(mock_server_module):
 
     await _handle_model_list_response(response)
 
-    assert len(mock_server_module.parsed_model_list) == 2
+    assert len(mock_state.parsed_model_list) == 2
 
 
 @pytest.mark.asyncio
 @patch(
     "browser_utils.operations_modules.parsers.MODELS_ENDPOINT_URL_CONTAINS", "models"
 )
-async def test_handle_model_list_response_heuristic_search(mock_server_module):
+@patch("api_utils.server_state.state")
+async def test_handle_model_list_response_heuristic_search(mock_state):
     """Test heuristic search for model list in dict response."""
-    mock_server_module.parsed_model_list = []
-    mock_server_module.excluded_model_ids = set()
-    mock_server_module.is_page_ready = True
+    import asyncio
+
+    mock_state.parsed_model_list = []
+    mock_state.excluded_model_ids = set()
+    mock_state.is_page_ready = True
+    mock_state.model_list_fetch_event = AsyncMock(spec=asyncio.Event)
+    mock_state.model_list_fetch_event.is_set.return_value = False
 
     response = AsyncMock()
     response.url = "https://example.com/models"
@@ -668,17 +718,24 @@ async def test_handle_model_list_response_heuristic_search(mock_server_module):
 
     await _handle_model_list_response(response)
 
-    assert len(mock_server_module.parsed_model_list) == 1
-    assert mock_server_module.parsed_model_list[0]["id"] == "heuristic-model"
+    assert len(mock_state.parsed_model_list) == 1
+    assert mock_state.parsed_model_list[0]["id"] == "heuristic-model"
 
 
 @pytest.mark.asyncio
 @patch(
     "browser_utils.operations_modules.parsers.MODELS_ENDPOINT_URL_CONTAINS", "models"
 )
-async def test_handle_model_list_response_dict_no_models_found(mock_server_module):
+@patch("api_utils.server_state.state")
+async def test_handle_model_list_response_dict_no_models_found(mock_state):
     """Test dict response with no model array found."""
-    mock_server_module.is_page_ready = True
+    import asyncio
+
+    mock_state.is_page_ready = True
+    mock_state.parsed_model_list = []
+    mock_state.excluded_model_ids = set()
+    mock_state.model_list_fetch_event = AsyncMock(spec=asyncio.Event)
+    mock_state.model_list_fetch_event.is_set.return_value = False
 
     response = AsyncMock()
     response.url = "https://example.com/models"
@@ -688,20 +745,25 @@ async def test_handle_model_list_response_dict_no_models_found(mock_server_modul
     await _handle_model_list_response(response)
 
     # Should set event and return early
-    assert mock_server_module.model_list_fetch_event.is_set()
+    assert mock_state.model_list_fetch_event.set.called
 
 
 @pytest.mark.asyncio
 @patch(
     "browser_utils.operations_modules.parsers.MODELS_ENDPOINT_URL_CONTAINS", "models"
 )
+@patch("api_utils.server_state.state")
 async def test_handle_model_list_response_list_with_invalid_numeric_fields(
-    mock_server_module,
+    mock_state,
 ):
     """Test list-based model with invalid numeric fields."""
-    mock_server_module.parsed_model_list = []
-    mock_server_module.excluded_model_ids = set()
-    mock_server_module.is_page_ready = True
+    import asyncio
+
+    mock_state.parsed_model_list = []
+    mock_state.excluded_model_ids = set()
+    mock_state.is_page_ready = True
+    mock_state.model_list_fetch_event = AsyncMock(spec=asyncio.Event)
+    mock_state.model_list_fetch_event.is_set.return_value = False
 
     response = AsyncMock()
     response.url = "https://example.com/models"
@@ -714,7 +776,7 @@ async def test_handle_model_list_response_list_with_invalid_numeric_fields(
     await _handle_model_list_response(response)
 
     # Should still parse, but use fallback values
-    assert len(mock_server_module.parsed_model_list) == 1
+    assert len(mock_state.parsed_model_list) == 1
 
 
 @pytest.mark.asyncio
@@ -722,11 +784,16 @@ async def test_handle_model_list_response_list_with_invalid_numeric_fields(
     "browser_utils.operations_modules.parsers.MODELS_ENDPOINT_URL_CONTAINS", "models"
 )
 @patch("browser_utils.operations_modules.parsers.DEBUG_LOGS_ENABLED", True)
-async def test_handle_model_list_response_debug_logs_enabled(mock_server_module):
+@patch("api_utils.server_state.state")
+async def test_handle_model_list_response_debug_logs_enabled(mock_state):
     """Test detailed logging when DEBUG_LOGS_ENABLED=True."""
-    mock_server_module.parsed_model_list = []
-    mock_server_module.excluded_model_ids = set()
-    mock_server_module.is_page_ready = True
+    import asyncio
+
+    mock_state.parsed_model_list = []
+    mock_state.excluded_model_ids = set()
+    mock_state.is_page_ready = True
+    mock_state.model_list_fetch_event = AsyncMock(spec=asyncio.Event)
+    mock_state.model_list_fetch_event.is_set.return_value = False
 
     response = AsyncMock()
     response.url = "https://example.com/models"
@@ -740,4 +807,4 @@ async def test_handle_model_list_response_debug_logs_enabled(mock_server_module)
     await _handle_model_list_response(response)
 
     # Should log first 3 models when debug enabled
-    assert len(mock_server_module.parsed_model_list) == 3
+    assert len(mock_state.parsed_model_list) == 3

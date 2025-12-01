@@ -1,4 +1,6 @@
 import asyncio
+import logging
+from typing import Callable
 
 from playwright.async_api import Error as PlaywrightAsyncError
 from playwright.async_api import Page as AsyncPage
@@ -9,7 +11,10 @@ from logging_utils import set_request_id
 
 
 async def locate_response_elements(
-    page: AsyncPage, req_id: str, logger, check_client_disconnected
+    page: AsyncPage,
+    req_id: str,
+    logger: logging.Logger,
+    check_client_disconnected: Callable[[str], bool],
 ) -> None:
     """定位响应容器与文本元素，包含超时与错误处理。"""
     set_request_id(req_id)
@@ -26,6 +31,8 @@ async def locate_response_elements(
         from .error_utils import upstream_error
 
         raise upstream_error(req_id, f"定位AI Studio响应元素失败: {locate_err}")
+    except asyncio.CancelledError:
+        raise
     except Exception as locate_exc:
         from .error_utils import server_error
 

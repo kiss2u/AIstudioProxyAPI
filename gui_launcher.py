@@ -1046,6 +1046,7 @@ def enhanced_port_check(port, port_name_key=""):
 
 
 def check_all_required_ports(ports_to_check: List[Tuple[int, str]]) -> bool:
+    assert root_widget is not None, "root_widget must be initialized"
     occupied_ports_info = []
     for port, port_name_key in ports_to_check:
         result = enhanced_port_check(port, port_name_key)
@@ -1195,6 +1196,7 @@ def is_valid_auth_filename(filename: str) -> bool:
 
 
 def manage_auth_files_gui():
+    assert root_widget is not None, "root_widget must be initialized"
     if not os.path.exists(AUTH_PROFILES_DIR):  # 检查根目录
         messagebox.showerror(
             get_text("error_title"), get_text("auth_dirs_missing"), parent=root_widget
@@ -1368,6 +1370,9 @@ def build_launch_command(
     auto_save_auth: bool = False,
     save_auth_as: Optional[str] = None,
 ):
+    assert proxy_enabled_var is not None, "proxy_enabled_var must be initialized"
+    assert proxy_address_var is not None, "proxy_address_var must be initialized"
+
     cmd = [
         PYTHON_EXECUTABLE,
         LAUNCH_CAMOUFOX_PY,
@@ -1513,6 +1518,7 @@ def monitor_process_thread_target():
 
 
 def get_fastapi_port_from_gui() -> int:
+    assert port_entry_var is not None, "port_entry_var must be initialized"
     try:
         port_str = port_entry_var.get()
         if not port_str:
@@ -1533,6 +1539,9 @@ def get_fastapi_port_from_gui() -> int:
 
 
 def get_camoufox_debug_port_from_gui() -> int:
+    assert camoufox_debug_port_var is not None, (
+        "camoufox_debug_port_var must be initialized"
+    )
     try:
         port_str = camoufox_debug_port_var.get()
         if not port_str:
@@ -1584,6 +1593,19 @@ def load_config():
 
 # 保存配置
 def save_config():
+    assert port_entry_var is not None, "port_entry_var must be initialized"
+    assert camoufox_debug_port_var is not None, (
+        "camoufox_debug_port_var must be initialized"
+    )
+    assert stream_port_var is not None, "stream_port_var must be initialized"
+    assert stream_port_enabled_var is not None, (
+        "stream_port_enabled_var must be initialized"
+    )
+    assert helper_endpoint_var is not None, "helper_endpoint_var must be initialized"
+    assert helper_enabled_var is not None, "helper_enabled_var must be initialized"
+    assert proxy_address_var is not None, "proxy_address_var must be initialized"
+    assert proxy_enabled_var is not None, "proxy_enabled_var must be initialized"
+
     config = {
         "fastapi_port": port_entry_var.get(),
         "camoufox_debug_port": camoufox_debug_port_var.get(),
@@ -1604,6 +1626,8 @@ def save_config():
 
 def custom_yes_no_dialog(title, message, yes_text="Yes", no_text="No"):
     """Creates a custom dialog with specified button texts."""
+    assert root_widget is not None, "root_widget must be initialized"
+
     dialog = tk.Toplevel(root_widget)
     dialog.title(title)
     dialog.transient(root_widget)
@@ -1646,6 +1670,19 @@ def custom_yes_no_dialog(title, message, yes_text="Yes", no_text="No"):
 
 def have_settings_changed() -> bool:
     """检查GUI设置是否已更改"""
+    assert port_entry_var is not None, "port_entry_var must be initialized"
+    assert camoufox_debug_port_var is not None, (
+        "camoufox_debug_port_var must be initialized"
+    )
+    assert stream_port_var is not None, "stream_port_var must be initialized"
+    assert stream_port_enabled_var is not None, (
+        "stream_port_enabled_var must be initialized"
+    )
+    assert helper_endpoint_var is not None, "helper_endpoint_var must be initialized"
+    assert helper_enabled_var is not None, "helper_enabled_var must be initialized"
+    assert proxy_address_var is not None, "proxy_address_var must be initialized"
+    assert proxy_enabled_var is not None, "proxy_enabled_var must be initialized"
+
     global g_config
     if not g_config:
         return False
@@ -1689,6 +1726,7 @@ def have_settings_changed() -> bool:
 
 def prompt_to_save_data():
     """显示一个弹出窗口，询问用户是否要保存当前配置。"""
+    assert root_widget is not None, "root_widget must be initialized"
     global g_config
     if custom_yes_no_dialog(
         get_text("confirm_save_settings_title"),
@@ -1707,6 +1745,20 @@ def prompt_to_save_data():
 
 # 重置为默认配置，包含代理设置
 def reset_to_defaults():
+    assert root_widget is not None, "root_widget must be initialized"
+    assert port_entry_var is not None, "port_entry_var must be initialized"
+    assert camoufox_debug_port_var is not None, (
+        "camoufox_debug_port_var must be initialized"
+    )
+    assert stream_port_var is not None, "stream_port_var must be initialized"
+    assert stream_port_enabled_var is not None, (
+        "stream_port_enabled_var must be initialized"
+    )
+    assert helper_endpoint_var is not None, "helper_endpoint_var must be initialized"
+    assert helper_enabled_var is not None, "helper_enabled_var must be initialized"
+    assert proxy_address_var is not None, "proxy_address_var must be initialized"
+    assert proxy_enabled_var is not None, "proxy_enabled_var must be initialized"
+
     if messagebox.askyesno(
         get_text("confirm_reset_title"),
         get_text("confirm_reset_message"),
@@ -1730,6 +1782,9 @@ def _configure_proxy_env_vars() -> Dict[str, str]:
     配置代理环境变量（已弃用，现在主要通过 --internal-camoufox-proxy 参数传递）
     保留此函数以维持向后兼容性，但现在主要用于状态显示
     """
+    assert proxy_enabled_var is not None, "proxy_enabled_var must be initialized"
+    assert proxy_address_var is not None, "proxy_address_var must be initialized"
+
     proxy_env = {}
     if proxy_enabled_var.get():
         proxy_addr = proxy_address_var.get().strip()
@@ -1805,10 +1860,7 @@ def _launch_process_gui(
         env_prefix_parts = []
         if env_vars:  # env_vars 应该是从 _configure_proxy_env_vars() 来的 proxy_env
             for key, value in env_vars.items():
-                if value is not None:  # 确保值存在且不为空字符串
-                    env_prefix_parts.append(
-                        f"{shlex.quote(key)}={shlex.quote(str(value))}"
-                    )
+                env_prefix_parts.append(f"{shlex.quote(key)}={shlex.quote(str(value))}")
         env_prefix_str = " ".join(env_prefix_parts)
 
         # Construct the full shell command to be executed in the new terminal
@@ -2178,10 +2230,8 @@ def start_virtual_display_gui():
 
 def is_llm_service_running() -> bool:
     """检查本地LLM模拟服务是否正在运行"""
-    return (
-        llm_service_process_info.get("popen")
-        and llm_service_process_info["popen"].poll() is None
-    )
+    popen = llm_service_process_info.get("popen")
+    return bool(popen and popen.poll() is None)
 
 
 def monitor_llm_process_thread_target():
@@ -2388,6 +2438,7 @@ def _check_llm_backend_and_launch_thread():
 
 def start_llm_service_gui():
     """GUI命令：启动本地LLM模拟服务"""
+    assert root_widget is not None, "root_widget must be initialized"
     if is_llm_service_running():
         pid = llm_service_process_info["popen"].pid
         update_status_bar("status_llm_already_running", pid=pid)
@@ -2405,6 +2456,8 @@ def start_llm_service_gui():
 
 def stop_llm_service_gui():
     """GUI命令：停止本地LLM模拟服务"""
+    assert root_widget is not None, "root_widget must be initialized"
+
     service_name = get_text(
         llm_service_process_info.get("service_name_key", "llm_service_name_key")
     )
@@ -2501,6 +2554,12 @@ def stop_llm_service_gui():
 
 
 def query_port_and_display_pids_gui():
+    assert root_widget is not None, "root_widget must be initialized"
+    assert stream_port_enabled_var is not None, (
+        "stream_port_enabled_var must be initialized"
+    )
+    assert stream_port_var is not None, "stream_port_var must be initialized"
+
     ports_to_query_info = []
     ports_desc_list = []
 
@@ -2690,7 +2749,13 @@ def _perform_proxy_test(proxy_address: str, test_url: str) -> Tuple[bool, str]:
     Returns (success_status, message_or_error_string).
     """
     max_attempts = 3
-    backup_url = LANG_TEXTS["proxy_test_url_backup"]
+    backup_url_value = LANG_TEXTS["proxy_test_url_backup"]
+    # Ensure backup_url is a string (LANG_TEXTS contains both str and dict values)
+    backup_url: str = (
+        str(backup_url_value)
+        if not isinstance(backup_url_value, dict)
+        else "http://www.google.com"
+    )
     urls_to_try = [test_url]
 
     # 如果主URL不是备用URL，则添加备用URL
@@ -2740,11 +2805,14 @@ def _perform_proxy_test(proxy_address: str, test_url: str) -> Tuple[bool, str]:
 
 def _proxy_test_thread(proxy_addr: str, test_url: str):
     """在后台线程中执行代理测试"""
+    assert root_widget is not None, "root_widget must be initialized"
+
     try:
         success, message = _perform_proxy_test(proxy_addr, test_url)
 
         # 在主线程中更新GUI
         def update_gui():
+            assert root_widget is not None  # Type narrowing for nested function
             if success:
                 messagebox.showinfo(get_text("info_title"), message, parent=root_widget)
                 update_status_bar("proxy_test_success_status", url=test_url)
@@ -2756,14 +2824,14 @@ def _proxy_test_thread(proxy_addr: str, test_url: str):
                 )
                 update_status_bar("proxy_test_failure_status", error=message)
 
-        if root_widget:
-            root_widget.after_idle(update_gui)
+        root_widget.after_idle(update_gui)
 
     except Exception as e:
         logger.error(f"Proxy test thread error: {e}", exc_info=True)
         error_msg = str(e)  # Capture error message
 
         def show_error():
+            assert root_widget is not None  # Type narrowing for nested function
             messagebox.showerror(
                 get_text("error_title"),
                 f"代理测试过程中发生错误: {error_msg}",
@@ -2771,11 +2839,14 @@ def _proxy_test_thread(proxy_addr: str, test_url: str):
             )
             update_status_bar("proxy_test_failure_status", error=error_msg)
 
-        if root_widget:
-            root_widget.after_idle(show_error)
+        root_widget.after_idle(show_error)
 
 
 def test_proxy_connectivity_gui():
+    assert root_widget is not None, "root_widget must be initialized"
+    assert proxy_enabled_var is not None, "proxy_enabled_var must be initialized"
+    assert proxy_address_var is not None, "proxy_address_var must be initialized"
+
     if not proxy_enabled_var.get() or not proxy_address_var.get().strip():
         messagebox.showwarning(
             get_text("warning_title"),
@@ -2798,6 +2869,7 @@ def test_proxy_connectivity_gui():
 
 
 def stop_selected_pid_from_list_gui():
+    assert root_widget is not None, "root_widget must be initialized"
     if not pid_listbox_widget:
         return
     selected_indices = pid_listbox_widget.curselection()
@@ -2970,7 +3042,6 @@ def kill_process_pid_admin(pid: int) -> bool:
         elif system in ["Linux", "Darwin"]:  # Linux或macOS
             # 使用sudo尝试终止进程
             logger.info("使用sudo在新终端中终止进程")
-            ["sudo", "kill", "-9", str(pid)]
             # 对于GUI程序，我们需要让用户在终端输入密码，所以使用新终端窗口
             if system == "Darwin":  # macOS
                 logger.info("在macOS上使用AppleScript打开Terminal并执行sudo命令")
@@ -3665,6 +3736,8 @@ def _get_launch_parameters() -> Optional[Dict[str, Any]]:
 
 # 更新on_app_close_main函数，反映服务独立性
 def on_app_close_main():
+    assert root_widget is not None, "root_widget must be initialized"
+
     # 保存当前配置
     save_config()
 
@@ -3709,11 +3782,11 @@ def on_app_close_main():
         get_text("confirm_quit_message"),
         parent=root_widget,
     ):
-        if root_widget:
-            root_widget.destroy()
+        root_widget.destroy()
 
 
 def show_service_closing_guide():
+    assert root_widget is not None, "root_widget must be initialized"
     messagebox.showinfo(
         get_text("service_closing_guide"),
         get_text("service_closing_guide_message"),
@@ -3740,7 +3813,7 @@ if __name__ == "__main__":
         try:
             root_err = tk.Tk()
             root_err.withdraw()
-            messagebox.showerror(err_title, err_msg, parent=None)
+            messagebox.showerror(err_title, err_msg, parent=root_err)
             root_err.destroy()
         except tk.TclError:
             print(f"ERROR: {err_msg}", file=sys.stderr)

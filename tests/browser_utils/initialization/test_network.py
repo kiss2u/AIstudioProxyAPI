@@ -201,6 +201,7 @@ def test_find_template_flash_preferred():
 
     result = _find_template_model(models)
 
+    assert result is not None
     assert "flash" in result[0].lower()
 
 
@@ -213,6 +214,7 @@ def test_find_template_pro_fallback():
 
     result = _find_template_model(models)
 
+    assert result is not None
     assert "pro" in result[0].lower()
 
 
@@ -375,6 +377,7 @@ async def test_inject_models_array_extension():
 
         # Verify model was injected with extension to >10 elements
         models = _find_model_list_array(result)
+        assert models is not None, "models should not be None"
         assert len(models) == 2  # Original + injected
         injected_model = models[0]
         assert len(injected_model) > 10  # Should be extended

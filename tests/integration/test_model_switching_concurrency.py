@@ -15,11 +15,13 @@ Coverage Target: Concurrent model switching integrity
 """
 
 import asyncio
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
 
+from api_utils.context_types import RequestContext
 from api_utils.model_switching import handle_model_switching
 from api_utils.server_state import state
 
@@ -28,16 +30,84 @@ from api_utils.server_state import state
 class TestConcurrentModelSwitching:
     """Integration tests for concurrent model switching with real locks."""
 
-    @pytest.mark.skip(reason="Deep browser mock issues - needs complete test rewrite")
     async def test_concurrent_switches_are_serialized(self, real_server_state):
         """
         Test that concurrent model switch requests are serialized by lock.
 
-        SKIPPED: This test has design flaws where it tries to test complex
-        browser operations through incomplete mocks, causing Playwright errors.
-        Needs complete rewrite to properly mock all browser interactions.
+        Verifies that the model_switching_lock prevents concurrent browser operations.
         """
-        pass
+        lock = real_server_state.model_switching_lock
+        execution_log = []
+
+        # Save original state
+        original_model = state.current_ai_studio_model_id
+        try:
+            state.current_ai_studio_model_id = "gemini-1.5-pro"
+
+            async def mock_browser_switch(page, model_id, req_id):
+                """Mock browser switch that logs and simulates work."""
+                execution_log.append(f"{req_id}_browser_start")
+                await asyncio.sleep(0.05)  # Simulate browser operation
+                execution_log.append(f"{req_id}_browser_done")
+                return True
+
+            async def switch_with_logging(req_id: str, target_model: str):
+                """Switch model and log execution order."""
+                execution_log.append(f"{req_id}_wait_lock")
+
+                context = cast(
+                    RequestContext,
+                    {
+                        "req_id": req_id,
+                        "logger": MagicMock(),
+                        "page": real_server_state.page_instance,
+                        "model_switching_lock": lock,
+                        "needs_model_switching": True,
+                        "model_id_to_use": target_model,
+                        "current_ai_studio_model_id": state.current_ai_studio_model_id,
+                    },
+                )
+
+                await handle_model_switching(req_id, context)
+                execution_log.append(f"{req_id}_complete")
+
+            # Start 3 concurrent switches with mock applied
+            with patch(
+                "browser_utils.switch_ai_studio_model",
+                new_callable=AsyncMock,
+                side_effect=mock_browser_switch,
+            ):
+                tasks = [
+                    asyncio.create_task(
+                        switch_with_logging("req1", "gemini-1.5-flash")
+                    ),
+                    asyncio.create_task(
+                        switch_with_logging("req2", "gemini-2.0-flash")
+                    ),
+                    asyncio.create_task(switch_with_logging("req3", "gemini-1.5-pro")),
+                ]
+
+                await asyncio.gather(*tasks)
+
+            # Verify serialization: no overlapping browser operations
+            # Find all browser_start and browser_done pairs
+            browser_starts = [
+                i for i, e in enumerate(execution_log) if "browser_start" in e
+            ]
+            browser_dones = [
+                i for i, e in enumerate(execution_log) if "browser_done" in e
+            ]
+
+            # Each done must come before the next start (no overlap)
+            for i in range(len(browser_starts) - 1):
+                assert browser_dones[i] < browser_starts[i + 1], (
+                    f"Browser operations overlapped: "
+                    f"{execution_log[browser_starts[i]]} started but "
+                    f"{execution_log[browser_starts[i + 1]]} started before it finished"
+                )
+
+        finally:
+            state.current_ai_studio_model_id = original_model
 
     async def test_state_consistency_under_concurrent_switches(self, real_server_state):
         """
@@ -55,14 +125,18 @@ class TestConcurrentModelSwitching:
 
             async def switch_and_record(model_id: str, req_id: str):
                 """Switch model and record final state."""
-                context = {
-                    "logger": MagicMock(),
-                    "page": real_server_state.page_instance,
-                    "model_switching_lock": lock,
-                    "needs_model_switching": True,
-                    "model_id_to_use": model_id,
-                    "current_ai_studio_model_id": state.current_ai_studio_model_id,
-                }
+                context = cast(
+                    RequestContext,
+                    {
+                        "req_id": req_id,
+                        "logger": MagicMock(),
+                        "page": real_server_state.page_instance,
+                        "model_switching_lock": lock,
+                        "needs_model_switching": True,
+                        "model_id_to_use": model_id,
+                        "current_ai_studio_model_id": state.current_ai_studio_model_id,
+                    },
+                )
 
                 with patch(
                     "browser_utils.switch_ai_studio_model",
@@ -110,14 +184,18 @@ class TestConcurrentModelSwitching:
         try:
             state.current_ai_studio_model_id = "gemini-1.5-pro"
 
-            context = {
-                "logger": MagicMock(),
-                "page": real_server_state.page_instance,
-                "model_switching_lock": lock,
-                "needs_model_switching": True,
-                "model_id_to_use": "gemini-1.5-flash",
-                "current_ai_studio_model_id": "gemini-1.5-pro",
-            }
+            context = cast(
+                RequestContext,
+                {
+                    "req_id": "req1",
+                    "logger": MagicMock(),
+                    "page": real_server_state.page_instance,
+                    "model_switching_lock": lock,
+                    "needs_model_switching": True,
+                    "model_id_to_use": "gemini-1.5-flash",
+                    "current_ai_studio_model_id": "gemini-1.5-pro",
+                },
+            )
 
             # Mock browser switch to fail
             with patch(
@@ -132,6 +210,7 @@ class TestConcurrentModelSwitching:
             assert state.current_ai_studio_model_id == "gemini-1.5-pro"
 
             # Now try successful switch
+            context["req_id"] = "req2"
             context["model_id_to_use"] = "gemini-2.0-flash"
             with patch(
                 "browser_utils.switch_ai_studio_model",
@@ -175,14 +254,18 @@ class TestLockHierarchy:
                 assert processing_lock.locked()
 
                 # Should be able to acquire model_switching_lock inside
-                context = {
-                    "logger": MagicMock(),
-                    "page": real_server_state.page_instance,
-                    "model_switching_lock": model_switching_lock,
-                    "needs_model_switching": True,
-                    "model_id_to_use": "gemini-1.5-flash",
-                    "current_ai_studio_model_id": "gemini-1.5-pro",
-                }
+                context = cast(
+                    RequestContext,
+                    {
+                        "req_id": "req1",
+                        "logger": MagicMock(),
+                        "page": real_server_state.page_instance,
+                        "model_switching_lock": model_switching_lock,
+                        "needs_model_switching": True,
+                        "model_id_to_use": "gemini-1.5-flash",
+                        "current_ai_studio_model_id": "gemini-1.5-pro",
+                    },
+                )
 
                 with patch(
                     "browser_utils.switch_ai_studio_model",
@@ -225,14 +308,18 @@ class TestLockHierarchy:
                 async with processing_lock:
                     execution_log.append(f"{req_id}_acquired_processing")
 
-                    context = {
-                        "logger": MagicMock(),
-                        "page": real_server_state.page_instance,
-                        "model_switching_lock": model_switching_lock,
-                        "needs_model_switching": True,
-                        "model_id_to_use": target_model,
-                        "current_ai_studio_model_id": state.current_ai_studio_model_id,
-                    }
+                    context = cast(
+                        RequestContext,
+                        {
+                            "req_id": req_id,
+                            "logger": MagicMock(),
+                            "page": real_server_state.page_instance,
+                            "model_switching_lock": model_switching_lock,
+                            "needs_model_switching": True,
+                            "model_id_to_use": target_model,
+                            "current_ai_studio_model_id": state.current_ai_studio_model_id,
+                        },
+                    )
 
                     execution_log.append(f"{req_id}_wait_model_switch")
 
@@ -295,14 +382,18 @@ class TestModelSwitchRaceConditions:
 
             async def switch_to_flash(req_id: str):
                 """Switch to flash model."""
-                context = {
-                    "logger": MagicMock(),
-                    "page": real_server_state.page_instance,
-                    "model_switching_lock": lock,
-                    "needs_model_switching": True,
-                    "model_id_to_use": "gemini-1.5-flash",
-                    "current_ai_studio_model_id": state.current_ai_studio_model_id,
-                }
+                context = cast(
+                    RequestContext,
+                    {
+                        "req_id": req_id,
+                        "logger": MagicMock(),
+                        "page": real_server_state.page_instance,
+                        "model_switching_lock": lock,
+                        "needs_model_switching": True,
+                        "model_id_to_use": "gemini-1.5-flash",
+                        "current_ai_studio_model_id": state.current_ai_studio_model_id,
+                    },
+                )
 
                 with patch(
                     "browser_utils.switch_ai_studio_model",
@@ -345,14 +436,18 @@ class TestModelSwitchRaceConditions:
 
             async def rapid_switch(model_id: str, req_id: str):
                 """Rapidly switch to model."""
-                context = {
-                    "logger": MagicMock(),
-                    "page": real_server_state.page_instance,
-                    "model_switching_lock": lock,
-                    "needs_model_switching": True,
-                    "model_id_to_use": model_id,
-                    "current_ai_studio_model_id": state.current_ai_studio_model_id,
-                }
+                context = cast(
+                    RequestContext,
+                    {
+                        "req_id": req_id,
+                        "logger": MagicMock(),
+                        "page": real_server_state.page_instance,
+                        "model_switching_lock": lock,
+                        "needs_model_switching": True,
+                        "model_id_to_use": model_id,
+                        "current_ai_studio_model_id": state.current_ai_studio_model_id,
+                    },
+                )
 
                 with patch(
                     "browser_utils.switch_ai_studio_model",

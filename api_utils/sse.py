@@ -1,10 +1,10 @@
 import json
 import time
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 
 def generate_sse_chunk(delta: str, req_id: str, model: str) -> str:
-    chunk_data = {
+    chunk_data: Dict[str, Any] = {
         "id": f"chatcmpl-{req_id}",
         "object": "chat.completion.chunk",
         "created": int(time.time()),
@@ -15,9 +15,12 @@ def generate_sse_chunk(delta: str, req_id: str, model: str) -> str:
 
 
 def generate_sse_stop_chunk(
-    req_id: str, model: str, reason: str = "stop", usage: Optional[Dict] = None
+    req_id: str,
+    model: str,
+    reason: str = "stop",
+    usage: Optional[Dict[str, int]] = None,
 ) -> str:
-    stop_chunk_data = {
+    stop_chunk_data: Dict[str, Any] = {
         "id": f"chatcmpl-{req_id}",
         "object": "chat.completion.chunk",
         "created": int(time.time()),

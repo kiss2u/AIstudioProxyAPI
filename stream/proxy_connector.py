@@ -1,6 +1,7 @@
 import asyncio
 import ssl as ssl_module
 import urllib.parse
+from typing import Any, Optional, Tuple
 
 from aiohttp import TCPConnector
 from python_socks.async_.asyncio import Proxy
@@ -11,7 +12,7 @@ class ProxyConnector:
     Class to handle connections through different types of proxies
     """
 
-    def __init__(self, proxy_url=None):
+    def __init__(self, proxy_url: Optional[str] = None):
         self.proxy_url = proxy_url
         self.connector = None
 
@@ -33,7 +34,9 @@ class ProxyConnector:
         else:
             raise ValueError(f"Unsupported proxy type: {proxy_type}")
 
-    async def create_connection(self, host, port, ssl=None):
+    async def create_connection(
+        self, host: str, port: int, ssl: Optional[Any] = None
+    ) -> Tuple[Any, Any]:
         """Create a connection to the target host through the proxy"""
         if not self.connector:
             # Direct connection without proxy
@@ -41,7 +44,8 @@ class ProxyConnector:
             return reader, writer
 
         # SOCKS proxy connection
-        proxy = Proxy.from_url(self.proxy_url)
+        assert self.proxy_url is not None  # Type guard for pyright
+        proxy = Proxy.from_url(self.proxy_url)  # type: ignore[misc]
         sock = await proxy.connect(dest_host=host, dest_port=port)
         if ssl is None:
             reader, writer = await asyncio.open_connection(

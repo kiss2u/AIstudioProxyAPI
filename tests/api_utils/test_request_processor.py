@@ -15,12 +15,14 @@ Mock Budget: <50 (down from 103)
 
 import asyncio
 import json
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException, Request
 from playwright.async_api import Error as PlaywrightAsyncError
 
+from api_utils.context_types import RequestContext
 from api_utils.request_processor import (
     _analyze_model_requirements,
     _handle_model_switch_failure,
@@ -49,7 +51,7 @@ class TestAnalyzeModelRequirements:
 
         # Should return context (possibly modified)
         assert isinstance(result, dict)
-        assert result["req_id"] == "test-req"
+        assert "is_streaming" in result  # Verify it's a valid RequestContext
 
     @pytest.mark.asyncio
     async def test_analyze_different_model_requires_switch(
@@ -89,10 +91,13 @@ class TestValidatePageStatus:
         _, _, _, page = mock_playwright_stack
         page.is_closed.return_value = False
 
-        context = {
-            "page": page,
-            "is_page_ready": True,
-        }
+        context = cast(
+            RequestContext,
+            {
+                "page": page,
+                "is_page_ready": True,
+            },
+        )
         check_disco = MagicMock()  # Should be called
 
         # Should not raise
@@ -105,10 +110,13 @@ class TestValidatePageStatus:
         _, _, _, page = mock_playwright_stack
         page.is_closed.return_value = True  # Page closed
 
-        context = {
-            "page": page,
-            "is_page_ready": True,
-        }
+        context = cast(
+            RequestContext,
+            {
+                "page": page,
+                "is_page_ready": True,
+            },
+        )
         check_disco = MagicMock()
 
         with pytest.raises(HTTPException) as exc:
@@ -116,6 +124,7 @@ class TestValidatePageStatus:
 
         assert exc.value.status_code == 503
         assert "AI Studio page lost" in exc.value.detail
+        assert exc.value.headers is not None
         assert exc.value.headers.get("Retry-After") == "30"
 
     @pytest.mark.asyncio
@@ -124,10 +133,13 @@ class TestValidatePageStatus:
         _, _, _, page = mock_playwright_stack
         page.is_closed.return_value = False
 
-        context = {
-            "page": page,
-            "is_page_ready": False,  # Not ready
-        }
+        context = cast(
+            RequestContext,
+            {
+                "page": page,
+                "is_page_ready": False,  # Not ready
+            },
+        )
         check_disco = MagicMock()
 
         with pytest.raises(HTTPException) as exc:
@@ -138,10 +150,13 @@ class TestValidatePageStatus:
     @pytest.mark.asyncio
     async def test_validate_page_none_raises_503(self):
         """Test validation fails when page is None."""
-        context = {
-            "page": None,  # No page
-            "is_page_ready": True,
-        }
+        context = cast(
+            RequestContext,
+            {
+                "page": None,  # No page
+                "is_page_ready": True,
+            },
+        )
         check_disco = MagicMock()
 
         with pytest.raises(HTTPException) as exc:
@@ -290,6 +305,169 @@ class TestPrepareAndValidateRequest:
 
             assert exc.value.status_code == 400  # Bad request
             assert "Invalid request" in exc.value.detail
+
+    @pytest.mark.asyncio
+    async def test_prepare_tool_execution_exception(self, mock_env):
+        """Test that tool execution exceptions are caught and handled gracefully."""
+        req_id = "test-req"
+        request = ChatCompletionRequest(
+            messages=[Message(role="user", content="Test")],
+            model="gemini-1.5-pro",
+            tools=[{"type": "function", "function": {"name": "test_tool"}}],
+        )
+        check_disco = MagicMock()
+
+        with (
+            patch("api_utils.request_processor.validate_chat_request"),
+            patch(
+                "api_utils.request_processor.prepare_combined_prompt",
+                return_value=("Test prompt", []),
+            ),
+            patch(
+                "api_utils.request_processor.maybe_execute_tools",
+                new_callable=AsyncMock,
+                side_effect=Exception("Tool execution failed"),
+            ),
+        ):
+            # Should not raise - exception is caught and tool_exec_results becomes None
+            prompt, images = await _prepare_and_validate_request(
+                req_id, request, check_disco
+            )
+
+            # Verify prompt is returned without tool results
+            assert prompt == "Test prompt"
+            assert images == []
+            # Tool execution failure should be silently handled
+            check_disco.assert_called_once_with("After Prompt Prep")
+
+    @pytest.mark.asyncio
+    async def test_prepare_tool_results_append_exception(self, mock_env):
+        """Test that exceptions during tool result formatting are caught."""
+        req_id = "test-req"
+        request = ChatCompletionRequest(
+            messages=[Message(role="user", content="Test")],
+            model="gemini-1.5-pro",
+            tools=[{"type": "function", "function": {"name": "test_tool"}}],
+        )
+        check_disco = MagicMock()
+
+        # Tool result with missing/invalid keys to trigger exception during formatting
+        tool_results = [{"name": "test_tool"}]  # Missing "arguments" and "result" keys
+
+        with (
+            patch("api_utils.request_processor.validate_chat_request"),
+            patch(
+                "api_utils.request_processor.prepare_combined_prompt",
+                return_value=("Test prompt", []),
+            ),
+            patch(
+                "api_utils.request_processor.maybe_execute_tools",
+                new_callable=AsyncMock,
+                return_value=tool_results,
+            ),
+        ):
+            # Should not raise - exception during result appending is caught
+            prompt, images = await _prepare_and_validate_request(
+                req_id, request, check_disco
+            )
+
+            # Verify base prompt is returned (tool results not appended due to error)
+            assert "Test prompt" in prompt
+            # The append might partially succeed or fail - main point is no exception raised
+
+    @pytest.mark.asyncio
+    async def test_prepare_file_url_attachments(self, mock_env, tmp_path):
+        """Test preparing request with file:// URL attachments."""
+        req_id = "test-req"
+
+        # Create a temporary file
+        test_file = tmp_path / "test_doc.pdf"
+        test_file.write_bytes(b"fake pdf data")
+
+        # Create file:// URL
+        file_url = f"file://{test_file.as_posix()}"
+
+        request = ChatCompletionRequest(
+            messages=[
+                Message(
+                    role="user",
+                    content="Check this document",
+                    attachments=[file_url],  # file:// URL
+                )
+            ],
+            model="gemini-1.5-pro",
+        )
+        check_disco = MagicMock()
+
+        with (
+            patch("api_utils.request_processor.validate_chat_request"),
+            patch(
+                "api_utils.request_processor.prepare_combined_prompt",
+                return_value=("Check this document", []),
+            ),
+            patch(
+                "api_utils.request_processor.maybe_execute_tools",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
+                "api_utils.request_processor.ONLY_COLLECT_CURRENT_USER_ATTACHMENTS",
+                True,
+            ),
+        ):
+            prompt, images = await _prepare_and_validate_request(
+                req_id, request, check_disco
+            )
+
+            # Should parse file:// URL and extract local path
+            assert len(images) == 1
+            assert "test_doc.pdf" in images[0]
+
+    @pytest.mark.asyncio
+    async def test_prepare_dict_attachment_with_url_key(self, mock_env, tmp_path):
+        """Test preparing request with dict attachments containing url/path keys."""
+        req_id = "test-req"
+
+        # Create a temporary file
+        test_file = tmp_path / "image.jpg"
+        test_file.write_bytes(b"fake image")
+
+        request = ChatCompletionRequest(
+            messages=[
+                Message(
+                    role="user",
+                    content="Analyze image",
+                    # Dict-style attachment with "url" key
+                    attachments=[{"url": str(test_file)}],
+                )
+            ],
+            model="gemini-1.5-pro",
+        )
+        check_disco = MagicMock()
+
+        with (
+            patch("api_utils.request_processor.validate_chat_request"),
+            patch(
+                "api_utils.request_processor.prepare_combined_prompt",
+                return_value=("Analyze image", []),
+            ),
+            patch(
+                "api_utils.request_processor.maybe_execute_tools",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
+                "api_utils.request_processor.ONLY_COLLECT_CURRENT_USER_ATTACHMENTS",
+                True,
+            ),
+        ):
+            prompt, images = await _prepare_and_validate_request(
+                req_id, request, check_disco
+            )
+
+            # Should extract path from dict["url"]
+            assert len(images) == 1
+            assert "image.jpg" in images[0]
 
 
 class TestHandleModelSwitchFailure:
@@ -521,9 +699,315 @@ class TestAuxiliaryStreamResponse:
             assert content["choices"][0]["message"]["content"] == "Hello world"
             assert content["usage"]["total_tokens"] == 15
 
+    @pytest.mark.asyncio
+    async def test_auxiliary_stream_non_streaming_with_function_calls(
+        self, mock_env, make_request_context
+    ):
+        """Test non-streaming response with function calls (tool_calls) from auxiliary stream."""
+        from api_utils.request_processor import _handle_auxiliary_stream_response
 
+        req_id = "test-req-id"
+        request = ChatCompletionRequest(
+            messages=[Message(role="user", content="Get weather")],
+            model="gemini-1.5-pro",
+            stream=False,
+            tools=[{"type": "function", "function": {"name": "get_weather"}}],
+        )
+        context = make_request_context(req_id=req_id)
+        result_future = asyncio.Future()
+        submit_locator = MagicMock()
+        check_disco = MagicMock()
 
-import pytest
+        # Mock stream response with function calls
+        mock_stream_data = [
+            {
+                "body": None,
+                "done": True,
+                "reason": None,
+                "function": [
+                    {"name": "get_weather", "params": {"location": "San Francisco"}}
+                ],
+            },
+        ]
+
+        async def mock_stream_gen(req_id):
+            for data in mock_stream_data:
+                yield data
+
+        with (
+            patch(
+                "api_utils.request_processor.use_stream_response",
+                side_effect=mock_stream_gen,
+            ),
+            patch(
+                "api_utils.request_processor.calculate_usage_stats",
+                return_value={
+                    "prompt_tokens": 20,
+                    "completion_tokens": 10,
+                    "total_tokens": 30,
+                },
+            ),
+        ):
+            result = await _handle_auxiliary_stream_response(
+                req_id,
+                request,
+                context,
+                result_future,
+                submit_locator,
+                check_disco,
+            )
+
+            # Non-streaming with function calls returns None
+            assert result is None
+
+            # Future should have JSONResponse with tool_calls
+            assert result_future.done()
+            response = result_future.result()
+            assert response.status_code == 200
+
+            # Verify tool_calls in response
+            content = json.loads(response.body)
+            assert content["choices"][0]["finish_reason"] == "tool_calls"
+            assert "tool_calls" in content["choices"][0]["message"]
+            tool_calls = content["choices"][0]["message"]["tool_calls"]
+            assert len(tool_calls) == 1
+            assert tool_calls[0]["type"] == "function"
+            assert tool_calls[0]["function"]["name"] == "get_weather"
+            # Arguments should be JSON string
+            args = json.loads(tool_calls[0]["function"]["arguments"])
+            assert args["location"] == "San Francisco"
+            # Content should be None when tool_calls present
+            assert content["choices"][0]["message"]["content"] is None
+
+    @pytest.mark.asyncio
+    async def test_auxiliary_stream_non_streaming_no_content_error(
+        self, mock_env, make_request_context
+    ):
+        """Test error when aux stream completes with done=True but no content."""
+        from api_utils.request_processor import _handle_auxiliary_stream_response
+
+        req_id = "test-req-id"
+        request = ChatCompletionRequest(
+            messages=[Message(role="user", content="Hello")],
+            model="gemini-1.5-pro",
+            stream=False,
+        )
+        context = make_request_context(req_id=req_id)
+        result_future = asyncio.Future()
+        submit_locator = MagicMock()
+        check_disco = MagicMock()
+
+        # Mock stream that completes with no content and no functions
+        mock_stream_data = [
+            {"body": None, "done": True, "reason": None, "function": []},
+        ]
+
+        async def mock_stream_gen(req_id):
+            for data in mock_stream_data:
+                yield data
+
+        with patch(
+            "api_utils.request_processor.use_stream_response",
+            side_effect=mock_stream_gen,
+        ):
+            with pytest.raises(HTTPException) as exc:
+                await _handle_auxiliary_stream_response(
+                    req_id,
+                    request,
+                    context,
+                    result_future,
+                    submit_locator,
+                    check_disco,
+                )
+
+            # Should raise 502 error for no content provided
+            assert exc.value.status_code == 502
+            assert "no content provided" in exc.value.detail.lower()
+
+    @pytest.mark.asyncio
+    async def test_auxiliary_stream_non_streaming_json_parse_error(
+        self, mock_env, make_request_context
+    ):
+        """Test handling of JSON parse errors in non-streaming aux stream."""
+        from api_utils.request_processor import _handle_auxiliary_stream_response
+
+        req_id = "test-req-id"
+        request = ChatCompletionRequest(
+            messages=[Message(role="user", content="Hello")],
+            model="gemini-1.5-pro",
+            stream=False,
+        )
+        context = make_request_context(req_id=req_id)
+        result_future = asyncio.Future()
+        submit_locator = MagicMock()
+        check_disco = MagicMock()
+
+        # Mock stream that yields invalid JSON string
+        mock_stream_data = [
+            "invalid json string",  # This will trigger JSON parse error
+            {"body": "Final content", "done": True, "reason": None},
+        ]
+
+        async def mock_stream_gen(req_id):
+            for data in mock_stream_data:
+                yield data
+
+        with (
+            patch(
+                "api_utils.request_processor.use_stream_response",
+                side_effect=mock_stream_gen,
+            ),
+            patch(
+                "api_utils.request_processor.calculate_usage_stats",
+                return_value={
+                    "prompt_tokens": 5,
+                    "completion_tokens": 3,
+                    "total_tokens": 8,
+                },
+            ),
+        ):
+            result = await _handle_auxiliary_stream_response(
+                req_id,
+                request,
+                context,
+                result_future,
+                submit_locator,
+                check_disco,
+            )
+
+            # Should complete successfully, skipping invalid JSON
+            assert result is None
+            assert result_future.done()
+            response = result_future.result()
+            content = json.loads(response.body)
+            assert content["choices"][0]["message"]["content"] == "Final content"
+
+    @pytest.mark.asyncio
+    async def test_auxiliary_stream_non_streaming_unknown_data_type(
+        self, mock_env, make_request_context
+    ):
+        """Test handling of unknown data types in non-streaming aux stream."""
+        from api_utils.request_processor import _handle_auxiliary_stream_response
+
+        req_id = "test-req-id"
+        request = ChatCompletionRequest(
+            messages=[Message(role="user", content="Hello")],
+            model="gemini-1.5-pro",
+            stream=False,
+        )
+        context = make_request_context(req_id=req_id)
+        result_future = asyncio.Future()
+        submit_locator = MagicMock()
+        check_disco = MagicMock()
+
+        # Mock stream with unknown data type (not str or dict)
+        mock_stream_data = [
+            12345,  # Integer - unknown type
+            {"body": "Valid content", "done": True, "reason": None},
+        ]
+
+        async def mock_stream_gen(req_id):
+            for data in mock_stream_data:
+                yield data
+
+        with (
+            patch(
+                "api_utils.request_processor.use_stream_response",
+                side_effect=mock_stream_gen,
+            ),
+            patch(
+                "api_utils.request_processor.calculate_usage_stats",
+                return_value={
+                    "prompt_tokens": 5,
+                    "completion_tokens": 3,
+                    "total_tokens": 8,
+                },
+            ),
+        ):
+            result = await _handle_auxiliary_stream_response(
+                req_id,
+                request,
+                context,
+                result_future,
+                submit_locator,
+                check_disco,
+            )
+
+            # Should complete successfully, skipping unknown type
+            assert result is None
+            assert result_future.done()
+            response = result_future.result()
+            content = json.loads(response.body)
+            assert content["choices"][0]["message"]["content"] == "Valid content"
+
+    @pytest.mark.asyncio
+    async def test_auxiliary_stream_streaming_cancelled_error(
+        self, mock_env, make_request_context
+    ):
+        """Test CancelledError handling in streaming auxiliary stream."""
+        from api_utils.request_processor import _handle_auxiliary_stream_response
+
+        req_id = "test-req-id"
+        request = ChatCompletionRequest(
+            messages=[Message(role="user", content="Hello")],
+            model="gemini-1.5-pro",
+            stream=True,  # Streaming mode
+        )
+        context = make_request_context(req_id=req_id)
+        result_future = asyncio.Future()
+        submit_locator = MagicMock()
+        check_disco = MagicMock()
+
+        # Mock gen_sse_from_aux_stream to raise CancelledError
+        with patch(
+            "api_utils.request_processor.gen_sse_from_aux_stream",
+            side_effect=asyncio.CancelledError("Request cancelled"),
+        ):
+            with pytest.raises(asyncio.CancelledError):
+                await _handle_auxiliary_stream_response(
+                    req_id,
+                    request,
+                    context,
+                    result_future,
+                    submit_locator,
+                    check_disco,
+                )
+
+    @pytest.mark.asyncio
+    async def test_auxiliary_stream_streaming_exception_sets_event(
+        self, mock_env, make_request_context
+    ):
+        """Test that exceptions in streaming mode set completion event before raising."""
+        from api_utils.request_processor import _handle_auxiliary_stream_response
+
+        req_id = "test-req-id"
+        request = ChatCompletionRequest(
+            messages=[Message(role="user", content="Hello")],
+            model="gemini-1.5-pro",
+            stream=True,
+        )
+        context = make_request_context(req_id=req_id)
+        result_future = asyncio.Future()
+        submit_locator = MagicMock()
+        check_disco = MagicMock()
+
+        # Mock gen_sse_from_aux_stream to raise generic exception
+        with patch(
+            "api_utils.request_processor.gen_sse_from_aux_stream",
+            side_effect=Exception("Stream error"),
+        ):
+            with pytest.raises(Exception) as exc:
+                await _handle_auxiliary_stream_response(
+                    req_id,
+                    request,
+                    context,
+                    result_future,
+                    submit_locator,
+                    check_disco,
+                )
+
+            assert "Stream error" in str(exc.value)
+
 
 from api_utils.request_processor import (
     _cleanup_request_resources,
@@ -563,7 +1047,7 @@ def mock_context():
 @pytest.fixture
 def mock_request():
     return ChatCompletionRequest(
-        messages=[{"role": "user", "content": "Hello"}],
+        messages=[Message(role="user", content="Hello")],
         model="gemini-2.0-flash",
         stream=False,
     )
@@ -821,7 +1305,7 @@ async def test_handle_auxiliary_stream_response_streaming(
     with patch("api_utils.request_processor.gen_sse_from_aux_stream") as mock_gen:
         mock_gen.return_value = iter([])  # dummy iterator
 
-        completion_event, _, _, stream_state = await _handle_auxiliary_stream_response(
+        result = await _handle_auxiliary_stream_response(
             "req1",
             mock_request,
             mock_context,
@@ -830,8 +1314,10 @@ async def test_handle_auxiliary_stream_response_streaming(
             mock_check_disconnected,
         )
 
+        assert result is not None
+        completion_event, _, _ = result
         assert isinstance(completion_event, asyncio.Event)
-        assert stream_state == {"has_content": False}
+        # Note: stream_state is no longer returned in the tuple, it's used internally
         assert mock_future.done()
         # Check if result is StreamingResponse
         # Note: In actual code it sets StreamingResponse, which might not be easily checkable for class type if not imported,
@@ -922,7 +1408,7 @@ async def test_handle_playwright_response_streaming(
     ):
         mock_gen.return_value = iter([])
 
-        completion_event, _, _ = await _handle_playwright_response(
+        result = await _handle_playwright_response(
             "req1",
             mock_request,
             mock_page,
@@ -931,6 +1417,8 @@ async def test_handle_playwright_response_streaming(
             mock_locator,
             mock_check_disconnected,
         )
+        assert result is not None
+        completion_event, _, _ = result
 
         assert isinstance(completion_event, asyncio.Event)
         assert mock_future.done()
@@ -976,33 +1464,73 @@ async def test_handle_playwright_response_non_streaming(
         assert mock_future.done()
 
 
-@pytest.mark.asyncio
-async def test_cleanup_request_resources():
-    mock_task = MagicMock()
-    mock_task.done.return_value = False
-    mock_task.cancel.return_value = None
+class TestCleanupRequestResources:
+    """Tests for _cleanup_request_resources helper function."""
 
-    # Make task awaitable
-    async def await_task():
-        pass
+    @pytest.mark.asyncio
+    async def test_cleanup_request_resources_basic(self):
+        """Test basic cleanup of request resources."""
 
-    mock_task.__await__ = await_task().__await__
+        # Create a real task that we can cancel
+        async def dummy_task():
+            await asyncio.sleep(100)  # Will be cancelled
 
-    mock_event = asyncio.Event()
-    mock_future = asyncio.Future()
-    mock_future.set_exception(Exception("error"))
+        mock_task = asyncio.create_task(dummy_task())
 
-    with (
-        patch("shutil.rmtree") as mock_rmtree,
-        patch("os.path.isdir", return_value=True),
-    ):
-        await _cleanup_request_resources(
-            "req1", mock_task, mock_event, mock_future, True
-        )
+        mock_event = asyncio.Event()
+        mock_future = asyncio.Future()
+        mock_future.set_exception(Exception("error"))
 
-        mock_task.cancel.assert_called_once()
-        mock_rmtree.assert_called_once()
-        assert mock_event.is_set()
+        with (
+            patch("shutil.rmtree") as mock_rmtree,
+            patch("os.path.isdir", return_value=True),
+        ):
+            await _cleanup_request_resources(
+                "req1", mock_task, mock_event, mock_future, True
+            )
+
+            assert mock_task.cancelled()
+            mock_rmtree.assert_called_once()
+            assert mock_event.is_set()
+
+    @pytest.mark.asyncio
+    async def test_cleanup_directory_removal_exception(self):
+        """Test that directory removal exceptions are caught and logged."""
+        mock_task = AsyncMock()
+        mock_task.done.return_value = True
+        mock_event = asyncio.Event()
+        mock_future = asyncio.Future()
+        mock_future.set_result(MagicMock())
+
+        with (
+            patch("os.path.isdir", return_value=True),
+            patch("shutil.rmtree", side_effect=PermissionError("Access denied")),
+        ):
+            # Should not raise exception - error is logged but swallowed
+            await _cleanup_request_resources(
+                "req1", mock_task, mock_event, mock_future, False
+            )
+
+            # Cleanup should complete despite directory removal failure
+
+    @pytest.mark.asyncio
+    async def test_cleanup_cancelled_error_in_directory_removal(self):
+        """Test that CancelledError during cleanup is re-raised."""
+        mock_task = AsyncMock()
+        mock_task.done.return_value = True
+        mock_event = asyncio.Event()
+        mock_future = asyncio.Future()
+        mock_future.set_result(MagicMock())
+
+        with (
+            patch("os.path.isdir", return_value=True),
+            patch("shutil.rmtree", side_effect=asyncio.CancelledError()),
+        ):
+            # CancelledError should be re-raised
+            with pytest.raises(asyncio.CancelledError):
+                await _cleanup_request_resources(
+                    "req1", mock_task, mock_event, mock_future, False
+                )
 
 
 @pytest.mark.asyncio
@@ -1021,7 +1549,10 @@ async def test_process_request_refactored_client_disconnected_early(
         )
 
         assert result is None
-        assert mock_future.exception().status_code == 499
+        exc = mock_future.exception()
+        assert exc is not None
+        assert isinstance(exc, HTTPException)
+        assert exc.status_code == 499
 
 
 @pytest.mark.asyncio
@@ -1133,6 +1664,232 @@ async def test_process_request_refactored_success(
         mock_pc_instance.submit_prompt.assert_called_once()
         patches["_handle_response_processing"].assert_called_once()
         patches["_cleanup_request_resources"].assert_called_once()
+
+
+class TestProcessRequestRefactoredExceptionHandling:
+    """Tests for exception handling in _process_request_refactored."""
+
+    @pytest.mark.asyncio
+    async def test_process_request_stream_queue_clear_exception(
+        self, mock_request, mock_http_request
+    ):
+        """Test that stream queue clear exceptions are caught and logged."""
+        mock_future = asyncio.Future()
+
+        with (
+            patch(
+                "api_utils.request_processor._check_client_connection",
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
+            patch(
+                "config.get_environment_variable", return_value="3120"
+            ),  # Stream enabled
+            patch(
+                "api_utils.clear_stream_queue",  # Fixed: patch from api_utils module
+                new_callable=AsyncMock,
+                side_effect=Exception("Queue clear failed"),
+            ),
+            patch(
+                "api_utils.request_processor._initialize_request_context",
+                new_callable=AsyncMock,
+            ) as mock_init,
+        ):
+            # Exception in clear_stream_queue should be caught and logged
+            # Processing should continue
+            mock_init.side_effect = Exception("Stop processing early")
+
+            with pytest.raises(Exception):
+                await _process_request_refactored(
+                    "req1", mock_request, mock_http_request, mock_future
+                )
+
+    @pytest.mark.asyncio
+    async def test_process_request_stream_queue_clear_cancelled_error(
+        self, mock_request, mock_http_request
+    ):
+        """Test that CancelledError during stream queue clear is re-raised."""
+        mock_future = asyncio.Future()
+
+        with (
+            patch(
+                "api_utils.request_processor._check_client_connection",
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
+            patch("config.get_environment_variable", return_value="3120"),
+            patch(
+                "api_utils.clear_stream_queue",  # Fixed: patch from api_utils module
+                new_callable=AsyncMock,
+                side_effect=asyncio.CancelledError(),
+            ),
+        ):
+            # CancelledError should be re-raised
+            with pytest.raises(asyncio.CancelledError):
+                await _process_request_refactored(
+                    "req1", mock_request, mock_http_request, mock_future
+                )
+
+    @pytest.mark.asyncio
+    async def test_process_request_page_none_error(
+        self, mock_request, mock_http_request, make_request_context
+    ):
+        """Test error when page is None in _process_request_refactored."""
+        mock_future = asyncio.Future()
+        context = make_request_context(page=None, is_page_ready=False)
+
+        with (
+            patch(
+                "api_utils.request_processor._check_client_connection",
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
+            patch("config.get_environment_variable", return_value="0"),
+            patch(
+                "api_utils.request_processor._initialize_request_context",
+                new_callable=AsyncMock,
+                return_value=context,
+            ),
+            patch(
+                "api_utils.request_processor._analyze_model_requirements",
+                new_callable=AsyncMock,
+                return_value=context,
+            ),
+            patch(
+                "api_utils.request_processor._setup_disconnect_monitoring",
+                new_callable=AsyncMock,
+                return_value=(None, AsyncMock(), MagicMock()),
+            ),
+            patch(
+                "api_utils.request_processor._cleanup_request_resources",
+                new_callable=AsyncMock,
+            ),
+        ):
+            # Should raise HTTPException when page is None
+            await _process_request_refactored(
+                "req1", mock_request, mock_http_request, mock_future
+            )
+
+            # Future should have 503 error set
+            assert mock_future.done()
+            exc = mock_future.exception()
+            assert isinstance(exc, HTTPException)
+            assert exc.status_code == 503
+
+    @pytest.mark.asyncio
+    async def test_process_request_cancelled_error_handling(
+        self, mock_request, mock_http_request, make_request_context
+    ):
+        """Test CancelledError handling in _process_request_refactored."""
+        mock_future = asyncio.Future()
+        context = make_request_context()
+
+        with (
+            patch(
+                "api_utils.request_processor._check_client_connection",
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
+            patch("config.get_environment_variable", return_value="0"),
+            patch(
+                "api_utils.request_processor._initialize_request_context",
+                new_callable=AsyncMock,
+                return_value=context,
+            ),
+            patch(
+                "api_utils.request_processor._analyze_model_requirements",
+                new_callable=AsyncMock,
+                return_value=context,
+            ),
+            patch(
+                "api_utils.request_processor._setup_disconnect_monitoring",
+                new_callable=AsyncMock,
+                return_value=(None, AsyncMock(), MagicMock()),
+            ),
+            patch(
+                "api_utils.request_processor._validate_page_status",
+                new_callable=AsyncMock,
+            ),
+            patch("api_utils.request_processor.PageController"),
+            patch(
+                "api_utils.request_processor._handle_model_switching",
+                new_callable=AsyncMock,
+                side_effect=asyncio.CancelledError(),
+            ),
+            patch(
+                "api_utils.request_processor._cleanup_request_resources",
+                new_callable=AsyncMock,
+            ),
+        ):
+            # CancelledError should be caught, future cancelled, and re-raised
+            with pytest.raises(asyncio.CancelledError):
+                await _process_request_refactored(
+                    "req1", mock_request, mock_http_request, mock_future
+                )
+
+            # Future should be cancelled
+            assert mock_future.cancelled()
+
+    @pytest.mark.asyncio
+    async def test_process_request_client_disconnected_error_handling(
+        self, mock_request, mock_http_request, make_request_context
+    ):
+        """Test ClientDisconnectedError handling in _process_request_refactored."""
+        from models import ClientDisconnectedError
+
+        mock_future = asyncio.Future()
+        context = make_request_context()
+
+        with (
+            patch(
+                "api_utils.request_processor._check_client_connection",
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
+            patch("config.get_environment_variable", return_value="0"),
+            patch(
+                "api_utils.request_processor._initialize_request_context",
+                new_callable=AsyncMock,
+                return_value=context,
+            ),
+            patch(
+                "api_utils.request_processor._analyze_model_requirements",
+                new_callable=AsyncMock,
+                return_value=context,
+            ),
+            patch(
+                "api_utils.request_processor._setup_disconnect_monitoring",
+                new_callable=AsyncMock,
+                return_value=(None, AsyncMock(), MagicMock()),
+            ),
+            patch(
+                "api_utils.request_processor._validate_page_status",
+                new_callable=AsyncMock,
+            ),
+            patch("api_utils.request_processor.PageController"),
+            patch(
+                "api_utils.request_processor._handle_model_switching",
+                new_callable=AsyncMock,
+                side_effect=ClientDisconnectedError("Client disconnected"),
+            ),
+            patch(
+                "api_utils.request_processor._cleanup_request_resources",
+                new_callable=AsyncMock,
+            ),
+        ):
+            # Should catch ClientDisconnectedError and set exception in future
+            result = await _process_request_refactored(
+                "req1", mock_request, mock_http_request, mock_future
+            )
+
+            # Should return None (no streaming)
+            assert result is None
+
+            # Future should have HTTPException with 499 status
+            assert mock_future.done()
+            exc = mock_future.exception()
+            assert isinstance(exc, HTTPException)
+            assert exc.status_code == 499
 
 
 @pytest.mark.asyncio

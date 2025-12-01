@@ -121,7 +121,7 @@ def mock_chat_request():
         messages=[Message(role="user", content="Test message")],
         stream=False,
         temperature=0.7,
-        max_tokens=1024,
+        max_output_tokens=1024,
     )
 
 

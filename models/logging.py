@@ -3,18 +3,18 @@ import datetime
 import json
 import logging
 import sys
-from typing import Dict
+from typing import Dict, List
 
 from fastapi import WebSocket, WebSocketDisconnect
 
 
 class StreamToLogger:
-    def __init__(self, logger_instance, log_level=logging.INFO):
+    def __init__(self, logger_instance: logging.Logger, log_level: int = logging.INFO):
         self.logger = logger_instance
         self.log_level = log_level
         self.linebuf = ""
 
-    def write(self, buf):
+    def write(self, buf: str):
         try:
             temp_linebuf = self.linebuf + buf
             self.linebuf = ""
@@ -58,6 +58,8 @@ class WebSocketConnectionManager:
                     }
                 )
             )
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             logger.warning(f"向 WebSocket 客户端 {client_id} 发送欢迎消息失败: {e}")
 
@@ -70,7 +72,7 @@ class WebSocketConnectionManager:
     async def broadcast(self, message: str):
         if not self.active_connections:
             return
-        disconnected_clients = []
+        disconnected_clients: List[str] = []
         active_conns_copy = list(self.active_connections.items())
         logger = logging.getLogger("AIStudioProxyServer")
         for client_id, connection in active_conns_copy:
@@ -86,6 +88,8 @@ class WebSocketConnectionManager:
                 else:
                     logger.error(f"广播到 WebSocket {client_id} 时发生运行时错误: {e}")
                     disconnected_clients.append(client_id)
+            except asyncio.CancelledError:
+                raise
             except Exception as e:
                 logger.error(f"广播到 WebSocket {client_id} 时发生未知错误: {e}")
                 disconnected_clients.append(client_id)

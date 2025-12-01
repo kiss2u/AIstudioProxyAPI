@@ -60,7 +60,12 @@ class TestGenSSEFromAuxStream:
         ):
             chunks = []
             async for chunk in gen_sse_from_aux_stream(
-                req_id, request, "gemini-1.5-pro", check_disconnect, completion_event
+                req_id,
+                request,
+                "gemini-1.5-pro",
+                check_disconnect,
+                completion_event,
+                None,
             ):
                 chunks.append(chunk)
 
@@ -118,6 +123,7 @@ class TestGenSSEFromAuxStream:
                 "gemini-2.0-flash-thinking",
                 check_disconnect,
                 completion_event,
+                None,
             ):
                 chunks.append(chunk)
 
@@ -170,7 +176,12 @@ class TestGenSSEFromAuxStream:
         ):
             chunks = []
             async for chunk in gen_sse_from_aux_stream(
-                req_id, request, "gemini-1.5-pro", check_disconnect, completion_event
+                req_id,
+                request,
+                "gemini-1.5-pro",
+                check_disconnect,
+                completion_event,
+                None,
             ):
                 chunks.append(chunk)
 
@@ -215,7 +226,12 @@ class TestGenSSEFromAuxStream:
         ):
             chunks = []
             async for chunk in gen_sse_from_aux_stream(
-                req_id, request, "gemini-1.5-pro", check_disconnect, completion_event
+                req_id,
+                request,
+                "gemini-1.5-pro",
+                check_disconnect,
+                completion_event,
+                None,
             ):
                 chunks.append(chunk)
 
@@ -253,7 +269,12 @@ class TestGenSSEFromAuxStream:
         ):
             chunks = []
             async for chunk in gen_sse_from_aux_stream(
-                req_id, request, "gemini-1.5-pro", check_disconnect, completion_event
+                req_id,
+                request,
+                "gemini-1.5-pro",
+                check_disconnect,
+                completion_event,
+                None,
             ):
                 chunks.append(chunk)
 
@@ -296,7 +317,12 @@ class TestGenSSEFromAuxStream:
         ):
             chunks = []
             async for chunk in gen_sse_from_aux_stream(
-                req_id, request, "gemini-1.5-pro", check_disconnect, completion_event
+                req_id,
+                request,
+                "gemini-1.5-pro",
+                check_disconnect,
+                completion_event,
+                None,
             ):
                 chunks.append(chunk)
 
@@ -501,8 +527,6 @@ Focuses on:
 
 from asyncio import Event
 
-import pytest
-
 
 @pytest.fixture
 def mock_request():
@@ -682,7 +706,7 @@ async def test_gen_sse_from_aux_stream_body_with_tool_calls(
     ):
         chunks = []
         async for chunk in gen_sse_from_aux_stream(
-            req_id, mock_request, "model", mock_check_disconnect, mock_event
+            req_id, mock_request, "model", mock_check_disconnect, mock_event, None
         ):
             chunks.append(chunk)
 
@@ -745,7 +769,7 @@ async def test_gen_sse_from_aux_stream_tool_calls_only_in_final_chunk(
     ):
         chunks = []
         async for chunk in gen_sse_from_aux_stream(
-            req_id, mock_request, "model", mock_check_disconnect, mock_event
+            req_id, mock_request, "model", mock_check_disconnect, mock_event, None
         ):
             chunks.append(chunk)
 
@@ -801,7 +825,7 @@ async def test_gen_sse_from_aux_stream_error_in_processing(
         with pytest.raises(ValueError, match="Simulated stream processing error"):
             chunks = []
             async for chunk in gen_sse_from_aux_stream(
-                req_id, mock_request, "model", mock_check_disconnect, mock_event
+                req_id, mock_request, "model", mock_check_disconnect, mock_event, None
             ):
                 chunks.append(chunk)
 
@@ -835,7 +859,7 @@ async def test_gen_sse_from_aux_stream_usage_stats_error(
     ):
         chunks = []
         async for chunk in gen_sse_from_aux_stream(
-            req_id, mock_request, "model", mock_check_disconnect, mock_event
+            req_id, mock_request, "model", mock_check_disconnect, mock_event, None
         ):
             chunks.append(chunk)
 
@@ -863,7 +887,7 @@ async def test_gen_sse_from_aux_stream_cancelled_error(
 
         with pytest.raises(asyncio.CancelledError):
             async for chunk in gen_sse_from_aux_stream(
-                req_id, mock_request, "model", mock_check_disconnect, mock_event
+                req_id, mock_request, "model", mock_check_disconnect, mock_event, None
             ):
                 chunks.append(chunk)
 
@@ -1041,7 +1065,7 @@ async def test_gen_sse_from_aux_stream_non_dict_data(
     ):
         chunks = []
         async for chunk in gen_sse_from_aux_stream(
-            req_id, mock_request, "model", mock_check_disconnect, mock_event
+            req_id, mock_request, "model", mock_check_disconnect, mock_event, None
         ):
             chunks.append(chunk)
 
@@ -1072,7 +1096,7 @@ async def test_gen_sse_from_aux_stream_list_instead_of_dict(
     ):
         chunks = []
         async for chunk in gen_sse_from_aux_stream(
-            req_id, mock_request, "model", mock_check_disconnect, mock_event
+            req_id, mock_request, "model", mock_check_disconnect, mock_event, None
         ):
             chunks.append(chunk)
 

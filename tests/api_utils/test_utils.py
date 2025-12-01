@@ -1,3 +1,4 @@
+from typing import Any, Dict, List, cast
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -10,7 +11,7 @@ from api_utils.utils import (
     maybe_execute_tools,
     prepare_combined_prompt,
 )
-from models import FunctionCall, Message, ToolCall
+from models import FunctionCall, Message, MessageContentItem, ToolCall
 
 
 @pytest.fixture
@@ -100,7 +101,9 @@ def test_prepare_combined_prompt_multimodal_image(mock_file_utils, mock_logger):
         "image_url": {"url": "data:image/png;base64,...", "detail": "high"},
     }
 
-    messages = [Message(role="user", content=[content_item])]
+    messages = [
+        Message(role="user", content=cast(List[MessageContentItem], [content_item]))
+    ]
 
     prompt, files = prepare_combined_prompt(messages, "req1")
 
@@ -140,7 +143,9 @@ def test_prepare_combined_prompt_audio(mock_file_utils, mock_logger):
         },
     }
 
-    messages = [Message(role="user", content=[content_item])]
+    messages = [
+        Message(role="user", content=cast(List[MessageContentItem], [content_item]))
+    ]
 
     prompt, files = prepare_combined_prompt(messages, "req1")
 
@@ -197,7 +202,7 @@ def test_get_latest_user_text():
 
     # Test with list content
     content = [{"type": "text", "text": "Part1"}, {"type": "text", "text": "Part2"}]
-    messages = [Message(role="user", content=content)]
+    messages = [Message(role="user", content=cast(List[MessageContentItem], content))]
     assert _get_latest_user_text(messages) == "Part1\nPart2"
 
 
@@ -294,7 +299,7 @@ def test_prepare_combined_prompt_local_files(mock_file_utils, mock_logger):
 
     content = [{"type": "image_url", "image_url": {"url": "file:///c:/test.png"}}]
 
-    messages = [Message(role="user", content=content)]
+    messages = [Message(role="user", content=cast(List[MessageContentItem], content))]
 
     prompt, files = prepare_combined_prompt(messages, "req1")
 
@@ -379,7 +384,9 @@ def test_prepare_combined_prompt_input_audio_data_url(mock_file_utils, mock_logg
         "input_audio": {"data": "data:audio/mp3;base64,SGVsbG8=", "format": "mp3"},
     }
 
-    messages = [Message(role="user", content=[content_item])]
+    messages = [
+        Message(role="user", content=cast(List[MessageContentItem], [content_item]))
+    ]
 
     prompt, files = prepare_combined_prompt(messages, "req1")
 
@@ -412,7 +419,11 @@ def test_prepare_combined_prompt_input_video_processing(mock_file_utils, mock_lo
     # 3. Local file URL
     item3 = {"type": "input_video", "input_video": {"url": "file:///c:/video3.mp4"}}
 
-    messages = [Message(role="user", content=[item1, item2, item3])]
+    messages = [
+        Message(
+            role="user", content=cast(List[MessageContentItem], [item1, item2, item3])
+        )
+    ]
 
     prompt, files = prepare_combined_prompt(messages, "req1")
 
@@ -556,7 +567,7 @@ def test_prepare_combined_prompt_invalid_base64(mock_file_utils, mock_logger):
         "input_audio": {"data": "InvalidBase64!!!", "mime_type": "audio/mp3"},
     }
 
-    messages = [Message(role="user", content=[item])]
+    messages = [Message(role="user", content=cast(List[MessageContentItem], [item]))]
 
     # Should not crash, just ignore or log error
     prompt, files = prepare_combined_prompt(messages, "req1")
@@ -665,7 +676,9 @@ def test_prepare_combined_prompt_tools_error(mock_logger):
     messages = [Message(role="user", content="hi")]
 
     # Should not crash
-    prompt, _ = prepare_combined_prompt(messages, "req1", tools=tools)
+    prompt, _ = prepare_combined_prompt(
+        messages, "req1", tools=cast(List[Dict[str, Any]], tools)
+    )
     assert "用户:\nhi" in prompt
 
 
@@ -839,7 +852,7 @@ def test_prepare_combined_prompt_non_existent_local_file(mock_file_utils, mock_l
     mock_exists.return_value = False  # Not exists
 
     item = {"type": "file_url", "file_url": {"url": "file:///c:/missing.txt"}}
-    messages = [Message(role="user", content=[item])]
+    messages = [Message(role="user", content=cast(List[MessageContentItem], [item]))]
 
     prompt, files = prepare_combined_prompt(messages, "req1")
 
@@ -973,3 +986,423 @@ def test_prepare_combined_prompt_fallback_str_content(mock_logger):
 
     # Should convert to string
     assert "12345" in prompt
+
+
+def test_prepare_combined_prompt_input_image_with_detail(mock_file_utils, mock_logger):
+    """Test input_image object with detail field (lines 234-244)."""
+    mock_extract, _, _ = mock_file_utils
+    mock_extract.return_value = "/tmp/input_image.png"
+
+    class InputImage:
+        url = "data:image/png;base64,iVBORw0KGgo="
+        detail = "high"
+
+    class ContentItem:
+        type = "image_url"
+
+        def __init__(self):
+            self.input_image = InputImage()
+
+    messages = [Message.model_construct(role="user", content=[ContentItem()])]
+
+    prompt, files = prepare_combined_prompt(messages, "req1")
+
+    assert "/tmp/input_image.png" in files
+    assert "[图像细节: detail=high]" in prompt
+
+
+def test_prepare_combined_prompt_dict_image_url_with_detail(
+    mock_file_utils, mock_logger
+):
+    """Test dict image_url with detail field (lines 266-268)."""
+    mock_extract, _, _ = mock_file_utils
+    mock_extract.return_value = "/tmp/image_detail.png"
+
+    # Dict structure with nested image_url dict containing detail
+    content = [
+        {
+            "type": "image_url",
+            "image_url": {"url": "data:image/png;base64,ABC123", "detail": "auto"},
+        }
+    ]
+
+    messages = [Message.model_construct(role="user", content=content)]
+
+    prompt, files = prepare_combined_prompt(messages, "req1")
+
+    assert "/tmp/image_detail.png" in files
+    assert "[图像细节: detail=auto]" in prompt
+
+
+def test_prepare_combined_prompt_audio_absolute_path(mock_file_utils, mock_logger):
+    """Test audio with absolute path (lines 427-431)."""
+    _, _, mock_exists = mock_file_utils
+    mock_exists.return_value = True
+
+    # Absolute path for audio
+    content_item = {
+        "type": "input_audio",
+        "input_audio": {"url": "c:/audio/test.mp3"},
+    }
+
+    messages = [
+        Message(role="user", content=cast(List[MessageContentItem], [content_item]))
+    ]
+
+    prompt, files = prepare_combined_prompt(messages, "req1")
+
+    assert "c:/audio/test.mp3" in files
+
+
+def test_prepare_combined_prompt_video_absolute_path(mock_file_utils, mock_logger):
+    """Test video with absolute path (lines 427-431)."""
+    _, _, mock_exists = mock_file_utils
+    mock_exists.return_value = True
+
+    # Absolute path for video
+    content_item = {
+        "type": "input_video",
+        "input_video": {"url": "/home/user/video.mp4"},
+    }
+
+    messages = [
+        Message(role="user", content=cast(List[MessageContentItem], [content_item]))
+    ]
+
+    prompt, files = prepare_combined_prompt(messages, "req1")
+
+    assert "/home/user/video.mp4" in files
+
+
+def test_get_latest_user_text_dict_non_text_type(mock_logger):
+    """Test _get_latest_user_text with dict items that are not text type (lines 666-671)."""
+    messages = [
+        Message.model_construct(
+            role="user",
+            content=[
+                {"type": "image", "url": "image.png"},  # Not text type
+                {"type": "audio", "data": "..."},  # Not text type
+                {"type": "text", "text": "Valid text"},
+            ],
+        )
+    ]
+
+    result = _get_latest_user_text(messages)
+
+    # Should only extract text items
+    assert result == "Valid text"
+
+
+def test_get_latest_user_text_dict_content_empty(mock_logger):
+    """Test _get_latest_user_text with dict content that has no text (lines 680-681)."""
+    # Dict content with no text field
+    messages = [
+        Message.model_construct(role="user", content={"attachments": ["file.pdf"]})
+    ]
+
+    result = _get_latest_user_text(messages)
+
+    assert result == ""
+
+
+def test_get_latest_user_text_no_user_message(mock_logger):
+    """Test _get_latest_user_text with no user messages (lines 680-681)."""
+    messages = [
+        Message(role="assistant", content="Hello"),
+        Message(role="system", content="System"),
+    ]
+
+    result = _get_latest_user_text(messages)
+
+    assert result == ""
+
+
+@pytest.mark.asyncio
+async def test_maybe_execute_tools_auto_single_tool_name_fallback(
+    mock_tools_registry, mock_logger
+):
+    """Test maybe_execute_tools with auto choice, single tool, name at top level (lines 726-728)."""
+    _, mock_exec = mock_tools_registry
+    mock_exec.return_value = "success"
+
+    # Tool with name at top level, no function dict
+    tools = [{"name": "top_level_func"}]
+    tool_choice = "auto"
+
+    messages = [Message(role="user", content='call it {"arg": 1}')]
+
+    results = await maybe_execute_tools(messages, tools, tool_choice)
+
+    assert results is not None
+    assert results[0]["name"] == "top_level_func"
+
+
+@pytest.mark.asyncio
+async def test_maybe_execute_tools_required_single_tool(
+    mock_tools_registry, mock_logger
+):
+    """Test maybe_execute_tools with 'required' choice (lines 717-728)."""
+    _, mock_exec = mock_tools_registry
+    mock_exec.return_value = "result"
+
+    tools = [{"type": "function", "function": {"name": "required_func"}}]
+    tool_choice = "required"
+
+    messages = [Message(role="user", content='{"x": 1}')]
+
+    results = await maybe_execute_tools(messages, tools, tool_choice)
+
+    assert results is not None
+    assert results[0]["name"] == "required_func"
+
+
+def test_prepare_combined_prompt_tool_params_json_dumps_error(mock_logger):
+    """Test tool params that raise exception during json.dumps (lines 96-97)."""
+
+    class UnserializableParams:
+        """Object that cannot be JSON serialized."""
+
+        def __iter__(self):
+            raise TypeError("Cannot iterate")
+
+    # Create tool with unserializable parameters
+    tools = [
+        {
+            "type": "function",
+            "function": {"name": "bad_tool", "parameters": UnserializableParams()},
+        }
+    ]
+
+    messages = [Message(role="user", content="hi")]
+
+    # Should not crash, just skip params serialization
+    prompt, _ = prepare_combined_prompt(messages, "req1", tools=tools)
+
+    # Tool name should still be present
+    assert "- 函数: bad_tool" in prompt
+    # But params should be skipped due to exception
+    # The code has a try/except that passes on json.dumps failure
+
+
+def test_collect_and_validate_attachments_empty_url_handling(
+    mock_file_utils, mock_logger
+):
+    """Test attachment collection with empty URL strings (lines 802, 831, 834)."""
+    _, _, mock_exists = mock_file_utils
+    mock_exists.return_value = True
+
+    class MockRequest:
+        attachments = [
+            "",  # Empty string
+            "   ",  # Whitespace only
+            {"url": ""},  # Empty URL in dict
+            {"url": "   "},  # Whitespace URL in dict
+            "c:/valid.png",  # Valid path
+        ]
+        messages = [
+            Message.model_construct(
+                role="user",
+                content="test",
+                images=["", "c:/valid_image.png"],
+                files=[{"path": ""}, {"path": "c:/valid_file.pdf"}],
+            )
+        ]
+
+    req = MockRequest()
+    result = collect_and_validate_attachments(req, "req1", [])
+
+    # Only valid paths should be included
+    assert "c:/valid.png" in result
+    assert "c:/valid_image.png" in result
+    assert "c:/valid_file.pdf" in result
+
+    # Empty strings should be filtered out
+    assert "" not in result
+    assert "   " not in result
+
+
+def test_prepare_combined_prompt_dict_input_image_with_detail(
+    mock_file_utils, mock_logger
+):
+    """Test dict input_image structure with detail field (lines 271-282)."""
+    mock_extract, _, _ = mock_file_utils
+    mock_extract.return_value = "/tmp/input_img_detail.png"
+
+    content = [
+        {
+            "type": "image_url",
+            "input_image": {
+                "url": "data:image/png;base64,XYZ",
+                "detail": "low",
+            },
+        }
+    ]
+
+    messages = [Message.model_construct(role="user", content=content)]
+
+    prompt, files = prepare_combined_prompt(messages, "req1")
+
+    assert "/tmp/input_img_detail.png" in files
+    assert "[图像细节: detail=low]" in prompt
+
+
+def test_prepare_combined_prompt_dict_content_file_field(mock_file_utils, mock_logger):
+    """Test dict content with generic 'file' field (lines 313-322)."""
+    _, _, mock_exists = mock_file_utils
+    mock_exists.return_value = True
+
+    content = [
+        {
+            "type": "image_url",
+            "file": {"url": "c:/from_file_field.png"},
+        }
+    ]
+
+    messages = [Message.model_construct(role="user", content=content)]
+
+    prompt, files = prepare_combined_prompt(messages, "req1")
+
+    assert "c:/from_file_field.png" in files
+
+
+def test_prepare_combined_prompt_dict_content_file_path(mock_file_utils, mock_logger):
+    """Test dict content with file.path field (lines 318-322)."""
+    _, _, mock_exists = mock_file_utils
+    mock_exists.return_value = True
+
+    content = [
+        {
+            "type": "file_url",
+            "file": {"path": "/absolute/path/file.pdf"},
+        }
+    ]
+
+    messages = [Message.model_construct(role="user", content=content)]
+
+    prompt, files = prepare_combined_prompt(messages, "req1")
+
+    assert "/absolute/path/file.pdf" in files
+
+
+def test_prepare_combined_prompt_object_url_attribute(mock_file_utils, mock_logger):
+    """Test content item with direct url attribute (lines 249-250)."""
+    _, _, mock_exists = mock_file_utils
+    mock_exists.return_value = True
+
+    class UrlItem:
+        type = "image_url"
+        url = "c:/direct_url.png"
+
+    messages = [Message.model_construct(role="user", content=[UrlItem()])]
+
+    prompt, files = prepare_combined_prompt(messages, "req1")
+
+    assert "c:/direct_url.png" in files
+
+
+def test_prepare_combined_prompt_dict_attachments_nested_input_image(
+    mock_file_utils, mock_logger
+):
+    """Test dict content attachments with nested input_image (lines 496-502)."""
+    mock_extract, _, _ = mock_file_utils
+    mock_extract.return_value = "/tmp/nested_input.png"
+
+    content = {
+        "text": "Check attachment",
+        "attachments": [
+            {"input_image": {"url": "data:image/png;base64,NESTED"}},
+        ],
+    }
+
+    messages = [Message.model_construct(role="user", content=content)]
+
+    prompt, files = prepare_combined_prompt(messages, "req1")
+
+    assert "Check attachment" in prompt
+    assert "/tmp/nested_input.png" in files
+
+
+def test_prepare_combined_prompt_content_item_input_image_string(
+    mock_file_utils, mock_logger
+):
+    """Test content item with input_image as string (lines 283-284)."""
+    _, _, mock_exists = mock_file_utils
+    mock_exists.return_value = True
+
+    # This tests the case where item has input_image as a string directly
+    content = [
+        {
+            "type": "image_url",
+            "input_image": "c:/string_input_image.png",  # String, not dict
+        }
+    ]
+
+    messages = [Message.model_construct(role="user", content=content)]
+
+    prompt, files = prepare_combined_prompt(messages, "req1")
+
+    assert "c:/string_input_image.png" in files
+
+
+def test_prepare_combined_prompt_audio_video_data_base64(mock_file_utils, mock_logger):
+    """Test audio/video with raw base64 data not starting with 'data:' (lines 446-459)."""
+    _, mock_save, _ = mock_file_utils
+    mock_save.return_value = "/tmp/base64_audio.mp3"
+
+    content_item = {
+        "type": "input_audio",
+        "input_audio": {
+            "data": "SGVsbG8gV29ybGQ=",  # Not starting with "data:"
+            "mime_type": "audio/mp3",
+            "format": "mp3",
+        },
+    }
+
+    messages = [
+        Message(role="user", content=cast(List[MessageContentItem], [content_item]))
+    ]
+
+    prompt, files = prepare_combined_prompt(messages, "req1")
+
+    assert "/tmp/base64_audio.mp3" in files
+    mock_save.assert_called_once()
+
+
+def test_prepare_combined_prompt_tool_result_no_tool_call_id(mock_logger):
+    """Test tool result without tool_call_id (lines 579-586)."""
+    messages = [Message.model_construct(role="tool", content="Result without ID")]
+
+    prompt, _ = prepare_combined_prompt(messages, "req1")
+
+    # Should still include content, but no tool_call_id line
+    assert "Result without ID" in prompt
+    assert "tool_call_id=" not in prompt
+
+
+def test_prepare_combined_prompt_assistant_empty_with_tool_calls(mock_logger):
+    """Test assistant message with no content but has tool_calls (line 614)."""
+    tool_call = ToolCall(
+        id="call1",
+        type="function",
+        function=FunctionCall(name="func", arguments="{}"),
+    )
+
+    messages = [
+        Message(role="assistant", content="", tool_calls=[tool_call])  # Empty content
+    ]
+
+    prompt, _ = prepare_combined_prompt(messages, "req1")
+
+    # Should include tool call visualization even with empty content
+    assert "请求调用函数: func" in prompt
+
+
+def test_prepare_combined_prompt_skip_empty_messages_edge_case(mock_logger):
+    """Test edge case for empty message skipping (lines 616-621)."""
+    # Edge case: First message with only role prefix, no content
+    messages = [Message.model_construct(role="assistant", content="")]
+
+    prompt, _ = prepare_combined_prompt(messages, "req1")
+
+    # Should be empty since only role prefix and no content
+    assert prompt == ""

@@ -65,7 +65,12 @@ class TestStreamingGeneratorBehavior:
         ):
             chunks = []
             async for chunk in gen_sse_from_aux_stream(
-                req_id, request, "gemini-1.5-pro", check_disconnect, completion_event
+                req_id,
+                request,
+                "gemini-1.5-pro",
+                check_disconnect,
+                completion_event,
+                None,
             ):
                 chunks.append(chunk)
                 iteration_log.append(f"received_{len(chunks) - 1}")
@@ -127,6 +132,7 @@ class TestStreamingGeneratorBehavior:
                     "model",
                     check_disconnect,
                     event,
+                    None,
                 ):
                     chunks.append(chunk)
                 return chunks
@@ -185,7 +191,12 @@ class TestStreamingGeneratorBehavior:
         ):
             chunks = []
             async for chunk in gen_sse_from_aux_stream(
-                req_id, request, "gemini-1.5-pro", check_disconnect, completion_event
+                req_id,
+                request,
+                "gemini-1.5-pro",
+                check_disconnect,
+                completion_event,
+                None,
             ):
                 chunks.append(chunk)
                 # Simulate slow consumer
@@ -244,7 +255,12 @@ class TestStreamingGeneratorBehavior:
             ),
         ):
             async for chunk in gen_sse_from_aux_stream(
-                req_id, request, "gemini-1.5-pro", check_disconnect, completion_event
+                req_id,
+                request,
+                "gemini-1.5-pro",
+                check_disconnect,
+                completion_event,
+                None,
             ):
                 # Record event state after each chunk
                 event_check_log.append(completion_event.is_set())
@@ -287,6 +303,7 @@ class TestStreamingErrorHandling:
                     "gemini-1.5-pro",
                     check_disconnect,
                     completion_event,
+                    None,
                 ):
                     chunks.append(chunk)
             except Exception:
@@ -327,7 +344,12 @@ class TestStreamingErrorHandling:
         ):
             chunks = []
             async for chunk in gen_sse_from_aux_stream(
-                req_id, request, "gemini-1.5-pro", check_disconnect, completion_event
+                req_id,
+                request,
+                "gemini-1.5-pro",
+                check_disconnect,
+                completion_event,
+                None,
             ):
                 chunks.append(chunk)
 
@@ -375,7 +397,12 @@ class TestStreamingDataIntegrity:
         ):
             chunks = []
             async for chunk in gen_sse_from_aux_stream(
-                req_id, request, "gemini-1.5-pro", check_disconnect, completion_event
+                req_id,
+                request,
+                "gemini-1.5-pro",
+                check_disconnect,
+                completion_event,
+                None,
             ):
                 if "[DONE]" not in chunk:
                     chunks.append(chunk)
@@ -435,7 +462,12 @@ class TestStreamingDataIntegrity:
         ):
             chunks = []
             async for chunk in gen_sse_from_aux_stream(
-                req_id, request, "gemini-1.5-pro", check_disconnect, completion_event
+                req_id,
+                request,
+                "gemini-1.5-pro",
+                check_disconnect,
+                completion_event,
+                None,
             ):
                 chunks.append(chunk)
 

@@ -431,7 +431,7 @@ def test_websocketloghandler_emit_no_connections():
 
 def test_websocketloghandler_emit_no_manager():
     """Test emitting log record with no manager."""
-    handler = WebSocketLogHandler(None)
+    handler = WebSocketLogHandler(None)  # type: ignore[arg-type]
 
     record = logging.LogRecord(
         name="test",

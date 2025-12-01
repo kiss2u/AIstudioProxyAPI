@@ -228,6 +228,8 @@ async def lifespan(app: FastAPI):
         logger.info("Server startup complete.")
         state.is_initializing = False
         yield
+    except asyncio.CancelledError:
+        raise
     except Exception as e:
         logger.critical(f"Application startup failed: {e}", exc_info=True)
         await _shutdown_resources()

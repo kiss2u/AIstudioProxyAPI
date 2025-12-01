@@ -5,6 +5,7 @@ import socket
 import subprocess
 import sys
 import threading
+from typing import List, Optional
 
 logger = logging.getLogger("CamoufoxLauncher")
 
@@ -22,8 +23,8 @@ def is_port_in_use(port: int, host: str = "0.0.0.0") -> bool:
             return True
 
 
-def find_pids_on_port(port: int) -> list[int]:
-    pids = []
+def find_pids_on_port(port: int) -> List[int]:
+    pids: List[int] = []
     system_platform = platform.system()
     command = ""
     try:
@@ -166,7 +167,7 @@ def kill_process_interactive(pid: int) -> bool:
 def input_with_timeout(prompt_message: str, timeout_seconds: int = 30) -> str:
     print(prompt_message, end="", flush=True)
     if sys.platform == "win32":
-        user_input_container = [None]
+        user_input_container: List[Optional[str]] = [None]
 
         def get_input_in_thread():
             try:
@@ -190,13 +191,13 @@ def input_with_timeout(prompt_message: str, timeout_seconds: int = 30) -> str:
             return ""
 
 
-def get_proxy_from_gsettings():
+def get_proxy_from_gsettings() -> Optional[str]:
     """
     Retrieves the proxy settings from GSettings on Linux systems.
     Returns a proxy string like "http://host:port" or None.
     """
 
-    def _run_gsettings_command(command_parts: list[str]) -> str | None:
+    def _run_gsettings_command(command_parts: List[str]) -> Optional[str]:
         """Helper function to run gsettings command and return cleaned string output."""
         try:
             process_result = subprocess.run(

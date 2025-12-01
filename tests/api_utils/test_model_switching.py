@@ -14,11 +14,13 @@ Mock Budget: <35 (down from 82)
 """
 
 import asyncio
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
 
+from api_utils.context_types import RequestContext
 from api_utils.model_switching import (
     analyze_model_requirements,
     handle_model_switching,
@@ -48,7 +50,7 @@ class TestAnalyzeModelRequirements:
         context["model_id_to_use"] = "gemini-1.5-pro"
         context["needs_model_switching"] = False
 
-        requested_model = None
+        requested_model = ""  # No model requested
         proxy_model_name = "proxy-model"
 
         result = await analyze_model_requirements(
@@ -407,13 +409,16 @@ class TestHandleParameterCache:
         assert isinstance(lock, asyncio.Lock)
         assert not lock.locked()
 
-        context = {
-            "logger": MagicMock(),
-            "params_cache_lock": lock,
-            "page_params_cache": {},
-            "current_ai_studio_model_id": "gemini-1.5-pro",
-            "model_actually_switched": True,
-        }
+        context = cast(
+            RequestContext,
+            {
+                "logger": MagicMock(),
+                "params_cache_lock": lock,
+                "page_params_cache": {},
+                "current_ai_studio_model_id": "gemini-1.5-pro",
+                "model_actually_switched": True,
+            },
+        )
 
         # Acquire lock externally to test contention
         async with lock:

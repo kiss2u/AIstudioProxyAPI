@@ -11,16 +11,35 @@ Created: 2025-11-21
 Purpose: Fix headless mode debugging and client disconnect issues
 """
 
+import asyncio
 import json
 import logging
 import os
 import traceback
+from asyncio import Lock, Queue
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Protocol, Tuple, Union
 
 from playwright.async_api import Locator
 from playwright.async_api import Page as AsyncPage
+
+
+class SupportsSizeQuery(Protocol):
+    """Protocol for queue-like objects that support qsize()."""
+
+    def qsize(self) -> int:
+        """Return the approximate size of the queue."""
+        ...
+
+
+class SupportsLockQuery(Protocol):
+    """Protocol for lock-like objects that support locked()."""
+
+    def locked(self) -> bool:
+        """Return True if the lock is currently held."""
+        ...
+
 
 logger = logging.getLogger("AIStudioProxyServer")
 
@@ -129,6 +148,8 @@ async def capture_dom_structure(page: AsyncPage) -> str:
         }""")
 
         return dom_tree
+    except asyncio.CancelledError:
+        raise
     except Exception as e:
         logger.error(f"Failed to capture DOM structure: {e}")
         return f"Error capturing DOM structure: {str(e)}\n"
@@ -160,37 +181,37 @@ async def capture_system_context(
     iso_time, texas_time = get_texas_timestamp()
 
     # Helper to safely get queue size
-    def get_qsize(q: Any) -> int:
+    def get_qsize(q: Optional[Union[Queue[Any], SupportsSizeQuery]]) -> int:
         try:
             return q.qsize() if q else -1
-        except NotImplementedError:
+        except (NotImplementedError, AttributeError):
             return -1  # Some queue types (like multiprocessing.Queue on macOS) might not support qsize
 
     # Helper to safely check lock state
-    def is_locked(lock: Any) -> bool:
-        return lock.locked() if lock else False
+    def is_locked(lock: Optional[Union[Lock, SupportsLockQuery]]) -> bool:
+        try:
+            return lock.locked() if lock else False
+        except AttributeError:
+            return False
 
     # Helper to sanitize proxy settings
-    def _sanitize_proxy(settings: Optional[Dict[str, str]]) -> Optional[Dict[str, str]]:
+    def _sanitize_proxy(settings: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
         if not settings:
             return None
         safe_settings = settings.copy()
-        if "server" in safe_settings:
-            # Simple redaction for now, can be improved with regex if needed
-            if "@" in safe_settings["server"]:
-                # Redact credentials in http://user:pass@host format
-                try:
-                    parts = safe_settings["server"].split("@")
-                    scheme_creds = parts[0].split("://")
-                    if len(scheme_creds) == 2:
-                        safe_settings["server"] = (
-                            f"{scheme_creds[0]}://***:***@{parts[1]}"
-                        )
-                except Exception:
-                    safe_settings["server"] = "REDACTED"
+        server_val = safe_settings.get("server")
+        if isinstance(server_val, str) and "@" in server_val:
+            # Redact credentials in http://user:pass@host format
+            try:
+                parts = server_val.split("@")
+                scheme_creds = parts[0].split("://")
+                if len(scheme_creds) == 2:
+                    safe_settings["server"] = f"{scheme_creds[0]}://***:***@{parts[1]}"
+            except Exception:
+                safe_settings["server"] = "REDACTED"
         return safe_settings
 
-    context = {
+    context: Dict[str, Any] = {
         "meta": {
             "timestamp_iso": iso_time,
             "timestamp_texas": texas_time,
@@ -294,7 +315,7 @@ async def capture_playwright_state(
     Returns:
         Dict containing page state and locator states
     """
-    state = {
+    state: Dict[str, Any] = {
         "page": {
             "url": page.url,
             "title": "",
@@ -309,6 +330,8 @@ async def capture_playwright_state(
 
     try:
         state["page"]["title"] = await page.title()
+    except asyncio.CancelledError:
+        raise
     except Exception as e:
         logger.warning(f"Failed to get page title: {e}")
         state["page"]["title"] = f"Error: {e}"
@@ -316,7 +339,7 @@ async def capture_playwright_state(
     # Capture locator states
     if locators:
         for name, locator in locators.items():
-            loc_state = {
+            loc_state: Dict[str, Any] = {
                 "exists": False,
                 "count": 0,
                 "visible": False,
@@ -332,12 +355,16 @@ async def capture_playwright_state(
                     # Check visibility with short timeout
                     try:
                         loc_state["visible"] = await locator.is_visible(timeout=1000)
+                    except asyncio.CancelledError:
+                        raise
                     except Exception:
                         loc_state["visible"] = False
 
                     # Check enabled state
                     try:
                         loc_state["enabled"] = await locator.is_enabled(timeout=1000)
+                    except asyncio.CancelledError:
+                        raise
                     except Exception:
                         loc_state["enabled"] = False
 
@@ -349,9 +376,13 @@ async def capture_playwright_state(
                             loc_state["value"] = (
                                 value[:100] + "..." if len(value) > 100 else value
                             )
+                    except asyncio.CancelledError:
+                        raise
                     except Exception:
                         pass  # Not an input element or error
 
+            except asyncio.CancelledError:
+                raise
             except Exception as e:
                 logger.warning(f"Failed to capture state for locator '{name}': {e}")
                 loc_state["error"] = str(e)
@@ -362,12 +393,16 @@ async def capture_playwright_state(
     try:
         cookies = await page.context.cookies()
         state["storage"]["cookies_count"] = len(cookies)
+    except asyncio.CancelledError:
+        raise
     except Exception as e:
         logger.warning(f"Failed to get cookies: {e}")
 
     try:
         localStorage_keys = await page.evaluate("() => Object.keys(localStorage)")
         state["storage"]["localStorage_keys"] = localStorage_keys
+    except asyncio.CancelledError:
+        raise
     except Exception as e:
         logger.warning(f"Failed to get localStorage keys: {e}")
 
@@ -443,6 +478,8 @@ async def save_comprehensive_snapshot(
                 path=str(screenshot_path), full_page=True, timeout=15000
             )
             logger.info("   Screenshot saved")
+        except asyncio.CancelledError:
+            raise
         except Exception as ss_err:
             logger.error(f"   Screenshot failed: {ss_err}")
 
@@ -453,6 +490,8 @@ async def save_comprehensive_snapshot(
             with open(html_path, "w", encoding="utf-8") as f:
                 f.write(content)
             logger.info("   HTML dump saved")
+        except asyncio.CancelledError:
+            raise
         except Exception as html_err:
             logger.error(f"   HTML dump failed: {html_err}")
 
@@ -463,6 +502,8 @@ async def save_comprehensive_snapshot(
             with open(dom_structure_path, "w", encoding="utf-8") as f:
                 f.write(dom_tree)
             logger.info("   DOM structure saved")
+        except asyncio.CancelledError:
+            raise
         except Exception as dom_err:
             logger.error(f"   DOM structure failed: {dom_err}")
 
@@ -515,6 +556,8 @@ async def save_comprehensive_snapshot(
             with open(playwright_state_path, "w", encoding="utf-8") as f:
                 json.dump(pw_state, f, indent=2, ensure_ascii=False)
             logger.info("   Playwright state saved")
+        except asyncio.CancelledError:
+            raise
         except Exception as pw_err:
             logger.error(f"   Playwright state failed: {pw_err}")
 
@@ -525,6 +568,8 @@ async def save_comprehensive_snapshot(
             with open(context_path, "w", encoding="utf-8") as f:
                 json.dump(system_context, f, indent=2, ensure_ascii=False)
             logger.info("   LLM context saved")
+        except asyncio.CancelledError:
+            raise
         except Exception as ctx_err:
             logger.error(f"   LLM context failed: {ctx_err}")
 
@@ -575,6 +620,8 @@ async def save_comprehensive_snapshot(
         logger.info(f" Comprehensive snapshot complete: {snapshot_dir.name}")
         return str(snapshot_dir)
 
+    except asyncio.CancelledError:
+        raise
     except Exception as e:
         logger.error(f" Failed to create snapshot directory: {e}", exc_info=True)
         return ""

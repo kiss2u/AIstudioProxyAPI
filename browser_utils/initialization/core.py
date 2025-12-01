@@ -171,6 +171,8 @@ async def initialize_page_logic(
                 logger.warning(f"   检查页面 URL 时出现 Playwright 错误: {pw_err_url}")
             except AttributeError as attr_err_url:
                 logger.warning(f"   检查页面 URL 时出现属性错误: {attr_err_url}")
+            except asyncio.CancelledError:
+                raise
             except Exception as e_url_check:
                 logger.warning(
                     f"   检查页面 URL 时出现其他未预期错误: {e_url_check} (类型: {type(e_url_check).__name__})"
@@ -192,6 +194,8 @@ async def initialize_page_logic(
                 )
                 current_url = found_page.url
                 logger.info(f"-> 新页面导航尝试完成。当前 URL: {current_url}")
+            except asyncio.CancelledError:
+                raise
             except Exception as new_page_nav_err:
                 # 导入save_error_snapshot函数
                 from browser_utils.operations import save_error_snapshot
@@ -262,6 +266,8 @@ async def initialize_page_logic(
                             temp_context, launch_mode, loop
                         )
 
+                except asyncio.CancelledError:
+                    raise
                 except Exception as wait_login_err:
                     from browser_utils.operations import save_error_snapshot
 
@@ -311,6 +317,8 @@ async def initialize_page_logic(
 
             logger.info("页面逻辑初始化成功。")
             return result_page_instance, result_page_ready
+        except asyncio.CancelledError:
+            raise
         except Exception as input_visible_err:
             from browser_utils.operations import save_error_snapshot
 
@@ -327,6 +335,8 @@ async def initialize_page_logic(
         if temp_context:
             try:
                 await temp_context.close()
+            except asyncio.CancelledError:
+                raise
             except Exception:
                 pass
         raise
@@ -341,6 +351,8 @@ async def initialize_page_logic(
                 )
                 await temp_context.close()
                 logger.info("   临时浏览器上下文已关闭。")
+            except asyncio.CancelledError:
+                raise
             except Exception as close_err:
                 logger.warning(f"   关闭临时浏览器上下文时出错: {close_err}")
         from browser_utils.operations import save_error_snapshot
@@ -352,12 +364,12 @@ async def initialize_page_logic(
 async def close_page_logic() -> Tuple[None, bool]:
     """关闭页面逻辑"""
     # 需要访问全局变量
-    import server
+    from api_utils.server_state import state
 
     logger.info("--- 运行页面逻辑关闭 --- ")
-    if server.page_instance and not server.page_instance.is_closed():
+    if state.page_instance and not state.page_instance.is_closed():
         try:
-            await server.page_instance.close()
+            await state.page_instance.close()
             logger.info("   页面已关闭")
         except PlaywrightAsyncError as pw_err:
             logger.warning(f"   关闭页面时出现Playwright错误: {pw_err}")
@@ -370,8 +382,8 @@ async def close_page_logic() -> Tuple[None, bool]:
                 f"   关闭页面时出现意外错误: {other_err} (类型: {type(other_err).__name__})",
                 exc_info=True,
             )
-    server.page_instance = None
-    server.is_page_ready = False
+    state.page_instance = None
+    state.is_page_ready = False
     logger.info("页面逻辑状态已重置。")
     return None, False
 

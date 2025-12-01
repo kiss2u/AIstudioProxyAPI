@@ -37,6 +37,7 @@ def test_http_error_with_headers():
     assert result.status_code == 503
     assert result.detail == "Service unavailable"
     assert result.headers == custom_headers
+    assert result.headers is not None  # Type guard for pyright
     assert result.headers["X-Custom-Header"] == "value"
     assert result.headers["Retry-After"] == "60"
 

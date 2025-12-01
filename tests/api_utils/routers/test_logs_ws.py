@@ -32,7 +32,7 @@ async def test_websocket_log_endpoint_no_manager():
     websocket = AsyncMock(spec=WebSocket)
     logger = MagicMock()
 
-    await websocket_log_endpoint(websocket, logger, None)
+    await websocket_log_endpoint(websocket, logger, None)  # type: ignore[arg-type]
 
     websocket.close.assert_called_with(code=1011)
 

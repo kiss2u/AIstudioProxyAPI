@@ -605,9 +605,6 @@ Strategy: Test edge cases for proxy settings and middleware path matching.
 """
 
 
-import pytest
-
-
 def test_initialize_proxy_settings_no_proxy_configured():
     """
     测试场景: 完全没有配置任何代理

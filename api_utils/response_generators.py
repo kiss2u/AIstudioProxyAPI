@@ -1,9 +1,10 @@
 import asyncio
 import json
+import logging
 import random
 import time
 from asyncio import Event
-from typing import Any, AsyncGenerator, Callable, Dict, Optional
+from typing import Any, AsyncGenerator, Callable, Dict, List, Optional, cast
 
 from playwright.async_api import Page as AsyncPage
 
@@ -21,9 +22,9 @@ async def gen_sse_from_aux_stream(
     req_id: str,
     request: ChatCompletionRequest,
     model_name_for_stream: str,
-    check_client_disconnected: Callable,
+    check_client_disconnected: Callable[[str], bool],
     event_to_set: Event,
-    stream_state: Optional[Dict[str, Any]] = None,
+    stream_state: Optional[Dict[str, Any]],
 ) -> AsyncGenerator[str, None]:
     """辅助流队列 -> OpenAI 兼容 SSE 生成器。
 
@@ -67,6 +68,7 @@ async def gen_sse_from_aux_stream(
                     event_to_set.set()
                 break
 
+            data: Any
             if isinstance(raw_data, str):
                 try:
                     data = json.loads(raw_data)
@@ -74,7 +76,7 @@ async def gen_sse_from_aux_stream(
                     logger.warning(f"无法解析流数据JSON: {raw_data}")
                     continue
             elif isinstance(raw_data, dict):
-                data = raw_data
+                data = cast(Dict[str, Any], raw_data)
             else:
                 logger.warning(f"未知的流数据类型: {type(raw_data)}")
                 continue
@@ -83,10 +85,19 @@ async def gen_sse_from_aux_stream(
                 logger.warning(f"数据不是字典类型: {data}")
                 continue
 
-            reason = data.get("reason", "")
-            body = data.get("body", "")
-            done = data.get("done", False)
-            function = data.get("function", [])
+            # After isinstance check, data is confirmed to be dict - use cast for type narrowing
+            typed_data: Dict[str, Any] = cast(Dict[str, Any], data)
+
+            reason_raw: Any = typed_data.get("reason", "")
+            reason: str = reason_raw if isinstance(reason_raw, str) else ""
+            body_raw: Any = typed_data.get("body", "")
+            body: str = body_raw if isinstance(body_raw, str) else ""
+            done_raw: Any = typed_data.get("done", False)
+            done: bool = done_raw if isinstance(done_raw, bool) else False
+            function_raw: Any = typed_data.get("function", [])
+            function: List[Any] = (
+                cast(List[Any], function_raw) if isinstance(function_raw, list) else []
+            )
 
             if reason:
                 full_reasoning_content = reason
@@ -116,12 +127,15 @@ async def gen_sse_from_aux_stream(
                 yield f"data: {json.dumps(output, ensure_ascii=False, separators=(',', ':'))}\n\n"
 
             if len(body) > last_body_pos:
-                finish_reason_val = None
+                finish_reason_val: Optional[str] = None
                 if done:
                     finish_reason_val = "stop"
 
-                delta_content = {"role": "assistant", "content": body[last_body_pos:]}
-                choice_item = {
+                delta_content: Dict[str, Any] = {
+                    "role": "assistant",
+                    "content": body[last_body_pos:],
+                }
+                choice_item: Dict[str, Any] = {
                     "index": 0,
                     "delta": delta_content,
                     "finish_reason": finish_reason_val,
@@ -129,21 +143,25 @@ async def gen_sse_from_aux_stream(
                 }
 
                 if done and function and len(function) > 0:
-                    tool_calls_list = []
+                    tool_calls_list: List[Dict[str, Any]] = []
                     for func_idx, function_call_data in enumerate(function):
-                        tool_calls_list.append(
-                            {
-                                "id": f"call_{random_id()}",
-                                "index": func_idx,
-                                "type": "function",
-                                "function": {
-                                    "name": function_call_data["name"],
-                                    "arguments": json.dumps(
-                                        function_call_data["params"]
-                                    ),
-                                },
-                            }
-                        )
+                        if isinstance(function_call_data, dict):
+                            typed_func_data: Dict[str, Any] = cast(
+                                Dict[str, Any], function_call_data
+                            )
+                            tool_calls_list.append(
+                                {
+                                    "id": f"call_{random_id()}",
+                                    "index": func_idx,
+                                    "type": "function",
+                                    "function": {
+                                        "name": typed_func_data.get("name", ""),
+                                        "arguments": json.dumps(
+                                            typed_func_data.get("params", {})
+                                        ),
+                                    },
+                                }
+                            )
                     delta_content["tool_calls"] = tool_calls_list
                     choice_item["finish_reason"] = "tool_calls"
                     choice_item["native_finish_reason"] = "tool_calls"
@@ -160,34 +178,38 @@ async def gen_sse_from_aux_stream(
                 yield f"data: {json.dumps(output, ensure_ascii=False, separators=(',', ':'))}\n\n"
             elif done:
                 if function and len(function) > 0:
-                    tool_calls_list = []
+                    tool_calls_list: List[Dict[str, Any]] = []
                     for func_idx, function_call_data in enumerate(function):
-                        tool_calls_list.append(
-                            {
-                                "id": f"call_{random_id()}",
-                                "index": func_idx,
-                                "type": "function",
-                                "function": {
-                                    "name": function_call_data["name"],
-                                    "arguments": json.dumps(
-                                        function_call_data["params"]
-                                    ),
-                                },
-                            }
-                        )
-                    delta_content = {
+                        if isinstance(function_call_data, dict):
+                            typed_func_data: Dict[str, Any] = cast(
+                                Dict[str, Any], function_call_data
+                            )
+                            tool_calls_list.append(
+                                {
+                                    "id": f"call_{random_id()}",
+                                    "index": func_idx,
+                                    "type": "function",
+                                    "function": {
+                                        "name": typed_func_data.get("name", ""),
+                                        "arguments": json.dumps(
+                                            typed_func_data.get("params", {})
+                                        ),
+                                    },
+                                }
+                            )
+                    delta_content: Dict[str, Any] = {
                         "role": "assistant",
                         "content": None,
                         "tool_calls": tool_calls_list,
                     }
-                    choice_item = {
+                    choice_item: Dict[str, Any] = {
                         "index": 0,
                         "delta": delta_content,
                         "finish_reason": "tool_calls",
                         "native_finish_reason": "tool_calls",
                     }
                 else:
-                    choice_item = {
+                    choice_item: Dict[str, Any] = {
                         "index": 0,
                         "delta": {"role": "assistant"},
                         "finish_reason": "stop",
@@ -229,7 +251,7 @@ async def gen_sse_from_aux_stream(
                 full_reasoning_content,
             )
             logger.info(f"计算的token使用统计: {usage_stats}")
-            final_chunk = {
+            final_chunk: Dict[str, Any] = {
                 "id": chat_completion_id,
                 "object": "chat.completion.chunk",
                 "model": model_name_for_stream,
@@ -245,11 +267,15 @@ async def gen_sse_from_aux_stream(
                 "usage": usage_stats,
             }
             yield f"data: {json.dumps(final_chunk, ensure_ascii=False, separators=(',', ':'))}\n\n"
+        except asyncio.CancelledError:
+            raise
         except Exception as usage_err:
             logger.error(f"计算或发送usage统计时出错: {usage_err}")
         try:
             logger.info("流式生成器完成，发送 [DONE] 标记")
             yield "data: [DONE]\n\n"
+        except asyncio.CancelledError:
+            raise
         except Exception as done_err:
             logger.error(f"发送 [DONE] 标记时出错: {done_err}")
         if not event_to_set.is_set():
@@ -265,11 +291,11 @@ async def gen_sse_from_aux_stream(
 
 async def gen_sse_from_playwright(
     page: AsyncPage,
-    logger: Any,
+    logger: logging.Logger,
     req_id: str,
     model_name_for_stream: str,
     request: ChatCompletionRequest,
-    check_client_disconnected: Callable,
+    check_client_disconnected: Callable[[str], bool],
     completion_event: Event,
 ) -> AsyncGenerator[str, None]:
     """Playwright 最终响应 -> OpenAI 兼容 SSE 生成器。"""
@@ -281,7 +307,9 @@ async def gen_sse_from_playwright(
     data_receiving = False
     try:
         page_controller = PageController(page, logger, req_id)
-        final_content = await page_controller.get_response(check_client_disconnected)
+        final_content: str = await page_controller.get_response(
+            check_client_disconnected
+        )
         data_receiving = True
         lines = final_content.split("\n")
         for line_idx, line in enumerate(lines):

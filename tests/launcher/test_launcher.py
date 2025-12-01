@@ -69,6 +69,7 @@ def test_determine_proxy_configuration_arg():
     )
     assert result["camoufox_proxy"] == "http://proxy:8080"
     assert result["stream_proxy"] == "http://proxy:8080"
+    assert result["source"] is not None
     assert "命令行参数" in result["source"]
 
 
@@ -77,6 +78,7 @@ def test_determine_proxy_configuration_env():
     with patch.dict(os.environ, {"UNIFIED_PROXY_CONFIG": "http://env:8080"}):
         result = determine_proxy_configuration()
         assert result["camoufox_proxy"] == "http://env:8080"
+        assert result["source"] is not None
         assert "环境变量 UNIFIED_PROXY_CONFIG" in result["source"]
 
 

@@ -10,9 +10,12 @@ Focus: Ensure model_switching_lock serializes model switches and params_cache_lo
 """
 
 import asyncio
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
+from api_utils.context_types import RequestContext
 
 
 @pytest.mark.integration
@@ -36,15 +39,18 @@ async def test_concurrent_model_switches_serialized(real_server_state):
 
     # 创建两个请求上下文
     def create_context(model_id):
-        return {
-            "needs_model_switching": True,
-            "model_id_to_use": model_id,
-            "page": AsyncMock(),
-            "logger": MagicMock(),
-            "model_switching_lock": real_server_state.model_switching_lock,
-            "model_actually_switched": False,
-            "current_ai_studio_model_id": "gemini-1.5-pro",
-        }
+        return cast(
+            RequestContext,
+            {
+                "needs_model_switching": True,
+                "model_id_to_use": model_id,
+                "page": AsyncMock(),
+                "logger": MagicMock(),
+                "model_switching_lock": real_server_state.model_switching_lock,
+                "model_actually_switched": False,
+                "current_ai_studio_model_id": "gemini-1.5-pro",
+            },
+        )
 
     context1 = create_context("gemini-2.0-flash")
     context2 = create_context("gemini-1.5-flash")
@@ -91,13 +97,16 @@ async def test_model_switch_invalidates_param_cache(real_server_state):
         "max_tokens": 1024,
     }
 
-    context = {
-        "logger": MagicMock(),
-        "params_cache_lock": real_server_state.params_cache_lock,
-        "page_params_cache": page_params_cache,
-        "current_ai_studio_model_id": "gemini-2.0-flash",  # 模型已切换
-        "model_actually_switched": True,  # 标记实际切换
-    }
+    context = cast(
+        RequestContext,
+        {
+            "logger": MagicMock(),
+            "params_cache_lock": real_server_state.params_cache_lock,
+            "page_params_cache": page_params_cache,
+            "current_ai_studio_model_id": "gemini-2.0-flash",  # 模型已切换
+            "model_actually_switched": True,  # 标记实际切换
+        },
+    )
 
     # 执行参数缓存处理
     await handle_parameter_cache("req1", context)
@@ -137,26 +146,32 @@ async def test_param_cache_waits_for_model_switch(real_server_state):
     real_server_state.current_ai_studio_model_id = "gemini-1.5-pro"
 
     # 创建请求上下文
-    switch_context = {
-        "needs_model_switching": True,
-        "model_id_to_use": "gemini-2.0-flash",
-        "page": mock_page,
-        "logger": mock_logger,
-        "model_switching_lock": real_server_state.model_switching_lock,
-        "model_actually_switched": False,
-        "current_ai_studio_model_id": "gemini-1.5-pro",
-    }
-
-    cache_context = {
-        "logger": mock_logger,
-        "params_cache_lock": real_server_state.params_cache_lock,
-        "page_params_cache": {
-            "last_known_model_id_for_params": "gemini-1.5-pro",
-            "temperature": 0.7,
+    switch_context = cast(
+        RequestContext,
+        {
+            "needs_model_switching": True,
+            "model_id_to_use": "gemini-2.0-flash",
+            "page": mock_page,
+            "logger": mock_logger,
+            "model_switching_lock": real_server_state.model_switching_lock,
+            "model_actually_switched": False,
+            "current_ai_studio_model_id": "gemini-1.5-pro",
         },
-        "current_ai_studio_model_id": "gemini-2.0-flash",
-        "model_actually_switched": True,
-    }
+    )
+
+    cache_context = cast(
+        RequestContext,
+        {
+            "logger": mock_logger,
+            "params_cache_lock": real_server_state.params_cache_lock,
+            "page_params_cache": {
+                "last_known_model_id_for_params": "gemini-1.5-pro",
+                "temperature": 0.7,
+            },
+            "current_ai_studio_model_id": "gemini-2.0-flash",
+            "model_actually_switched": True,
+        },
+    )
 
     async def cache_handler():
         execution_order.append("cache_handler_start")
@@ -201,15 +216,18 @@ async def test_model_switch_no_change_skips_operation(real_server_state):
     # 设置当前模型
     real_server_state.current_ai_studio_model_id = "gemini-1.5-pro"
 
-    context = {
-        "needs_model_switching": True,
-        "model_id_to_use": "gemini-1.5-pro",  # 与当前相同
-        "page": mock_page,
-        "logger": mock_logger,
-        "model_switching_lock": real_server_state.model_switching_lock,
-        "model_actually_switched": False,
-        "current_ai_studio_model_id": "gemini-1.5-pro",
-    }
+    context = cast(
+        RequestContext,
+        {
+            "needs_model_switching": True,
+            "model_id_to_use": "gemini-1.5-pro",  # 与当前相同
+            "page": mock_page,
+            "logger": mock_logger,
+            "model_switching_lock": real_server_state.model_switching_lock,
+            "model_actually_switched": False,
+            "current_ai_studio_model_id": "gemini-1.5-pro",
+        },
+    )
 
     with patch("browser_utils.switch_ai_studio_model") as mock_switch:
         await handle_model_switching("req1", context)
@@ -235,15 +253,18 @@ async def test_model_switch_failure_raises_error(real_server_state):
 
     real_server_state.current_ai_studio_model_id = "gemini-1.5-pro"
 
-    context = {
-        "needs_model_switching": True,
-        "model_id_to_use": "gemini-2.0-flash",
-        "page": mock_page,
-        "logger": mock_logger,
-        "model_switching_lock": real_server_state.model_switching_lock,
-        "model_actually_switched": False,
-        "current_ai_studio_model_id": "gemini-1.5-pro",
-    }
+    context = cast(
+        RequestContext,
+        {
+            "needs_model_switching": True,
+            "model_id_to_use": "gemini-2.0-flash",
+            "page": mock_page,
+            "logger": mock_logger,
+            "model_switching_lock": real_server_state.model_switching_lock,
+            "model_actually_switched": False,
+            "current_ai_studio_model_id": "gemini-1.5-pro",
+        },
+    )
 
     with patch("browser_utils.switch_ai_studio_model", return_value=False):
         # 验证: 抛出 HTTP 422 异常
@@ -274,15 +295,18 @@ async def test_three_concurrent_model_switches(real_server_state):
     real_server_state.current_ai_studio_model_id = "base-model"
 
     contexts = [
-        {
-            "needs_model_switching": True,
-            "model_id_to_use": f"model-{i}",
-            "page": AsyncMock(),
-            "logger": MagicMock(),
-            "model_switching_lock": real_server_state.model_switching_lock,
-            "model_actually_switched": False,
-            "current_ai_studio_model_id": "base-model",
-        }
+        cast(
+            RequestContext,
+            {
+                "needs_model_switching": True,
+                "model_id_to_use": f"model-{i}",
+                "page": AsyncMock(),
+                "logger": MagicMock(),
+                "model_switching_lock": real_server_state.model_switching_lock,
+                "model_actually_switched": False,
+                "current_ai_studio_model_id": "base-model",
+            },
+        )
         for i in range(1, 4)
     ]
 
@@ -324,13 +348,16 @@ async def test_param_cache_cleared_on_model_change_detection(real_server_state):
         "top_p": 0.95,
     }
 
-    context = {
-        "logger": MagicMock(),
-        "params_cache_lock": real_server_state.params_cache_lock,
-        "page_params_cache": page_params_cache,
-        "current_ai_studio_model_id": "new-model",  # 模型ID已变化
-        "model_actually_switched": False,  # 未显式标记，但ID不同
-    }
+    context = cast(
+        RequestContext,
+        {
+            "logger": MagicMock(),
+            "params_cache_lock": real_server_state.params_cache_lock,
+            "page_params_cache": page_params_cache,
+            "current_ai_studio_model_id": "new-model",  # 模型ID已变化
+            "model_actually_switched": False,  # 未显式标记，但ID不同
+        },
+    )
 
     await handle_parameter_cache("req1", context)
 
@@ -355,13 +382,16 @@ async def test_param_cache_preserved_when_model_unchanged(real_server_state):
         "max_tokens": 2048,
     }
 
-    context = {
-        "logger": MagicMock(),
-        "params_cache_lock": real_server_state.params_cache_lock,
-        "page_params_cache": page_params_cache,
-        "current_ai_studio_model_id": "gemini-1.5-pro",  # 模型未变
-        "model_actually_switched": False,
-    }
+    context = cast(
+        RequestContext,
+        {
+            "logger": MagicMock(),
+            "params_cache_lock": real_server_state.params_cache_lock,
+            "page_params_cache": page_params_cache,
+            "current_ai_studio_model_id": "gemini-1.5-pro",  # 模型未变
+            "model_actually_switched": False,
+        },
+    )
 
     await handle_parameter_cache("req1", context)
 

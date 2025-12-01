@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import uuid
 
@@ -24,6 +25,8 @@ async def websocket_log_endpoint(
             await websocket.receive_text()
     except WebSocketDisconnect:
         pass
+    except asyncio.CancelledError:
+        raise
     except Exception as e:
         logger.error(
             f"日志 WebSocket (客户端 {client_id}) 发生异常: {e}", exc_info=True

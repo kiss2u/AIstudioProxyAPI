@@ -1,10 +1,9 @@
 import asyncio
 import json
 import logging
-import multiprocessing
 import ssl
 from pathlib import Path
-from typing import Optional
+from typing import Any, List, Optional
 
 from stream.cert_manager import CertificateManager
 from stream.interceptors import HttpInterceptor
@@ -18,11 +17,11 @@ class ProxyServer:
 
     def __init__(
         self,
-        host="0.0.0.0",
-        port=3120,
-        intercept_domains=None,
-        upstream_proxy=None,
-        queue: Optional[multiprocessing.Queue] = None,
+        host: str = "0.0.0.0",
+        port: int = 3120,
+        intercept_domains: Optional[List[str]] = None,
+        upstream_proxy: Optional[str] = None,
+        queue: Optional[Any] = None,
     ):
         self.host = host
         self.port = port
@@ -42,7 +41,7 @@ class ProxyServer:
         # Set up logging
         self.logger = logging.getLogger("proxy_server")
 
-    def should_intercept(self, host):
+    def should_intercept(self, host: str) -> bool:
         """
         Determine if the connection to the host should be intercepted
         """
@@ -78,7 +77,7 @@ class ProxyServer:
                 return
 
             # Parse the request line
-            method, target, version = request_line_str.split(" ")
+            method, target, _version = request_line_str.split(" ")
 
             if method == "CONNECT":
                 # Handle HTTPS connection
@@ -122,7 +121,7 @@ class ProxyServer:
             loop = asyncio.get_running_loop()
             transport = writer.transport  # This is the original client transport
 
-            if transport is None:
+            if transport is None:  # type: ignore[reportUnnecessaryComparison]
                 self.logger.warning(
                     f"Client writer transport is None for {host}:{port} before TLS upgrade. Closing."
                 )
@@ -209,13 +208,19 @@ class ProxyServer:
                     pass
 
     async def _forward_data(
-        self, client_reader, client_writer, server_reader, server_writer
-    ):
+        self,
+        client_reader: asyncio.StreamReader,
+        client_writer: asyncio.StreamWriter,
+        server_reader: asyncio.StreamReader,
+        server_writer: asyncio.StreamWriter,
+    ) -> None:
         """
         Forward data between client and server without interception
         """
 
-        async def _forward(reader, writer):
+        async def _forward(
+            reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+        ) -> None:
             try:
                 while True:
                     data = await reader.read(8192)
@@ -242,10 +247,10 @@ class ProxyServer:
         tasks = [client_to_server, server_to_client]
         try:
             # print("Waiting for tasks...")
-            done, pending = await asyncio.wait(
+            _done, pending = await asyncio.wait(
                 tasks, return_when=asyncio.FIRST_COMPLETED
             )
-            # print("Tasks done/pending:", done, pending)
+            # print("Tasks done/pending:", _done, pending)
         except asyncio.CancelledError:
             # print("CancelledError caught in _forward_data_with_interception")
             # If the main task is cancelled, cancel all sub-tasks
@@ -264,8 +269,13 @@ class ProxyServer:
                 pass
 
     async def _forward_data_with_interception(
-        self, client_reader, client_writer, server_reader, server_writer, host
-    ):
+        self,
+        client_reader: asyncio.StreamReader,
+        client_writer: asyncio.StreamWriter,
+        server_reader: asyncio.StreamReader,
+        server_writer: asyncio.StreamWriter,
+        host: str,
+    ) -> None:
         """
         Forward data between client and server with interception
         """
@@ -297,7 +307,7 @@ class ProxyServer:
                         request_line = lines[0].decode("utf-8")
 
                         try:
-                            method, path, _ = request_line.split(" ")
+                            _method, path, _ = request_line.split(" ")
                         except ValueError:
                             # Not a valid HTTP request, just forward
                             server_writer.write(client_buffer)
@@ -310,12 +320,13 @@ class ProxyServer:
                             should_sniff = True
                             # Process the request body
                             processed_body = await self.interceptor.process_request(
-                                body_data, host, path
+                                bytes(body_data), host, path
                             )
 
                             # Send the processed request
                             server_writer.write(headers_data)
-                            server_writer.write(processed_body)
+                            if isinstance(processed_body, bytes):
+                                server_writer.write(processed_body)
                         else:
                             should_sniff = False
                             # Forward the request as is
@@ -374,7 +385,7 @@ class ProxyServer:
                                 pass
 
                         # Parse headers
-                        headers = {}
+                        headers: dict[str, str] = {}
                         for i in range(1, len(lines)):
                             if not lines[i]:
                                 continue
@@ -406,7 +417,7 @@ class ProxyServer:
                                 else:
                                     # 正常响应，按原逻辑处理
                                     resp = await self.interceptor.process_response(
-                                        body_data, host, "", headers
+                                        bytes(body_data), host, "", headers
                                     )
 
                                     if self.queue is not None:
@@ -440,7 +451,7 @@ class ProxyServer:
         # Wait for either task to complete, then cancel the other
         tasks = [client_to_server, server_to_client]
         try:
-            done, pending = await asyncio.wait(
+            _done, pending = await asyncio.wait(
                 tasks, return_when=asyncio.FIRST_COMPLETED
             )
         except asyncio.CancelledError:
@@ -459,7 +470,7 @@ class ProxyServer:
             except asyncio.CancelledError:
                 pass
 
-    async def start(self):
+    async def start(self) -> None:
         """
         Start the proxy server
         """

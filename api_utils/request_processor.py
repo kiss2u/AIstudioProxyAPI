@@ -5,12 +5,17 @@ Contains core request processing logic.
 
 import asyncio
 import json
+import logging
 import os
 from asyncio import Event, Future
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
+
+# Type aliases for common function signatures
+CheckClientDisconnected = Callable[[str], bool]
+Logger = logging.Logger
 from playwright.async_api import (
     Error as PlaywrightAsyncError,
 )
@@ -20,9 +25,6 @@ from playwright.async_api import (
 from playwright.async_api import (
     Page as AsyncPage,
 )
-
-# --- Centralized State ---
-from api_utils.server_state import state
 
 # --- Browser Utils Imports ---
 from browser_utils import save_error_snapshot
@@ -92,7 +94,9 @@ async def _analyze_model_requirements(
 
 
 async def _validate_page_status(
-    req_id: str, context: RequestContext, check_client_disconnected: Callable
+    req_id: str,
+    context: RequestContext,
+    check_client_disconnected: CheckClientDisconnected,
 ) -> None:
     """Validates page status"""
     page = context["page"]
@@ -109,16 +113,24 @@ async def _validate_page_status(
 
 
 async def _handle_model_switching(
-    req_id: str, context: RequestContext, check_client_disconnected: Callable
+    req_id: str,
+    context: RequestContext,
+    check_client_disconnected: CheckClientDisconnected,
 ) -> RequestContext:
     """Delegates to model_switching.handle_model_switching"""
     return await ms_switch(req_id, context)
 
 
-async def _handle_model_switch_failure(
-    req_id: str, page: AsyncPage, model_id_to_use: str, model_before_switch: str, logger
+async def _handle_model_switch_failure(  # pyright: ignore[reportUnusedFunction] - Called by tests
+    req_id: str,
+    page: AsyncPage,
+    model_id_to_use: str,
+    model_before_switch: str,
+    logger: Logger,
 ) -> None:
     """Handles model switching failure"""
+    from api_utils.server_state import state
+
     set_request_id(req_id)
     logger.warning(f"Model switch to {model_id_to_use} failed.")
     # Try to restore global state
@@ -130,7 +142,9 @@ async def _handle_model_switch_failure(
     )
 
 
-async def _handle_parameter_cache(req_id: str, context: RequestContext) -> None:
+async def _handle_parameter_cache(  # pyright: ignore[reportUnusedFunction] - Called by tests
+    req_id: str, context: RequestContext
+) -> None:
     """Delegates to model_switching.handle_parameter_cache"""
     await ms_param_cache(req_id, context)
 
@@ -138,7 +152,7 @@ async def _handle_parameter_cache(req_id: str, context: RequestContext) -> None:
 async def _prepare_and_validate_request(
     req_id: str,
     request: ChatCompletionRequest,
-    check_client_disconnected: Callable,
+    check_client_disconnected: CheckClientDisconnected,
 ) -> Tuple[str, List[str]]:
     """Prepares and validates request, returns (combined_prompt, images_list)."""
     try:
@@ -204,25 +218,29 @@ async def _prepare_and_validate_request(
                 getattr(latest_user, "content", None)
                 # Unified extraction from messages attachment fields
                 for key in ("attachments", "images", "files", "media"):
-                    arr = getattr(latest_user, key, None)
+                    arr: Any = getattr(latest_user, key, None)
                     if not isinstance(arr, list):
                         continue
+                    # Type narrowing after isinstance check
                     for it in arr:
-                        url_value = None
+                        url_value: Optional[str] = None
                         if isinstance(it, str):
                             url_value = it
                         elif isinstance(it, dict):
-                            url_value = it.get("url") or it.get("path")
-                        url_value = (url_value or "").strip()
+                            # Type narrowed to dict by isinstance
+                            url_value = str(it.get("url") or it.get("path") or "")
+                        if not url_value:
+                            continue
+                        url_value = url_value.strip()
                         if not url_value:
                             continue
                         if url_value.startswith("data:"):
-                            fp = extract_data_url_to_local(url_value)
+                            fp: Optional[str] = extract_data_url_to_local(url_value)
                             if fp:
                                 filtered.append(fp)
                         elif url_value.startswith("file:"):
                             parsed = urlparse(url_value)
-                            lp = unquote(parsed.path)
+                            lp: str = unquote(parsed.path)
                             if os.path.exists(lp):
                                 filtered.append(lp)
                         elif os.path.isabs(url_value) and os.path.exists(url_value):
@@ -241,10 +259,10 @@ async def _handle_response_processing(
     request: ChatCompletionRequest,
     page: Optional[AsyncPage],
     context: RequestContext,
-    result_future: Future,
+    result_future: Future[Union[StreamingResponse, JSONResponse]],
     submit_button_locator: Optional[Locator],
-    check_client_disconnected: Callable,
-) -> Optional[Tuple[Event, Locator, Callable]]:
+    check_client_disconnected: CheckClientDisconnected,
+) -> Optional[Tuple[Optional[Event], Locator, CheckClientDisconnected]]:
     """Handles response generation"""
     import logging
 
@@ -278,13 +296,13 @@ async def _handle_response_processing(
             raise server_error(
                 req_id, "Submit button locator is None in _handle_response_processing"
             )
-        # Cast context to dict to satisfy type checker if needed, though RequestContext is a TypedDict which is a dict
-        context_dict: dict = context  # type: ignore
+        # RequestContext is a TypedDict, which is structurally compatible with Dict[str, Any]
+        # at runtime, but we need explicit typing for the function signature
         return await _handle_playwright_response(
             req_id,
             request,
             page,
-            context_dict,
+            context,
             result_future,
             submit_button_locator,
             check_client_disconnected,
@@ -295,10 +313,10 @@ async def _handle_auxiliary_stream_response(
     req_id: str,
     request: ChatCompletionRequest,
     context: RequestContext,
-    result_future: Future,
+    result_future: Future[Union[StreamingResponse, JSONResponse]],
     submit_button_locator: Locator,
-    check_client_disconnected: Callable,
-) -> Optional[Tuple[Event, Locator, Callable]]:
+    check_client_disconnected: CheckClientDisconnected,
+) -> Optional[Tuple[Optional[Event], Locator, CheckClientDisconnected]]:
     """Auxiliary stream response path: converts STREAM_QUEUE data to OpenAI compatible SSE/JSON.
 
     - Streaming mode: Returns StreamingResponse, pushing delta and final usage incrementally.
@@ -310,6 +328,7 @@ async def _handle_auxiliary_stream_response(
 
     is_streaming = request.stream
     current_ai_studio_model_id = context.get("current_ai_studio_model_id")
+    completion_event: Optional[Event] = None
 
     if is_streaming:
         try:
@@ -333,13 +352,18 @@ async def _handle_auxiliary_stream_response(
                 if not completion_event.is_set():
                     completion_event.set()
 
+            # Return only first 3 elements to match function signature
+            # stream_state is used internally by the caller but not part of return type
             return (
                 completion_event,
                 submit_button_locator,
                 check_client_disconnected,
-                stream_state,
             )
 
+        except asyncio.CancelledError:
+            if completion_event and not completion_event.is_set():
+                completion_event.set()
+            raise
         except Exception as e:
             logger.error(f"Error getting stream data from queue: {e}", exc_info=True)
             if completion_event and not completion_event.is_set():
@@ -347,16 +371,17 @@ async def _handle_auxiliary_stream_response(
             raise
 
     else:  # Non-streaming
-        content = None
-        reasoning_content = None
-        functions = None
-        final_data_from_aux_stream = None
+        content: Optional[str] = None
+        reasoning_content: Optional[str] = None
+        functions: Optional[List[Dict[str, Any]]] = None
+        final_data_from_aux_stream: Optional[Dict[str, Any]] = None
 
         # Non-streaming: Consume auxiliary queue final result and assemble JSON response
         async for raw_data in use_stream_response(req_id):
             check_client_disconnected(f"Non-streaming Aux Stream - Loop ({req_id}): ")
 
             # Ensure data is dict type
+            data: Dict[str, Any]
             if isinstance(raw_data, str):
                 try:
                     data = json.loads(raw_data)
@@ -364,14 +389,10 @@ async def _handle_auxiliary_stream_response(
                     logger.warning(f"Failed to parse non-stream data JSON: {raw_data}")
                     continue
             elif isinstance(raw_data, dict):
-                data = raw_data
+                # Type narrowed to dict by isinstance check
+                data = raw_data  # type: Dict[str, Any]
             else:
                 logger.warning(f"Non-stream unknown data type: {type(raw_data)}")
-                continue
-
-            # Ensure data is dict type
-            if not isinstance(data, dict):
-                logger.warning(f"Non-stream data is not dict: {data}")
                 continue
 
             final_data_from_aux_stream = data
@@ -408,11 +429,13 @@ async def _handle_auxiliary_stream_response(
             )
 
         model_name_for_json = current_ai_studio_model_id or MODEL_NAME
-        message_payload = {"role": "assistant", "content": content}
+        message_payload: Dict[str, Any] = {"role": "assistant", "content": content}
         finish_reason_val = "stop"
 
         if functions and len(functions) > 0:
-            tool_calls_list = []
+            tool_calls_list: List[Dict[str, Any]] = []
+            func_idx: int
+            function_call_data: Dict[str, Any]
             for func_idx, function_call_data in enumerate(functions):
                 tool_calls_list.append(
                     {
@@ -465,11 +488,11 @@ async def _handle_playwright_response(
     req_id: str,
     request: ChatCompletionRequest,
     page: AsyncPage,
-    context: dict,
-    result_future: Future,
+    context: Union[RequestContext, Dict[str, Any]],
+    result_future: Future[Union[StreamingResponse, JSONResponse]],
     submit_button_locator: Locator,
-    check_client_disconnected: Callable,
-) -> Optional[Tuple[Event, Locator, Callable]]:
+    check_client_disconnected: CheckClientDisconnected,
+) -> Optional[Tuple[Optional[Event], Locator, CheckClientDisconnected]]:
     """Handle response using Playwright"""
     import logging
 
@@ -542,9 +565,9 @@ async def _handle_playwright_response(
 
 async def _cleanup_request_resources(
     req_id: str,
-    disconnect_check_task: Optional[asyncio.Task],
+    disconnect_check_task: Optional[asyncio.Task[None]],
     completion_event: Optional[Event],
-    result_future: Future,
+    result_future: Future[Union[StreamingResponse, JSONResponse]],
     is_streaming: bool,
 ) -> None:
     """Clean up request resources"""
@@ -562,8 +585,6 @@ async def _cleanup_request_resources(
             await disconnect_check_task
         except asyncio.CancelledError:
             pass
-        except Exception as task_clean_err:
-            logger.error(f"Error cleaning up task: {task_clean_err}")
 
     logger.info("Processing complete.")
 
@@ -573,6 +594,8 @@ async def _cleanup_request_resources(
         if os.path.isdir(req_dir):
             shutil.rmtree(req_dir, ignore_errors=True)
             logger.info(f"Cleaned up request upload directory: {req_dir}")
+    except asyncio.CancelledError:
+        raise
     except Exception as clean_err:
         logger.warning(f"Failed to clean upload directory: {clean_err}")
 
@@ -587,12 +610,12 @@ async def _cleanup_request_resources(
     return None
 
 
-async def _process_request_refactored(
+async def _process_request_refactored(  # pyright: ignore[reportUnusedFunction] - Called by queue_worker.py
     req_id: str,
     request: ChatCompletionRequest,
     http_request: Request,
-    result_future: Future,
-) -> Optional[Tuple[Optional[Event], Locator, Callable[[str], bool]]]:
+    result_future: Future[Union[StreamingResponse, JSONResponse]],
+) -> Optional[Tuple[Optional[Event], Locator, CheckClientDisconnected]]:
     """Core request processing function - Refactored"""
     # 设置日志上下文 (Grid Logger)
     set_request_id(req_id)
@@ -627,6 +650,8 @@ async def _process_request_refactored(
 
             await clear_stream_queue()
             logger.info("Stream queue cleared")
+        except asyncio.CancelledError:
+            raise
         except Exception as clear_err:
             logger.warning(f"Error clearing stream queue: {clear_err}")
 
@@ -634,7 +659,7 @@ async def _process_request_refactored(
     context = await _analyze_model_requirements(req_id, context, request)
 
     (
-        client_disconnected_event,
+        _,  # client_disconnected_event - not used, kept for unpacking
         disconnect_check_task,
         check_client_disconnected,
     ) = await _setup_disconnect_monitoring(req_id, http_request, result_future)
@@ -665,14 +690,8 @@ async def _process_request_refactored(
             # Attachment source strategy: Only accept data:/file:/absolute paths (existing) explicitly provided in current request
             from api_utils.utils import collect_and_validate_attachments
 
-            # Ensure image_list is List[str] by filtering out None
-            valid_image_list: List[str] = [img for img in image_list if img is not None]
-            valid_image_list = collect_and_validate_attachments(
-                request, req_id, valid_image_list
-            )
-            image_list = [
-                img for img in valid_image_list
-            ]  # Cast back to compatible type if needed, but collect_and_validate_attachments returns List[str]
+            # image_list is already List[str] from _prepare_and_validate_request
+            image_list = collect_and_validate_attachments(request, req_id, image_list)
 
             # Use PageController for page interaction
             # Note: Chat history clearing moved to after queue processing lock release
@@ -724,19 +743,17 @@ async def _process_request_refactored(
             # Should have been caught earlier, but for safety
             return None
 
-        # If completion_event is None (non-streaming), we still return the tuple with None for event
-        # But the type hint says Tuple[Event, ...].
-        # Let's check the return type hint of _process_request_refactored: Optional[Tuple[Event, Locator, Callable[[str], bool]]]
-        # So completion_event MUST be an Event if we return a tuple.
-
-        if completion_event is None:
-            pass
-
         # 直接返回 response_result (可能是 3-tuple 或 4-tuple)
         # queue_worker 已更新为动态处理不同长度的元组
-        if response_result:
-            return response_result  # type: ignore
-        return completion_event, submit_button_locator, check_client_disconnected  # type: ignore
+        # Type note: response_result can be 3-tuple or 4-tuple, we return only first 3 elements
+        # The return type allows Optional[Event], so None completion_event is valid
+        if response_result and len(response_result) >= 3:
+            # Extract first 3 elements: (Optional[Event], Locator, CheckClientDisconnected)
+            return (response_result[0], response_result[1], response_result[2])
+
+        # If no response_result, return the constructed tuple
+        # Note: completion_event can be None for non-streaming responses
+        return (completion_event, submit_button_locator, check_client_disconnected)
 
     except ClientDisconnectedError as disco_err:
         context["logger"].info(f"Caught client disconnected signal: {disco_err}")

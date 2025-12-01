@@ -743,3 +743,808 @@ async def test_handle_thinking_budget_invalid_string(mock_controller):
     # The exception handling path should be taken, leading to level_to_set = None
     # which logs "无法解析等级" and returns without calling _set_thinking_level
     # Note: This test mainly ensures the exception path is covered
+
+
+# --- Additional Coverage Tests for Missing Lines ---
+
+
+@pytest.mark.asyncio
+async def test_should_enable_from_raw_edge_cases(mock_controller):
+    """Test _should_enable_from_raw with various edge cases to cover lines 59, 66."""
+    mock_controller._uses_thinking_level = MagicMock(return_value=False)
+    mock_controller._model_has_main_thinking_toggle = MagicMock(return_value=True)
+    mock_controller._control_thinking_mode_toggle = AsyncMock(return_value=True)
+    mock_controller._control_thinking_budget_toggle = AsyncMock()
+
+    # Test string "none" (line 58-59) - should enable thinking
+    await mock_controller._handle_thinking_budget(
+        {"reasoning_effort": "none"}, "model", MagicMock(return_value=False)
+    )
+    mock_controller._control_thinking_mode_toggle.assert_called_with(
+        should_be_enabled=True, check_client_disconnected=unittest.mock.ANY
+    )
+    mock_controller._control_thinking_mode_toggle.reset_mock()
+
+    # Test invalid type (boolean) - normalize_reasoning_effort returns default config
+    # which typically enables thinking (line 66 returns False in _should_enable_from_raw,
+    # but directive.thinking_enabled takes precedence)
+    await mock_controller._handle_thinking_budget(
+        {"reasoning_effort": [1, 2, 3]},
+        "model",
+        MagicMock(return_value=False),  # Use list instead
+    )
+    # normalize_reasoning_effort returns default (ENABLE_THINKING_BUDGET)
+    # Just verify it doesn't crash - behavior depends on config
+
+
+@pytest.mark.asyncio
+async def test_set_thinking_level_string_conversion_paths(mock_controller):
+    """Test _set_thinking_level with string conversion paths (lines 113-117)."""
+    mock_controller._uses_thinking_level = MagicMock(return_value=True)
+    mock_controller._has_thinking_dropdown = AsyncMock(return_value=True)
+    mock_controller._model_has_main_thinking_toggle = MagicMock(return_value=True)
+    mock_controller._control_thinking_mode_toggle = AsyncMock(return_value=True)
+    mock_controller._set_thinking_level = AsyncMock()
+
+    # Test string "none" -> high (line 110-111)
+    await mock_controller._handle_thinking_budget(
+        {"reasoning_effort": "none"}, "gemini-3-pro", MagicMock(return_value=False)
+    )
+    mock_controller._set_thinking_level.assert_called_with("high", unittest.mock.ANY)
+
+    # Test string that parses to int >= 8000 (line 114-115)
+    await mock_controller._handle_thinking_budget(
+        {"reasoning_effort": "9000"}, "gemini-3-pro", MagicMock(return_value=False)
+    )
+    mock_controller._set_thinking_level.assert_called_with("high", unittest.mock.ANY)
+
+    # Test string that parses to int < 8000 (line 115)
+    await mock_controller._handle_thinking_budget(
+        {"reasoning_effort": "5000"}, "gemini-3-pro", MagicMock(return_value=False)
+    )
+    mock_controller._set_thinking_level.assert_called_with("low", unittest.mock.ANY)
+
+    # Test string with exception during parsing (line 116-117)
+    mock_controller._set_thinking_level.reset_mock()
+    await mock_controller._handle_thinking_budget(
+        {"reasoning_effort": "not_a_number_or_keyword"},
+        "gemini-3-pro",
+        MagicMock(return_value=False),
+    )
+    # Should not call _set_thinking_level (line 122)
+    mock_controller._set_thinking_level.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_handle_thinking_budget_no_main_toggle_enabled(mock_controller):
+    """Test enabled path when model has no main toggle (lines 147-152)."""
+    mock_controller._uses_thinking_level = MagicMock(return_value=False)
+    mock_controller._model_has_main_thinking_toggle = MagicMock(return_value=False)
+    mock_controller._control_thinking_mode_toggle = AsyncMock(return_value=True)
+    mock_controller._control_thinking_budget_toggle = AsyncMock()
+    mock_controller._set_thinking_budget_value = AsyncMock()
+
+    # Test with reasoning_effort that enables thinking but model has no main toggle
+    await mock_controller._handle_thinking_budget(
+        {"reasoning_effort": 5000}, "gemini-2.5-pro", MagicMock(return_value=False)
+    )
+
+    # Should call _control_thinking_mode_toggle even without main toggle (line 148-152)
+    mock_controller._control_thinking_mode_toggle.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_has_thinking_dropdown_cancelled_error(mock_controller, mock_page):
+    """Test CancelledError propagation in _has_thinking_dropdown (lines 190-195)."""
+    mock_page.locator.return_value.count = AsyncMock(return_value=1)
+
+    # Mock expect_async to raise CancelledError
+    import asyncio
+
+    with patch(
+        "browser_utils.page_controller_modules.thinking.expect_async"
+    ) as mock_expect:
+        mock_expect.return_value.to_be_visible = AsyncMock(
+            side_effect=asyncio.CancelledError()
+        )
+
+        # Should re-raise CancelledError (line 191)
+        with pytest.raises(asyncio.CancelledError):
+            await mock_controller._has_thinking_dropdown()
+
+    # Test outer CancelledError (line 195)
+    mock_page.locator.return_value.count = AsyncMock(
+        side_effect=asyncio.CancelledError()
+    )
+    with pytest.raises(asyncio.CancelledError):
+        await mock_controller._has_thinking_dropdown()
+
+
+@pytest.mark.asyncio
+async def test_set_thinking_level_listbox_close_fallback(mock_controller, mock_page):
+    """Test listbox close fallback with keyboard escape (lines 243-250)."""
+    trigger = AsyncMock()
+    option = AsyncMock()
+    listbox = AsyncMock()
+
+    locator_calls = [trigger, option, listbox]
+    mock_page.locator.side_effect = locator_calls
+
+    mock_expect = MagicMock()
+    mock_expect.return_value.to_be_visible = AsyncMock()
+    # Simulate listbox not closing automatically (line 242 exception)
+    mock_expect.return_value.to_be_hidden = AsyncMock(
+        side_effect=Exception("Listbox still visible")
+    )
+
+    trigger.locator.return_value.inner_text = AsyncMock(return_value="High")
+    mock_page.keyboard.press = AsyncMock()
+
+    check_disconnect_mock = MagicMock(return_value=False)
+
+    with patch(
+        "browser_utils.page_controller_modules.thinking.expect_async", mock_expect
+    ):
+        mock_controller._check_disconnect = AsyncMock()
+
+        await mock_controller._set_thinking_level("High", check_disconnect_mock)
+
+        # Should press Escape key (line 247)
+        mock_page.keyboard.press.assert_called_with("Escape")
+
+
+@pytest.mark.asyncio
+async def test_set_thinking_level_value_verification_mismatch(
+    mock_controller, mock_page
+):
+    """Test value verification mismatch warning (lines 255, 262)."""
+    trigger = AsyncMock()
+    option = AsyncMock()
+    listbox = AsyncMock()
+
+    # Setup trigger to return mismatched value
+    value_locator = AsyncMock()
+    value_locator.inner_text = AsyncMock(return_value="Low")
+    trigger.locator = MagicMock(return_value=value_locator)
+    trigger.scroll_into_view_if_needed = AsyncMock()
+    trigger.click = AsyncMock()
+
+    option.click = AsyncMock()
+
+    locator_call_count = [0]
+
+    def locator_side_effect(selector):
+        locator_call_count[0] += 1
+        if locator_call_count[0] == 1:  # First call for trigger
+            return trigger
+        elif locator_call_count[0] == 2:  # Second call for option
+            return option
+        else:  # Third call for listbox
+            return listbox
+
+    mock_page.locator.side_effect = locator_side_effect
+
+    mock_expect = MagicMock()
+    mock_expect.return_value.to_be_visible = AsyncMock()
+    mock_expect.return_value.to_be_hidden = AsyncMock()
+
+    check_disconnect_mock = MagicMock(return_value=False)
+
+    with patch(
+        "browser_utils.page_controller_modules.thinking.expect_async", mock_expect
+    ):
+        mock_controller._check_disconnect = AsyncMock()
+
+        await mock_controller._set_thinking_level("High", check_disconnect_mock)
+
+        # Should log warning (line 257-259)
+        mock_controller.logger.warning.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_set_thinking_level_client_disconnect(mock_controller, mock_page):
+    """Test ClientDisconnectedError handling in _set_thinking_level (lines 262, 265)."""
+    from models import ClientDisconnectedError
+
+    trigger = AsyncMock()
+    trigger.click = AsyncMock(side_effect=ClientDisconnectedError("Client gone"))
+
+    mock_page.locator.return_value = trigger
+
+    mock_expect = MagicMock()
+    mock_expect.return_value.to_be_visible = AsyncMock()
+
+    check_disconnect_mock = MagicMock(return_value=False)
+
+    with patch(
+        "browser_utils.page_controller_modules.thinking.expect_async", mock_expect
+    ):
+        mock_controller._check_disconnect = AsyncMock()
+
+        # Should re-raise ClientDisconnectedError (line 265)
+        with pytest.raises(ClientDisconnectedError):
+            await mock_controller._set_thinking_level("High", check_disconnect_mock)
+
+
+@pytest.mark.asyncio
+async def test_set_thinking_budget_value_evaluate_exception(mock_controller, mock_page):
+    """Test evaluate exception handling in _set_thinking_budget_value (lines 336-339)."""
+    import asyncio
+
+    input_el = AsyncMock()
+    mock_page.locator.return_value = input_el
+    mock_page.evaluate = AsyncMock(side_effect=Exception("Evaluate failed"))
+
+    mock_expect = MagicMock()
+    mock_expect.return_value.to_be_visible = AsyncMock()
+    mock_expect.return_value.to_have_value = AsyncMock()
+
+    check_disconnect_mock = MagicMock(return_value=False)
+
+    with patch(
+        "browser_utils.page_controller_modules.thinking.expect_async", mock_expect
+    ):
+        mock_controller._check_disconnect = AsyncMock()
+
+        # Should catch exception and continue (line 338)
+        await mock_controller._set_thinking_budget_value(5000, check_disconnect_mock)
+
+        # Should still call fill
+        input_el.fill.assert_called()
+
+    # Test CancelledError in evaluate (line 336-337)
+    mock_page.evaluate = AsyncMock(side_effect=asyncio.CancelledError())
+    with patch(
+        "browser_utils.page_controller_modules.thinking.expect_async", mock_expect
+    ):
+        mock_controller._check_disconnect = AsyncMock()
+
+        with pytest.raises(asyncio.CancelledError):
+            await mock_controller._set_thinking_budget_value(
+                5000, check_disconnect_mock
+            )
+
+
+@pytest.mark.asyncio
+async def test_set_thinking_budget_value_verification_int_exception(
+    mock_controller, mock_page
+):
+    """Test int parsing exception in verification fallback (lines 357-358)."""
+    input_el = AsyncMock()
+    mock_page.locator.return_value = input_el
+
+    mock_expect = MagicMock()
+    mock_expect.return_value.to_be_visible = AsyncMock()
+    mock_expect.return_value.to_have_value = AsyncMock(
+        side_effect=Exception("Mismatch")
+    )
+
+    # Return non-numeric string (line 357 exception)
+    input_el.input_value = AsyncMock(return_value="not_a_number")
+    input_el.get_attribute = AsyncMock(return_value=None)
+
+    check_disconnect_mock = MagicMock(return_value=False)
+
+    with patch(
+        "browser_utils.page_controller_modules.thinking.expect_async", mock_expect
+    ):
+        mock_controller._check_disconnect = AsyncMock()
+
+        await mock_controller._set_thinking_budget_value(5000, check_disconnect_mock)
+
+        # Should log warning (line 403-405)
+        mock_controller.logger.warning.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_set_thinking_budget_value_fallback_cancelled_error(
+    mock_controller, mock_page
+):
+    """Test CancelledError in fallback evaluation (lines 389-392, 399)."""
+    import asyncio
+
+    input_el = AsyncMock()
+    mock_page.locator.return_value = input_el
+
+    mock_expect = MagicMock()
+    mock_expect.return_value.to_be_visible = AsyncMock()
+    mock_expect.return_value.to_have_value = AsyncMock(
+        side_effect=Exception("Mismatch")
+    )
+
+    input_el.input_value = AsyncMock(return_value="8000")
+    input_el.get_attribute = AsyncMock(return_value="8000")
+
+    # Mock page.evaluate to raise CancelledError in fallback path (line 389)
+    mock_page.evaluate = AsyncMock(side_effect=asyncio.CancelledError())
+
+    check_disconnect_mock = MagicMock(return_value=False)
+
+    with patch(
+        "browser_utils.page_controller_modules.thinking.expect_async", mock_expect
+    ):
+        mock_controller._check_disconnect = AsyncMock()
+
+        # Should re-raise CancelledError (line 390)
+        with pytest.raises(asyncio.CancelledError):
+            await mock_controller._set_thinking_budget_value(
+                10000, check_disconnect_mock
+            )
+
+
+@pytest.mark.asyncio
+async def test_set_thinking_budget_value_top_level_errors(mock_controller, mock_page):
+    """Test top-level error handling in _set_thinking_budget_value (lines 407-412)."""
+    import asyncio
+
+    from models import ClientDisconnectedError
+
+    # Test CancelledError at top level (line 408)
+    input_el = AsyncMock()
+    mock_page.locator.return_value = input_el
+
+    mock_expect = MagicMock()
+    mock_expect.return_value.to_be_visible = AsyncMock(
+        side_effect=asyncio.CancelledError()
+    )
+
+    check_disconnect_mock = MagicMock(return_value=False)
+
+    with patch(
+        "browser_utils.page_controller_modules.thinking.expect_async", mock_expect
+    ):
+        mock_controller._check_disconnect = AsyncMock()
+
+        # Should re-raise CancelledError (line 409)
+        with pytest.raises(asyncio.CancelledError):
+            await mock_controller._set_thinking_budget_value(
+                5000, check_disconnect_mock
+            )
+
+    # Test ClientDisconnectedError (line 411-412)
+    mock_expect.return_value.to_be_visible = AsyncMock(
+        side_effect=ClientDisconnectedError("Client gone")
+    )
+
+    with patch(
+        "browser_utils.page_controller_modules.thinking.expect_async", mock_expect
+    ):
+        mock_controller._check_disconnect = AsyncMock()
+
+        # Should re-raise ClientDisconnectedError (line 412)
+        with pytest.raises(ClientDisconnectedError):
+            await mock_controller._set_thinking_budget_value(
+                5000, check_disconnect_mock
+            )
+
+
+@pytest.mark.asyncio
+async def test_control_thinking_mode_toggle_scroll_exception(
+    mock_controller, mock_page
+):
+    """Test scroll_into_view_if_needed exception handling (lines 438)."""
+
+    toggle = AsyncMock()
+    toggle.scroll_into_view_if_needed = AsyncMock(
+        side_effect=Exception("Scroll failed")
+    )
+    toggle.get_attribute = AsyncMock(return_value="false")
+    toggle.click = AsyncMock()
+
+    mock_page.locator.return_value = toggle
+
+    mock_expect = MagicMock()
+    mock_expect.return_value.to_be_visible = AsyncMock()
+
+    check_disconnect_mock = MagicMock(return_value=False)
+
+    with patch(
+        "browser_utils.page_controller_modules.thinking.expect_async", mock_expect
+    ):
+        mock_controller._check_disconnect = AsyncMock()
+
+        # Should catch exception and continue (line 439)
+        await mock_controller._control_thinking_mode_toggle(True, check_disconnect_mock)
+
+        # Should still attempt click
+        toggle.click.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_control_thinking_mode_toggle_click_cancelled_error(
+    mock_controller, mock_page
+):
+    """Test CancelledError during toggle click (lines 457-458)."""
+    import asyncio
+
+    toggle = AsyncMock()
+    toggle.get_attribute = AsyncMock(return_value="false")
+    toggle.click = AsyncMock(side_effect=asyncio.CancelledError())
+    toggle.scroll_into_view_if_needed = AsyncMock()
+
+    mock_page.locator.return_value = toggle
+
+    mock_expect = MagicMock()
+    mock_expect.return_value.to_be_visible = AsyncMock()
+
+    check_disconnect_mock = MagicMock(return_value=False)
+
+    with patch(
+        "browser_utils.page_controller_modules.thinking.expect_async", mock_expect
+    ):
+        mock_controller._check_disconnect = AsyncMock()
+
+        # Should re-raise CancelledError (line 458)
+        with pytest.raises(asyncio.CancelledError):
+            await mock_controller._control_thinking_mode_toggle(
+                True, check_disconnect_mock
+            )
+
+
+@pytest.mark.asyncio
+async def test_control_thinking_mode_toggle_fallback_success(
+    mock_controller, mock_page
+):
+    """Test successful fallback to label click (lines 459-468)."""
+    toggle = AsyncMock()
+    toggle.get_attribute = AsyncMock(side_effect=["false", "true"])  # Before and after
+    toggle.click = AsyncMock(side_effect=Exception("Click failed"))
+    toggle.scroll_into_view_if_needed = AsyncMock()
+
+    label = AsyncMock()
+    label.click = AsyncMock()  # Success on fallback
+
+    root = MagicMock()
+    root.locator.return_value = label
+
+    locator_call_count = [0]
+
+    def locator_side_effect(selector):
+        locator_call_count[0] += 1
+        if locator_call_count[0] == 1:  # First call for toggle button
+            return toggle
+        else:  # Second call for mat-slide-toggle root
+            return root
+
+    mock_page.locator.side_effect = locator_side_effect
+
+    mock_expect = MagicMock()
+    mock_expect.return_value.to_be_visible = AsyncMock()
+
+    check_disconnect_mock = MagicMock(return_value=False)
+
+    with patch(
+        "browser_utils.page_controller_modules.thinking.expect_async", mock_expect
+    ):
+        mock_controller._check_disconnect = AsyncMock()
+
+        # Should succeed via fallback (lines 459-468)
+        result = await mock_controller._control_thinking_mode_toggle(
+            True, check_disconnect_mock
+        )
+
+        # Verify label click was called (fallback)
+        label.click.assert_called()
+        assert result is True
+
+
+@pytest.mark.asyncio
+async def test_control_thinking_mode_toggle_verification_failure(
+    mock_controller, mock_page
+):
+    """Test verification failure after toggle click (lines 478-481)."""
+    toggle = AsyncMock()
+    # Simulate toggle not changing state
+    toggle.get_attribute = AsyncMock(side_effect=["false", "false"])
+    toggle.click = AsyncMock()
+    toggle.scroll_into_view_if_needed = AsyncMock()
+
+    mock_page.locator.return_value = toggle
+
+    mock_expect = MagicMock()
+    mock_expect.return_value.to_be_visible = AsyncMock()
+
+    check_disconnect_mock = MagicMock(return_value=False)
+
+    with patch(
+        "browser_utils.page_controller_modules.thinking.expect_async", mock_expect
+    ):
+        mock_controller._check_disconnect = AsyncMock()
+
+        result = await mock_controller._control_thinking_mode_toggle(
+            True, check_disconnect_mock
+        )
+
+        # Should log warning and return False (lines 483-486)
+        mock_controller.logger.warning.assert_called()
+        assert result is False
+
+
+@pytest.mark.asyncio
+async def test_control_thinking_mode_toggle_already_correct_state(
+    mock_controller, mock_page
+):
+    """Test toggle already in desired state (lines 488-489)."""
+    toggle = AsyncMock()
+    toggle.get_attribute = AsyncMock(return_value="true")
+    toggle.scroll_into_view_if_needed = AsyncMock()
+
+    mock_page.locator.return_value = toggle
+
+    mock_expect = MagicMock()
+    mock_expect.return_value.to_be_visible = AsyncMock()
+
+    check_disconnect_mock = MagicMock(return_value=False)
+
+    with patch(
+        "browser_utils.page_controller_modules.thinking.expect_async", mock_expect
+    ):
+        mock_controller._check_disconnect = AsyncMock()
+
+        result = await mock_controller._control_thinking_mode_toggle(
+            True, check_disconnect_mock
+        )
+
+        # Should not click and return True (line 489)
+        toggle.click.assert_not_called()
+        assert result is True
+
+
+@pytest.mark.asyncio
+async def test_control_thinking_mode_toggle_top_level_errors(
+    mock_controller, mock_page
+):
+    """Test top-level error handling in _control_thinking_mode_toggle (lines 497-503)."""
+    import asyncio
+
+    from playwright.async_api import TimeoutError
+
+    from models import ClientDisconnectedError
+
+    # Test TimeoutError (lines 491-495)
+    mock_page.locator.return_value = AsyncMock()
+
+    mock_expect = MagicMock()
+    mock_expect.return_value.to_be_visible = AsyncMock(
+        side_effect=TimeoutError("Not found")
+    )
+
+    check_disconnect_mock = MagicMock(return_value=False)
+
+    with patch(
+        "browser_utils.page_controller_modules.thinking.expect_async", mock_expect
+    ):
+        mock_controller._check_disconnect = AsyncMock()
+
+        result = await mock_controller._control_thinking_mode_toggle(
+            True, check_disconnect_mock
+        )
+
+        # Should return False and log warning (lines 492-495)
+        mock_controller.logger.warning.assert_called()
+        assert result is False
+
+    # Test CancelledError (lines 497-498)
+    mock_expect.return_value.to_be_visible = AsyncMock(
+        side_effect=asyncio.CancelledError()
+    )
+
+    with patch(
+        "browser_utils.page_controller_modules.thinking.expect_async", mock_expect
+    ):
+        mock_controller._check_disconnect = AsyncMock()
+
+        with pytest.raises(asyncio.CancelledError):
+            await mock_controller._control_thinking_mode_toggle(
+                True, check_disconnect_mock
+            )
+
+    # Test ClientDisconnectedError (lines 501-502)
+    mock_expect.return_value.to_be_visible = AsyncMock(
+        side_effect=ClientDisconnectedError("Client gone")
+    )
+
+    with (
+        patch(
+            "browser_utils.page_controller_modules.thinking.expect_async", mock_expect
+        ),
+        patch(
+            "browser_utils.page_controller_modules.thinking.save_error_snapshot",
+            AsyncMock(),
+        ),
+    ):
+        mock_controller._check_disconnect = AsyncMock()
+
+        with pytest.raises(ClientDisconnectedError):
+            await mock_controller._control_thinking_mode_toggle(
+                True, check_disconnect_mock
+            )
+
+
+@pytest.mark.asyncio
+async def test_control_thinking_budget_toggle_scroll_exception(
+    mock_controller, mock_page
+):
+    """Test scroll exception in _control_thinking_budget_toggle (lines 523)."""
+    toggle = AsyncMock()
+    toggle.scroll_into_view_if_needed = AsyncMock(
+        side_effect=Exception("Scroll failed")
+    )
+    toggle.get_attribute = AsyncMock(return_value="false")
+    toggle.click = AsyncMock()
+
+    mock_page.locator.return_value = toggle
+
+    mock_expect = MagicMock()
+    mock_expect.return_value.to_be_visible = AsyncMock()
+
+    check_disconnect_mock = MagicMock(return_value=False)
+
+    with patch(
+        "browser_utils.page_controller_modules.thinking.expect_async", mock_expect
+    ):
+        mock_controller._check_disconnect = AsyncMock()
+
+        # Should catch exception and continue (line 524)
+        await mock_controller._control_thinking_budget_toggle(
+            True, check_disconnect_mock
+        )
+
+        # Should still attempt click
+        toggle.click.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_control_thinking_budget_toggle_click_cancelled_error(
+    mock_controller, mock_page
+):
+    """Test CancelledError during budget toggle click (lines 543-544)."""
+    import asyncio
+
+    toggle = AsyncMock()
+    toggle.get_attribute = AsyncMock(return_value="false")
+    toggle.click = AsyncMock(side_effect=asyncio.CancelledError())
+    toggle.scroll_into_view_if_needed = AsyncMock()
+
+    mock_page.locator.return_value = toggle
+
+    mock_expect = MagicMock()
+    mock_expect.return_value.to_be_visible = AsyncMock()
+
+    check_disconnect_mock = MagicMock(return_value=False)
+
+    with patch(
+        "browser_utils.page_controller_modules.thinking.expect_async", mock_expect
+    ):
+        mock_controller._check_disconnect = AsyncMock()
+
+        # Should re-raise CancelledError (line 544)
+        with pytest.raises(asyncio.CancelledError):
+            await mock_controller._control_thinking_budget_toggle(
+                True, check_disconnect_mock
+            )
+
+
+@pytest.mark.asyncio
+async def test_control_thinking_budget_toggle_fallback_success(
+    mock_controller, mock_page
+):
+    """Test successful fallback to label click (lines 545-554)."""
+    toggle = AsyncMock()
+    toggle.get_attribute = AsyncMock(side_effect=["false", "true"])  # Before and after
+    toggle.click = AsyncMock(side_effect=Exception("Click failed"))
+    toggle.scroll_into_view_if_needed = AsyncMock()
+
+    label = AsyncMock()
+    label.click = AsyncMock()  # Success on fallback
+
+    root = MagicMock()
+    root.locator.return_value = label
+
+    locator_call_count = [0]
+
+    def locator_side_effect(selector):
+        locator_call_count[0] += 1
+        if locator_call_count[0] == 1:  # First call for toggle button
+            return toggle
+        else:  # Second call for mat-slide-toggle root
+            return root
+
+    mock_page.locator.side_effect = locator_side_effect
+
+    mock_expect = MagicMock()
+    mock_expect.return_value.to_be_visible = AsyncMock()
+
+    check_disconnect_mock = MagicMock(return_value=False)
+
+    with patch(
+        "browser_utils.page_controller_modules.thinking.expect_async", mock_expect
+    ):
+        mock_controller._check_disconnect = AsyncMock()
+
+        # Should succeed via fallback (lines 545-554)
+        await mock_controller._control_thinking_budget_toggle(
+            True, check_disconnect_mock
+        )
+
+        # Verify label click was called (fallback)
+        label.click.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_control_thinking_budget_toggle_already_correct(
+    mock_controller, mock_page
+):
+    """Test budget toggle already in desired state (lines 572-573)."""
+    toggle = AsyncMock()
+    toggle.get_attribute = AsyncMock(return_value="true")
+    toggle.scroll_into_view_if_needed = AsyncMock()
+
+    mock_page.locator.return_value = toggle
+
+    mock_expect = MagicMock()
+    mock_expect.return_value.to_be_visible = AsyncMock()
+
+    check_disconnect_mock = MagicMock(return_value=False)
+
+    with patch(
+        "browser_utils.page_controller_modules.thinking.expect_async", mock_expect
+    ):
+        mock_controller._check_disconnect = AsyncMock()
+
+        await mock_controller._control_thinking_budget_toggle(
+            True, check_disconnect_mock
+        )
+
+        # Should not click (line 572)
+        toggle.click.assert_not_called()
+        mock_controller.logger.info.assert_any_call(
+            unittest.mock.ANY
+        )  # Log "already in desired state"
+
+
+@pytest.mark.asyncio
+async def test_control_thinking_budget_toggle_top_level_errors(
+    mock_controller, mock_page
+):
+    """Test top-level error handling in _control_thinking_budget_toggle (lines 574-579)."""
+    import asyncio
+
+    from models import ClientDisconnectedError
+
+    # Test CancelledError (lines 575-576)
+    mock_page.locator.return_value = AsyncMock()
+
+    mock_expect = MagicMock()
+    mock_expect.return_value.to_be_visible = AsyncMock(
+        side_effect=asyncio.CancelledError()
+    )
+
+    check_disconnect_mock = MagicMock(return_value=False)
+
+    with patch(
+        "browser_utils.page_controller_modules.thinking.expect_async", mock_expect
+    ):
+        mock_controller._check_disconnect = AsyncMock()
+
+        # Should re-raise CancelledError (line 576)
+        with pytest.raises(asyncio.CancelledError):
+            await mock_controller._control_thinking_budget_toggle(
+                True, check_disconnect_mock
+            )
+
+    # Test ClientDisconnectedError (lines 578-579)
+    mock_expect.return_value.to_be_visible = AsyncMock(
+        side_effect=ClientDisconnectedError("Client gone")
+    )
+
+    with patch(
+        "browser_utils.page_controller_modules.thinking.expect_async", mock_expect
+    ):
+        mock_controller._check_disconnect = AsyncMock()
+
+        # Should re-raise ClientDisconnectedError (line 579)
+        with pytest.raises(ClientDisconnectedError):
+            await mock_controller._control_thinking_budget_toggle(
+                True, check_disconnect_mock
+            )

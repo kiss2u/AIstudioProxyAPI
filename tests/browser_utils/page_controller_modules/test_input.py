@@ -18,7 +18,7 @@ CONSTANTS = {
 @pytest.fixture(autouse=True)
 def mock_constants():
     """Patch constants where they are used in the input module."""
-    with patch.multiple("browser_utils.page_controller_modules.input", **CONSTANTS):
+    with patch.multiple("browser_utils.page_controller_modules.input", **CONSTANTS):  # type: ignore[call-overload, arg-type]
         yield
 
 
@@ -772,22 +772,23 @@ async def test_handle_post_upload_dialog_click_copyright(
 @pytest.mark.asyncio
 @pytest.mark.timeout(5)
 async def test_try_enter_submit_mac_detection(input_controller, mock_page_controller):
-    """Test _try_enter_submit detects Mac OS via userAgentData."""
+    """Test _try_enter_submit with unknown OS (simplified after refactor)."""
     prompt_area = MagicMock()
-    prompt_area.input_value = AsyncMock(return_value="test")
+    prompt_area.focus = AsyncMock()
     prompt_area.press = AsyncMock()
+    prompt_area.input_value = AsyncMock(
+        side_effect=["test", ""]
+    )  # Cleared after submit
 
-    # Mock userAgentData.platform
-    mock_page_controller.page.evaluate.side_effect = (
-        lambda script, *args: "macOS" if "userAgentData" in script else None
-    )
-
+    # After refactoring, OS detection from browser was removed as unused
+    # Test now verifies basic enter submit behavior with unknown OS
     with patch("os.environ.get", return_value="Unknown"):
-        await input_controller._try_enter_submit(prompt_area, lambda x: None)
+        result = await input_controller._try_enter_submit(prompt_area, lambda x: None)
 
-    # Should use Meta+Enter logic if it were combo, but for Enter submit it just logs or prepares
-    # This test mainly covers the OS detection block
-    assert mock_page_controller.page.evaluate.called
+    # Verify submission succeeded (input cleared)
+    assert result is True
+    assert prompt_area.focus.called
+    assert prompt_area.input_value.called
 
 
 @pytest.mark.asyncio

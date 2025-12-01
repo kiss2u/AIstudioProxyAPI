@@ -39,9 +39,9 @@ def test_load_script(
     patches = [patch("os.path.exists", return_value=file_exists)]
 
     if file_exists and read_side_effect:
-        patches.append(patch("builtins.open", side_effect=read_side_effect))
+        patches.append(patch("builtins.open", side_effect=read_side_effect))  # type: ignore[arg-type]
     elif file_exists:
-        patches.append(patch("builtins.open", mock_open(read_data=file_content)))
+        patches.append(patch("builtins.open", mock_open(read_data=file_content)))  # type: ignore[arg-type]
 
     with contextlib.ExitStack() as stack:
         for p in patches:
@@ -75,10 +75,10 @@ def test_load_model_config(
     patches = [patch("os.path.exists", return_value=file_exists)]
 
     if file_exists and read_side_effect:
-        patches.append(patch("builtins.open", side_effect=read_side_effect))
+        patches.append(patch("builtins.open", side_effect=read_side_effect))  # type: ignore[arg-type]
     elif file_exists:
         json_data = json.dumps(config_data)
-        patches.append(patch("builtins.open", mock_open(read_data=json_data)))
+        patches.append(patch("builtins.open", mock_open(read_data=json_data)))  # type: ignore[arg-type]
 
     with contextlib.ExitStack() as stack:
         for p in patches:

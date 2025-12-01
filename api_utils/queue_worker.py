@@ -7,11 +7,14 @@ import asyncio
 import logging
 import time
 from asyncio import Event, Future, Lock, Queue, Task
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
+from fastapi.responses import JSONResponse, StreamingResponse
+from playwright.async_api import Locator
 
 from logging_utils import set_request_id, set_source
+from models import ChatCompletionRequest
 
 from .error_utils import (
     client_cancelled,
@@ -28,48 +31,48 @@ class QueueManager:
         self.last_request_completion_time = 0.0
 
         # These will be initialized from server.py or created if missing
-        self.request_queue: Optional[Queue[Any]] = None
+        self.request_queue: Optional[Queue[Dict[str, Any]]] = None
         self.processing_lock: Optional[Lock] = None
         self.model_switching_lock: Optional[Lock] = None
         self.params_cache_lock: Optional[Lock] = None
 
         # Context for cleanup
-        self.current_submit_btn_loc: Any = None
-        self.current_client_disco_checker: Any = None
+        self.current_submit_btn_loc: Optional[Locator] = None
+        self.current_client_disco_checker: Optional[Callable[[str], bool]] = None
         self.current_completion_event: Optional[Event] = None
         self.current_req_id: Optional[str] = None
 
-    def initialize_globals(self):
-        """Initialize global variables from server module or create new ones."""
-        import server
+    def initialize_globals(self) -> None:
+        """Initialize global variables from server state or create new ones."""
+        from api_utils.server_state import state
 
-        # Use server's logger if available, otherwise keep local one
-        if hasattr(server, "logger"):
-            self.logger = server.logger
+        # Use state's logger if available, otherwise keep local one
+        if hasattr(state, "logger"):
+            self.logger = state.logger
 
         self.logger.info("--- Queue Worker Initializing ---")
 
-        if server.request_queue is None:
+        if state.request_queue is None:
             self.logger.info("Initializing request_queue...")
-            server.request_queue = Queue()  # type: ignore
-        self.request_queue = server.request_queue
+            state.request_queue = Queue()
+        self.request_queue = state.request_queue
 
-        if server.processing_lock is None:
+        if state.processing_lock is None:
             self.logger.info("Initializing processing_lock...")
-            server.processing_lock = Lock()
-        self.processing_lock = server.processing_lock
+            state.processing_lock = Lock()
+        self.processing_lock = state.processing_lock
 
-        if server.model_switching_lock is None:
+        if state.model_switching_lock is None:
             self.logger.info("Initializing model_switching_lock...")
-            server.model_switching_lock = Lock()
-        self.model_switching_lock = server.model_switching_lock
+            state.model_switching_lock = Lock()
+        self.model_switching_lock = state.model_switching_lock
 
-        if server.params_cache_lock is None:
+        if state.params_cache_lock is None:
             self.logger.info("Initializing params_cache_lock...")
-            server.params_cache_lock = Lock()
-        self.params_cache_lock = server.params_cache_lock
+            state.params_cache_lock = Lock()
+        self.params_cache_lock = state.params_cache_lock
 
-    async def check_queue_disconnects(self):
+    async def check_queue_disconnects(self) -> None:
         """Check for disconnected clients in the queue."""
         if not self.request_queue:
             return
@@ -141,7 +144,9 @@ class QueueManager:
         except asyncio.TimeoutError:
             return None
 
-    async def handle_streaming_delay(self, req_id: str, is_streaming_request: bool):
+    async def handle_streaming_delay(
+        self, req_id: str, is_streaming_request: bool
+    ) -> None:
         """Handle delay between streaming requests."""
         current_time = time.time()
         if (
@@ -160,9 +165,11 @@ class QueueManager:
     async def process_request(self, request_item: Dict[str, Any]) -> None:
         """Process a single request item."""
         req_id = str(request_item["req_id"])
-        request_data = request_item["request_data"]
-        http_request = request_item["http_request"]
-        result_future: Future[Any] = request_item["result_future"]
+        request_data: ChatCompletionRequest = request_item["request_data"]
+        http_request: Request = request_item["http_request"]
+        result_future: Future[Union[StreamingResponse, JSONResponse]] = request_item[
+            "result_future"
+        ]
 
         # 设置日志上下文 (Grid Logger)
         set_request_id(req_id)
@@ -185,7 +192,9 @@ class QueueManager:
         )
 
         # 2. Initial Connection Check
-        from api_utils.request_processor import _check_client_connection
+        from api_utils.request_processor import (
+            _check_client_connection,  # pyright: ignore[reportPrivateUsage]
+        )
 
         if not await _check_client_connection(req_id, http_request):
             self.logger.info("(Worker) Client disconnected before processing.")
@@ -363,10 +372,10 @@ class QueueManager:
     async def _execute_request_logic(
         self,
         req_id: str,
-        request_data: Any,
-        http_request: Any,
-        result_future: Future[Any],
-    ):
+        request_data: ChatCompletionRequest,
+        http_request: Request,
+        result_future: Future[Union[StreamingResponse, JSONResponse]],
+    ) -> None:
         """Execute the actual request processing logic."""
         # 确保日志上下文已设置
         set_request_id(req_id)
@@ -382,33 +391,21 @@ class QueueManager:
             self.current_completion_event = None
             self.current_req_id = req_id
 
-            returned_value = await _process_request_refactored(
+            returned_value: Optional[
+                Tuple[Optional[Event], Locator, Callable[[str], bool]]
+            ] = await _process_request_refactored(
                 req_id, request_data, http_request, result_future
             )
 
+            # Initialize variables that will be set from tuple unpacking
             completion_event: Optional[Event] = None
-            submit_btn_loc: Any = None
-            client_disco_checker: Any = None
-            stream_state: Optional[Dict[str, Any]] = None
+            submit_btn_loc: Optional[Locator] = None
+            client_disco_checker: Optional[Callable[[str], bool]] = None
             current_request_was_streaming = False
 
-            if isinstance(returned_value, tuple):
-                # 支持 3-tuple (旧版) 和 4-tuple (新版带 stream_state)
-                if len(returned_value) == 4:
-                    (
-                        completion_event,
-                        submit_btn_loc,
-                        client_disco_checker,
-                        stream_state,
-                    ) = returned_value
-                elif len(returned_value) == 3:
-                    completion_event, submit_btn_loc, client_disco_checker = (
-                        returned_value
-                    )
-                else:
-                    self.logger.warning(
-                        f"(Worker) Unexpected tuple length: {len(returned_value)}"
-                    )
+            if returned_value is not None:
+                # Always expect 3-tuple: (Optional[Event], Locator, Callable)
+                completion_event, submit_btn_loc, client_disco_checker = returned_value
 
                 if completion_event is not None:
                     current_request_was_streaming = True
@@ -417,17 +414,16 @@ class QueueManager:
                     self.logger.info(
                         "(Worker) Tuple received but completion_event is None."
                     )
-            elif returned_value is None:
-                self.logger.info("(Worker) Non-stream completion (None).")
             else:
-                self.logger.warning(
-                    f"(Worker) Unexpected return type: {type(returned_value)}"
-                )
+                self.logger.info("(Worker) Non-stream completion (None).")
 
             # Store for cleanup
             self.current_submit_btn_loc = submit_btn_loc
             self.current_client_disco_checker = client_disco_checker
             self.current_completion_event = completion_event
+
+            # Initialize stream_state for monitoring
+            stream_state: Optional[Dict[str, Any]] = None
 
             await self._monitor_completion(
                 req_id,
@@ -455,14 +451,14 @@ class QueueManager:
     async def _monitor_completion(
         self,
         req_id: str,
-        http_request: Any,
-        result_future: Future[Any],
+        http_request: Request,
+        result_future: Future[Union[StreamingResponse, JSONResponse]],
         completion_event: Optional[Event],
-        submit_btn_loc: Any,
-        client_disco_checker: Any,
+        submit_btn_loc: Optional[Locator],
+        client_disco_checker: Optional[Callable[[str], bool]],
         current_request_was_streaming: bool,
         stream_state: Optional[Dict[str, Any]] = None,
-    ):
+    ) -> None:
         """Monitor for completion and handle disconnects.
 
         Args:
@@ -581,10 +577,10 @@ class QueueManager:
     async def _handle_post_stream_button(
         self,
         req_id: str,
-        submit_btn_loc: Any,
-        client_disco_checker: Any,
+        submit_btn_loc: Locator,
+        client_disco_checker: Callable[[str], bool],
         completion_event: Event,
-    ):
+    ) -> None:
         """Handle the submit button state after streaming."""
         # 确保日志上下文已设置
         set_request_id(req_id)
@@ -654,7 +650,11 @@ class QueueManager:
             ):
                 from server import is_page_ready, page_instance
 
-                if page_instance and is_page_ready:
+                if (
+                    page_instance
+                    and is_page_ready
+                    and self.current_client_disco_checker
+                ):
                     from browser_utils.page_controller import PageController
 
                     page_controller = PageController(page_instance, self.logger, req_id)
@@ -675,12 +675,12 @@ class QueueManager:
         # 确保日志上下文已设置
         set_request_id(req_id)
 
-        import server
+        from api_utils.server_state import state
 
-        if not hasattr(server, "page_instance") or server.page_instance is None:
-            raise RuntimeError("server.page_instance is missing")
+        if state.page_instance is None:
+            raise RuntimeError("page_instance is missing")
 
-        page = server.page_instance
+        page = state.page_instance
         self.logger.info("(Recovery) 执行页面刷新...")
 
         try:
@@ -705,7 +705,6 @@ class QueueManager:
         # 确保日志上下文已设置
         set_request_id(req_id)
 
-        import server
         from api_utils.auth_manager import auth_manager
         from browser_utils.initialization.core import (
             close_page_logic,
@@ -713,7 +712,7 @@ class QueueManager:
             initialize_page_logic,
         )
         from browser_utils.model_management import (
-            _handle_initial_model_state_and_storage,
+            _handle_initial_model_state_and_storage,  # pyright: ignore[reportPrivateUsage]
         )
         from config import get_environment_variable
 
@@ -728,9 +727,11 @@ class QueueManager:
         await close_page_logic()
 
         # 2. 关闭浏览器连接以获取全新状态
-        if server.browser_instance and server.browser_instance.is_connected():
-            await server.browser_instance.close()
-            server.is_browser_connected = False
+        from api_utils.server_state import state
+
+        if state.browser_instance and state.browser_instance.is_connected():
+            await state.browser_instance.close()
+            state.is_browser_connected = False
             self.logger.info("(Recovery) 浏览器连接已关闭")
 
         # 3. 重新连接到 Camoufox
@@ -738,28 +739,28 @@ class QueueManager:
         if not ws_endpoint:
             raise RuntimeError("CAMOUFOX_WS_ENDPOINT not available for reconnection")
 
-        if not server.playwright_manager:
+        if not state.playwright_manager:
             raise RuntimeError("Playwright manager not available")
 
         self.logger.info("(Recovery) 重新连接到浏览器...")
-        server.browser_instance = await server.playwright_manager.firefox.connect(
+        state.browser_instance = await state.playwright_manager.firefox.connect(
             ws_endpoint, timeout=30000
         )
-        server.is_browser_connected = True
-        self.logger.info(f"(Recovery) 已连接: {server.browser_instance.version}")
+        state.is_browser_connected = True
+        self.logger.info(f"(Recovery) 已连接: {state.browser_instance.version}")
 
         # 4. 使用新配置文件初始化页面
-        server.page_instance, server.is_page_ready = await initialize_page_logic(
-            server.browser_instance,
+        state.page_instance, state.is_page_ready = await initialize_page_logic(
+            state.browser_instance,
             storage_state_path=next_profile,
         )
 
         # 5. 处理初始模型状态和存储
-        if server.is_page_ready and server.page_instance:
-            await _handle_initial_model_state_and_storage(server.page_instance)
+        if state.is_page_ready and state.page_instance:
+            await _handle_initial_model_state_and_storage(state.page_instance)
 
             # 6. 启用临时聊天模式
-            await enable_temporary_chat_mode(server.page_instance)
+            await enable_temporary_chat_mode(state.page_instance)
 
             self.logger.info("(Recovery) 配置文件切换完成 (浏览器已完全重新初始化)")
         else:

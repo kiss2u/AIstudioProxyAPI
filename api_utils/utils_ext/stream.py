@@ -160,6 +160,8 @@ async def use_stream_response(req_id: str) -> AsyncGenerator[Any, None]:
                     return
                 await asyncio.sleep(0.1)
                 continue
+    except asyncio.CancelledError:
+        raise
     except Exception as e:
         logger.error(f"使用流响应时出错: {e}", exc_info=True)
         raise
@@ -193,6 +195,8 @@ async def clear_stream_queue():
                 f"流式队列已清空 (捕获到 queue.Empty)。清空项数: {cleared_count}"
             )
             break
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             logger.error(
                 f"清空流式队列时发生意外错误 (已清空{cleared_count}项): {e}",

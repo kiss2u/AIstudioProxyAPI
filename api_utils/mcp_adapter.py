@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 from typing import Any, Dict
@@ -30,6 +31,8 @@ async def execute_mcp_tool(name: str, params: Dict[str, Any]) -> str:
         resp.raise_for_status()
         try:
             data = resp.json()
+        except asyncio.CancelledError:
+            raise
         except Exception:
             data = {"raw": resp.text}
     return json.dumps(data, ensure_ascii=False)
@@ -47,6 +50,8 @@ async def execute_mcp_tool_with_endpoint(
         resp.raise_for_status()
         try:
             data = resp.json()
+        except asyncio.CancelledError:
+            raise
         except Exception:
             data = {"raw": resp.text}
     return json.dumps(data, ensure_ascii=False)
