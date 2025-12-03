@@ -193,20 +193,6 @@ curl -X POST http://127.0.0.1:2048/v1/chat/completions \
 - 2GB+ 可用内存
 - 稳定的互联网连接
 
-### 一键安装脚本
-
-**macOS/Linux**:
-
-```bash
-curl -sSL https://raw.githubusercontent.com/CJackHwang/AIstudioProxyAPI/main/scripts/install.sh | bash
-```
-
-**Windows (PowerShell)**:
-
-```powershell
-iwr -useb https://raw.githubusercontent.com/CJackHwang/AIstudioProxyAPI/main/scripts/install.ps1 | iex
-```
-
 ### 手动安装步骤
 
 #### 1. 安装 Poetry
