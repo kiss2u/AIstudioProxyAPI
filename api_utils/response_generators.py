@@ -1,37 +1,45 @@
 import asyncio
 import json
-import time
+import logging
 import random
-from typing import Any, AsyncGenerator, Callable
+import time
 from asyncio import Event
+from typing import Any, AsyncGenerator, Callable, Dict, List, Optional, cast
 
 from playwright.async_api import Page as AsyncPage
 
-from models import ClientDisconnectedError, ChatCompletionRequest
 from config import CHAT_COMPLETION_ID_PREFIX
-from .utils import (
-    use_stream_response,
-    calculate_usage_stats,
-    generate_sse_chunk,
-    generate_sse_stop_chunk,
-)
+from logging_utils import set_request_id
+from models import ChatCompletionRequest, ClientDisconnectedError
+
 from .common_utils import random_id
+from .sse import generate_sse_chunk, generate_sse_stop_chunk
+from .utils_ext.stream import use_stream_response
+from .utils_ext.tokens import calculate_usage_stats
 
 
 async def gen_sse_from_aux_stream(
     req_id: str,
     request: ChatCompletionRequest,
     model_name_for_stream: str,
-    check_client_disconnected: Callable,
+    check_client_disconnected: Callable[[str], bool],
     event_to_set: Event,
+    stream_state: Optional[Dict[str, Any]],
 ) -> AsyncGenerator[str, None]:
     """辅助流队列 -> OpenAI 兼容 SSE 生成器。
 
     产出增量、tool_calls、最终 usage 与 [DONE]。
-    """
-    from server import logger
 
-    logger.info(f"[{req_id}] 开始生成 SSE 响应流")
+    Args:
+        stream_state: 可选的状态字典，用于向调用者报告流状态。
+                      如果提供，将设置 'has_content' 键表示是否收到内容。
+    """
+    import logging
+
+    logger = logging.getLogger("AIStudioProxyServer")
+    set_request_id(req_id)
+
+    logger.info("开始生成 SSE 响应流")
 
     last_reason_pos = 0
     last_body_pos = 0
@@ -54,32 +62,42 @@ async def gen_sse_from_aux_stream(
             try:
                 check_client_disconnected(f"流式生成器循环 ({req_id}): ")
             except ClientDisconnectedError:
-                logger.info(f"[{req_id}] 客户端断开连接，终止流式生成")
+                logger.info("客户端断开连接，终止流式生成")
                 if data_receiving and not event_to_set.is_set():
-                    logger.info(f"[{req_id}] 数据接收中客户端断开，立即设置done信号")
+                    logger.info("数据接收中客户端断开，立即设置done信号")
                     event_to_set.set()
                 break
 
+            data: Any
             if isinstance(raw_data, str):
                 try:
                     data = json.loads(raw_data)
                 except json.JSONDecodeError:
-                    logger.warning(f"[{req_id}] 无法解析流数据JSON: {raw_data}")
+                    logger.warning(f"无法解析流数据JSON: {raw_data}")
                     continue
             elif isinstance(raw_data, dict):
-                data = raw_data
+                data = cast(Dict[str, Any], raw_data)
             else:
-                logger.warning(f"[{req_id}] 未知的流数据类型: {type(raw_data)}")
+                logger.warning(f"未知的流数据类型: {type(raw_data)}")
                 continue
 
             if not isinstance(data, dict):
-                logger.warning(f"[{req_id}] 数据不是字典类型: {data}")
+                logger.warning(f"数据不是字典类型: {data}")
                 continue
 
-            reason = data.get("reason", "")
-            body = data.get("body", "")
-            done = data.get("done", False)
-            function = data.get("function", [])
+            # After isinstance check, data is confirmed to be dict - use cast for type narrowing
+            typed_data: Dict[str, Any] = cast(Dict[str, Any], data)
+
+            reason_raw: Any = typed_data.get("reason", "")
+            reason: str = reason_raw if isinstance(reason_raw, str) else ""
+            body_raw: Any = typed_data.get("body", "")
+            body: str = body_raw if isinstance(body_raw, str) else ""
+            done_raw: Any = typed_data.get("done", False)
+            done: bool = done_raw if isinstance(done_raw, bool) else False
+            function_raw: Any = typed_data.get("function", [])
+            function: List[Any] = (
+                cast(List[Any], function_raw) if isinstance(function_raw, list) else []
+            )
 
             if reason:
                 full_reasoning_content = reason
@@ -109,12 +127,15 @@ async def gen_sse_from_aux_stream(
                 yield f"data: {json.dumps(output, ensure_ascii=False, separators=(',', ':'))}\n\n"
 
             if len(body) > last_body_pos:
-                finish_reason_val = None
+                finish_reason_val: Optional[str] = None
                 if done:
                     finish_reason_val = "stop"
 
-                delta_content = {"role": "assistant", "content": body[last_body_pos:]}
-                choice_item = {
+                delta_content: Dict[str, Any] = {
+                    "role": "assistant",
+                    "content": body[last_body_pos:],
+                }
+                choice_item: Dict[str, Any] = {
                     "index": 0,
                     "delta": delta_content,
                     "finish_reason": finish_reason_val,
@@ -122,21 +143,25 @@ async def gen_sse_from_aux_stream(
                 }
 
                 if done and function and len(function) > 0:
-                    tool_calls_list = []
+                    tool_calls_list: List[Dict[str, Any]] = []
                     for func_idx, function_call_data in enumerate(function):
-                        tool_calls_list.append(
-                            {
-                                "id": f"call_{random_id()}",
-                                "index": func_idx,
-                                "type": "function",
-                                "function": {
-                                    "name": function_call_data["name"],
-                                    "arguments": json.dumps(
-                                        function_call_data["params"]
-                                    ),
-                                },
-                            }
-                        )
+                        if isinstance(function_call_data, dict):
+                            typed_func_data: Dict[str, Any] = cast(
+                                Dict[str, Any], function_call_data
+                            )
+                            tool_calls_list.append(
+                                {
+                                    "id": f"call_{random_id()}",
+                                    "index": func_idx,
+                                    "type": "function",
+                                    "function": {
+                                        "name": typed_func_data.get("name", ""),
+                                        "arguments": json.dumps(
+                                            typed_func_data.get("params", {})
+                                        ),
+                                    },
+                                }
+                            )
                     delta_content["tool_calls"] = tool_calls_list
                     choice_item["finish_reason"] = "tool_calls"
                     choice_item["native_finish_reason"] = "tool_calls"
@@ -153,34 +178,38 @@ async def gen_sse_from_aux_stream(
                 yield f"data: {json.dumps(output, ensure_ascii=False, separators=(',', ':'))}\n\n"
             elif done:
                 if function and len(function) > 0:
-                    tool_calls_list = []
+                    tool_calls_list: List[Dict[str, Any]] = []
                     for func_idx, function_call_data in enumerate(function):
-                        tool_calls_list.append(
-                            {
-                                "id": f"call_{random_id()}",
-                                "index": func_idx,
-                                "type": "function",
-                                "function": {
-                                    "name": function_call_data["name"],
-                                    "arguments": json.dumps(
-                                        function_call_data["params"]
-                                    ),
-                                },
-                            }
-                        )
-                    delta_content = {
+                        if isinstance(function_call_data, dict):
+                            typed_func_data: Dict[str, Any] = cast(
+                                Dict[str, Any], function_call_data
+                            )
+                            tool_calls_list.append(
+                                {
+                                    "id": f"call_{random_id()}",
+                                    "index": func_idx,
+                                    "type": "function",
+                                    "function": {
+                                        "name": typed_func_data.get("name", ""),
+                                        "arguments": json.dumps(
+                                            typed_func_data.get("params", {})
+                                        ),
+                                    },
+                                }
+                            )
+                    delta_content: Dict[str, Any] = {
                         "role": "assistant",
                         "content": None,
                         "tool_calls": tool_calls_list,
                     }
-                    choice_item = {
+                    choice_item: Dict[str, Any] = {
                         "index": 0,
                         "delta": delta_content,
                         "finish_reason": "tool_calls",
                         "native_finish_reason": "tool_calls",
                     }
                 else:
-                    choice_item = {
+                    choice_item: Dict[str, Any] = {
                         "index": 0,
                         "delta": {"role": "assistant"},
                         "finish_reason": "stop",
@@ -197,43 +226,32 @@ async def gen_sse_from_aux_stream(
                 yield f"data: {json.dumps(output, ensure_ascii=False, separators=(',', ':'))}\n\n"
 
     except ClientDisconnectedError:
-        logger.info(f"[{req_id}] 流式生成器中检测到客户端断开连接")
+        logger.info("流式生成器中检测到客户端断开连接")
         if data_receiving and not event_to_set.is_set():
-            logger.info(f"[{req_id}] 客户端断开异常处理中立即设置done信号")
+            logger.info("客户端断开异常处理中立即设置done信号")
             event_to_set.set()
+    except asyncio.CancelledError:
+        logger.info("流式生成器被取消")
+        if not event_to_set.is_set():
+            event_to_set.set()
+        raise
     except Exception as e:
-        logger.error(f"[{req_id}] 流式生成器处理过程中发生错误: {e}", exc_info=True)
-        try:
-            error_chunk = {
-                "id": chat_completion_id,
-                "object": "chat.completion.chunk",
-                "model": model_name_for_stream,
-                "created": created_timestamp,
-                "choices": [
-                    {
-                        "index": 0,
-                        "delta": {
-                            "role": "assistant",
-                            "content": f"\n\n[错误: {str(e)}]",
-                        },
-                        "finish_reason": "stop",
-                        "native_finish_reason": "stop",
-                    }
-                ],
-            }
-            yield f"data: {json.dumps(error_chunk, ensure_ascii=False, separators=(',', ':'))}\n\n"
-        except Exception:
-            pass
+        logger.error(f"流式生成器处理过程中发生错误: {e}", exc_info=True)
+        # 设置完成事件以避免调用者永久等待
+        if not event_to_set.is_set():
+            event_to_set.set()
+        # 重新抛出异常，让流式响应正常终止，而不是将错误作为聊天内容返回
+        raise
     finally:
-        logger.info(f"[{req_id}] SSE 响应流生成结束")
+        logger.info("SSE 响应流生成结束")
         try:
             usage_stats = calculate_usage_stats(
                 [msg.model_dump() for msg in request.messages],
                 full_body_content,
                 full_reasoning_content,
             )
-            logger.info(f"[{req_id}] 计算的token使用统计: {usage_stats}")
-            final_chunk = {
+            logger.info(f"计算的token使用统计: {usage_stats}")
+            final_chunk: Dict[str, Any] = {
                 "id": chat_completion_id,
                 "object": "chat.completion.chunk",
                 "model": model_name_for_stream,
@@ -249,47 +267,58 @@ async def gen_sse_from_aux_stream(
                 "usage": usage_stats,
             }
             yield f"data: {json.dumps(final_chunk, ensure_ascii=False, separators=(',', ':'))}\n\n"
+        except asyncio.CancelledError:
+            raise
         except Exception as usage_err:
-            logger.error(f"[{req_id}] 计算或发送usage统计时出错: {usage_err}")
+            logger.error(f"计算或发送usage统计时出错: {usage_err}")
         try:
-            logger.info(f"[{req_id}] 流式生成器完成，发送 [DONE] 标记")
+            logger.info("流式生成器完成，发送 [DONE] 标记")
             yield "data: [DONE]\n\n"
+        except asyncio.CancelledError:
+            raise
         except Exception as done_err:
-            logger.error(f"[{req_id}] 发送 [DONE] 标记时出错: {done_err}")
+            logger.error(f"发送 [DONE] 标记时出错: {done_err}")
         if not event_to_set.is_set():
             event_to_set.set()
-            logger.info(f"[{req_id}] 流式生成器完成事件已设置")
+            logger.info("流式生成器完成事件已设置")
+
+        # 更新 stream_state 以报告是否收到内容
+        if stream_state is not None:
+            has_content = bool(full_body_content or full_reasoning_content)
+            stream_state["has_content"] = has_content
+            logger.info(f"流状态更新: has_content={has_content}")
 
 
 async def gen_sse_from_playwright(
     page: AsyncPage,
-    logger: Any,
+    logger: logging.Logger,
     req_id: str,
     model_name_for_stream: str,
     request: ChatCompletionRequest,
-    check_client_disconnected: Callable,
+    check_client_disconnected: Callable[[str], bool],
     completion_event: Event,
 ) -> AsyncGenerator[str, None]:
     """Playwright 最终响应 -> OpenAI 兼容 SSE 生成器。"""
     # Reuse already-imported helpers from utils to avoid repeated imports
-    from models import ClientDisconnectedError
     from browser_utils.page_controller import PageController
+    from models import ClientDisconnectedError
 
+    set_request_id(req_id)
     data_receiving = False
     try:
         page_controller = PageController(page, logger, req_id)
-        final_content = await page_controller.get_response(check_client_disconnected)
+        final_content: str = await page_controller.get_response(
+            check_client_disconnected
+        )
         data_receiving = True
         lines = final_content.split("\n")
         for line_idx, line in enumerate(lines):
             try:
                 check_client_disconnected(f"Playwright流式生成器循环 ({req_id}): ")
             except ClientDisconnectedError:
-                logger.info(f"[{req_id}] Playwright流式生成器中检测到客户端断开连接")
+                logger.info("Playwright流式生成器中检测到客户端断开连接")
                 if data_receiving and not completion_event.is_set():
-                    logger.info(
-                        f"[{req_id}] Playwright数据接收中客户端断开，立即设置done信号"
-                    )
+                    logger.info("Playwright数据接收中客户端断开，立即设置done信号")
                     completion_event.set()
                 break
             if line:
@@ -306,27 +335,28 @@ async def gen_sse_from_playwright(
             final_content,
             "",
         )
-        logger.info(f"[{req_id}] Playwright非流式计算的token使用统计: {usage_stats}")
+        logger.info(f"Playwright非流式计算的token使用统计: {usage_stats}")
         yield generate_sse_stop_chunk(
             req_id, model_name_for_stream, "stop", usage_stats
         )
     except ClientDisconnectedError:
-        logger.info(f"[{req_id}] Playwright流式生成器中检测到客户端断开连接")
+        logger.info("Playwright流式生成器中检测到客户端断开连接")
         if data_receiving and not completion_event.is_set():
-            logger.info(f"[{req_id}] Playwright客户端断开异常处理中立即设置done信号")
+            logger.info("Playwright客户端断开异常处理中立即设置done信号")
             completion_event.set()
+    except asyncio.CancelledError:
+        logger.info("Playwright流式生成器被取消")
+        if not completion_event.is_set():
+            completion_event.set()
+        raise
     except Exception as e:
-        logger.error(
-            f"[{req_id}] Playwright流式生成器处理过程中发生错误: {e}", exc_info=True
-        )
-        try:
-            yield generate_sse_chunk(
-                f"\n\n[错误: {str(e)}]", req_id, model_name_for_stream
-            )
-            yield generate_sse_stop_chunk(req_id, model_name_for_stream)
-        except Exception:
-            pass
+        logger.error(f"Playwright流式生成器处理过程中发生错误: {e}", exc_info=True)
+        # 设置完成事件以避免调用者永久等待
+        if not completion_event.is_set():
+            completion_event.set()
+        # 重新抛出异常，让流式响应正常终止，而不是将错误作为聊天内容返回
+        raise
     finally:
         if not completion_event.is_set():
             completion_event.set()
-            logger.info(f"[{req_id}] Playwright流式生成器完成事件已设置")
+            logger.info("Playwright流式生成器完成事件已设置")
