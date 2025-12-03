@@ -11,6 +11,7 @@ from browser_utils.thinking_normalizer import (
 )
 from config import (
     CLICK_TIMEOUT_MS,
+    DEFAULT_THINKING_LEVEL,
     ENABLE_THINKING_MODE_TOGGLE_SELECTOR,
     SET_THINKING_BUDGET_TOGGLE_SELECTOR,
     THINKING_BUDGET_INPUT_SELECTOR,
@@ -69,6 +70,11 @@ class ThinkingController(BaseController):
             reasoning_effort
         )
 
+        # 特殊逻辑：对于使用等级的模型（Gemini 3 Pro），如果未指定 reasoning_effort，
+        # 我们默认认为应该开启（或者至少应该检查并应用默认等级）
+        if reasoning_effort is None and uses_level:
+            desired_enabled = True
+
         has_main_toggle = self._model_has_main_thinking_toggle(model_id_to_use)
         if has_main_toggle:
             self.logger.info(
@@ -117,6 +123,9 @@ class ThinkingController(BaseController):
                         level_to_set = None
             elif isinstance(rv, int):
                 level_to_set = "high" if rv >= 8000 or rv == -1 else "low"
+
+            if level_to_set is None and rv is None:
+                level_to_set = DEFAULT_THINKING_LEVEL
 
             if level_to_set is None:
                 self.logger.info(" 无法解析等级，保持当前等级。")

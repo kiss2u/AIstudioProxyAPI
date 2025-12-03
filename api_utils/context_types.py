@@ -1,12 +1,12 @@
 import logging
 from asyncio import Future, Lock
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, TypedDict
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, TypedDict, Union
 
 from playwright.async_api import Page as AsyncPage
 
 if TYPE_CHECKING:
     from fastapi import Request
-    from fastapi.responses import JSONResponse
+    from fastapi.responses import JSONResponse, StreamingResponse
 
     from models.chat import ChatCompletionRequest
 
@@ -21,7 +21,7 @@ class QueueItem(TypedDict):
     req_id: str
     request_data: "ChatCompletionRequest"
     http_request: "Request"
-    result_future: "Future[JSONResponse]"
+    result_future: "Future[Union[JSONResponse, StreamingResponse]]"
     enqueue_time: float
     cancelled: bool
 
@@ -34,6 +34,7 @@ class RequestContext(TypedDict):
     """
 
     # Core components (always set by context_init.py)
+    req_id: str
     logger: logging.Logger
     page: Optional[AsyncPage]  # Value can be None if browser not ready
     is_page_ready: bool

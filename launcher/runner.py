@@ -58,7 +58,8 @@ class Launcher:
 
     def run(self):
         # 检查是否是内部启动调用
-        is_internal_call = any(arg.startswith("--internal-") for arg in sys.argv)
+        # 注意：不能只检查 startswith("--internal-")，因为 --internal-camoufox-proxy 是主进程参数
+        is_internal_call = self.args.internal_launch_mode is not None
 
         if is_internal_call:
             # 处理内部 Camoufox 启动逻辑

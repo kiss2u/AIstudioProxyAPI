@@ -8,12 +8,14 @@
 """
 
 import asyncio
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
 
 from api_utils.queue_worker import QueueManager
+from api_utils.context_types import QueueItem
 
 
 @pytest.mark.asyncio
@@ -254,12 +256,14 @@ async def test_processing_lock_none_error():
     mock_chat_request.stream = False
     result_future = asyncio.Future()
 
-    request_item = {
+    request_item = cast(QueueItem, {
         "req_id": "req123",
         "request_data": mock_chat_request,
         "http_request": mock_http_request,
         "result_future": result_future,
-    }
+        "cancelled": False,
+        "enqueue_time": 0.0,
+    })
 
     async def mock_check_connection(req_id, http_req):
         return True  # 客户端连接正常
@@ -296,13 +300,14 @@ async def test_process_request_cancelled_before_processing():
     mock_chat_request.stream = False
     result_future = asyncio.Future()
 
-    request_item = {
+    request_item = cast(QueueItem, {
         "req_id": "req123",
         "request_data": mock_chat_request,
         "http_request": mock_http_request,
         "result_future": result_future,
         "cancelled": True,  # 请求已取消
-    }
+        "enqueue_time": 0.0,
+    })
 
     await queue_manager.process_request(request_item)
 

@@ -16,12 +16,14 @@ Mock Budget: <40 (down from 98)
 
 import asyncio
 import time
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
 
 from api_utils.queue_worker import QueueManager, queue_worker
+from api_utils.context_types import QueueItem
 
 # ==================== Test Classes ====================
 
@@ -137,20 +139,24 @@ class TestQueueDisconnectDetection:
         assert queue_manager.request_queue is not None
 
         # Create two items: one disconnected, one connected
-        item1 = {
+        item1 = cast(QueueItem, {
             "req_id": "req1",
             "http_request": MagicMock(),
             "cancelled": False,
             "result_future": asyncio.Future(),
-        }
+            "request_data": None,
+            "enqueue_time": 0.0,
+        })
         item1["http_request"].is_disconnected = AsyncMock(return_value=True)
 
-        item2 = {
+        item2 = cast(QueueItem, {
             "req_id": "req2",
             "http_request": MagicMock(),
             "cancelled": False,
             "result_future": asyncio.Future(),
-        }
+            "request_data": None,
+            "enqueue_time": 0.0,
+        })
         item2["http_request"].is_disconnected = AsyncMock(return_value=False)
 
         # Add to queue
@@ -180,12 +186,14 @@ class TestQueueDisconnectDetection:
         assert queue_manager.request_queue is not None
         queue_manager.logger = MagicMock()
 
-        item = {
+        item = cast(QueueItem, {
             "req_id": "req1",
             "http_request": MagicMock(),
             "cancelled": False,
             "result_future": asyncio.Future(),
-        }
+            "request_data": None,
+            "enqueue_time": 0.0,
+        })
         item["http_request"].is_disconnected = AsyncMock(
             side_effect=Exception("Connection check failed")
         )
@@ -213,13 +221,14 @@ class TestRequestProcessing:
         # Mock task_done since we're not using queue.get()
         queue_manager.request_queue.task_done = MagicMock()
 
-        req_item = {
+        req_item = cast(QueueItem, {
             "req_id": "req1",
             "request_data": MagicMock(),
             "http_request": MagicMock(),
             "result_future": asyncio.Future(),
             "cancelled": True,  # Already cancelled
-        }
+            "enqueue_time": 0.0,
+        })
 
         await queue_manager.process_request(req_item)
 
@@ -240,13 +249,14 @@ class TestRequestProcessing:
         queue_manager.request_queue.task_done = MagicMock()  # Mock task_done
         queue_manager.processing_lock = real_locks_mock_browser.processing_lock
 
-        req_item = {
+        req_item = cast(QueueItem, {
             "req_id": "req1",
             "request_data": MagicMock(),
             "http_request": MagicMock(),
             "result_future": asyncio.Future(),
             "cancelled": False,
-        }
+            "enqueue_time": 0.0,
+        })
 
         # Mock client as disconnected
         with patch(
@@ -273,13 +283,14 @@ class TestRequestProcessing:
         queue_manager.request_queue.task_done = MagicMock()  # Mock task_done
         queue_manager.processing_lock = None  # Not initialized
 
-        req_item = {
+        req_item = cast(QueueItem, {
             "req_id": "req1",
             "request_data": MagicMock(),
             "http_request": MagicMock(),
             "result_future": asyncio.Future(),
             "cancelled": False,
-        }
+            "enqueue_time": 0.0,
+        })
 
         with patch(
             "api_utils.request_processor._check_client_connection",
@@ -305,13 +316,14 @@ class TestRequestProcessing:
         queue_manager.processing_lock = real_locks_mock_browser.processing_lock
         queue_manager.logger = MagicMock()
 
-        req_item = {
+        req_item = cast(QueueItem, {
             "req_id": "req1",
             "request_data": MagicMock(),
             "http_request": MagicMock(),
             "result_future": asyncio.Future(),
             "cancelled": False,
-        }
+            "enqueue_time": 0.0,
+        })
         req_item["request_data"].stream = False
 
         with (
@@ -348,13 +360,14 @@ class TestRecoveryMechanisms:
         queue_manager.processing_lock = real_locks_mock_browser.processing_lock
         queue_manager.logger = MagicMock()
 
-        req_item = {
+        req_item = cast(QueueItem, {
             "req_id": "req1",
             "request_data": MagicMock(),
             "http_request": MagicMock(),
             "result_future": asyncio.Future(),
             "cancelled": False,
-        }
+            "enqueue_time": 0.0,
+        })
 
         with (
             patch(
@@ -392,13 +405,14 @@ class TestRecoveryMechanisms:
         queue_manager.processing_lock = real_locks_mock_browser.processing_lock
         queue_manager.logger = MagicMock()
 
-        req_item = {
+        req_item = cast(QueueItem, {
             "req_id": "req1",
             "request_data": MagicMock(),
             "http_request": MagicMock(),
             "result_future": asyncio.Future(),
             "cancelled": False,
-        }
+            "enqueue_time": 0.0,
+        })
 
         with (
             patch(
@@ -445,13 +459,14 @@ class TestRecoveryMechanisms:
         queue_manager.processing_lock = real_locks_mock_browser.processing_lock
         queue_manager.logger = MagicMock()
 
-        req_item = {
+        req_item = cast(QueueItem, {
             "req_id": "req1",
             "request_data": MagicMock(),
             "http_request": MagicMock(),
             "result_future": asyncio.Future(),
             "cancelled": False,
-        }
+            "enqueue_time": 0.0,
+        })
 
         with (
             patch(
@@ -493,13 +508,14 @@ class TestRecoveryMechanisms:
         queue_manager.processing_lock = real_locks_mock_browser.processing_lock
         queue_manager.logger = MagicMock()
 
-        req_item = {
+        req_item = cast(QueueItem, {
             "req_id": "req1",
             "request_data": MagicMock(),
             "http_request": MagicMock(),
             "result_future": asyncio.Future(),
             "cancelled": False,
-        }
+            "enqueue_time": 0.0,
+        })
 
         with (
             patch(
@@ -969,7 +985,14 @@ class TestGetNextRequest:
         queue_manager.request_queue = real_locks_mock_browser.request_queue
         assert queue_manager.request_queue is not None
 
-        item = {"req_id": "req1", "request_data": MagicMock()}
+        item = cast(QueueItem, {
+            "req_id": "req1",
+            "request_data": MagicMock(),
+            "http_request": MagicMock(),
+            "cancelled": False,
+            "result_future": asyncio.Future(),
+            "enqueue_time": 0.0,
+        })
         await queue_manager.request_queue.put(item)
 
         result = await queue_manager.get_next_request()
