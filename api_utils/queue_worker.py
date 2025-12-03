@@ -16,6 +16,8 @@ from playwright.async_api import Locator
 from logging_utils import set_request_id, set_source
 from models import ChatCompletionRequest
 
+from api_utils.context_types import QueueItem
+
 from .error_utils import (
     client_cancelled,
     client_disconnected,
@@ -31,7 +33,7 @@ class QueueManager:
         self.last_request_completion_time = 0.0
 
         # These will be initialized from server.py or created if missing
-        self.request_queue: Optional[Queue[Dict[str, Any]]] = None
+        self.request_queue: Optional[Queue[QueueItem]] = None
         self.processing_lock: Optional[Lock] = None
         self.model_switching_lock: Optional[Lock] = None
         self.params_cache_lock: Optional[Lock] = None
@@ -82,7 +84,7 @@ class QueueManager:
             return
 
         checked_count = 0
-        items_to_requeue: List[Dict[str, Any]] = []
+        items_to_requeue: List[QueueItem] = []
         processed_ids: Set[str] = set()
 
         # Limit check to 10 items or queue size
@@ -90,7 +92,7 @@ class QueueManager:
 
         while checked_count < limit:
             try:
-                item: Dict[str, Any] = self.request_queue.get_nowait()
+                item: QueueItem = self.request_queue.get_nowait()
                 item_req_id = str(item.get("req_id", "unknown"))
 
                 if item_req_id in processed_ids:
@@ -133,7 +135,7 @@ class QueueManager:
         for item in items_to_requeue:
             await self.request_queue.put(item)
 
-    async def get_next_request(self) -> Optional[Dict[str, Any]]:
+    async def get_next_request(self) -> Optional[QueueItem]:
         """Get the next request from the queue with timeout."""
         if not self.request_queue:
             await asyncio.sleep(1)
@@ -162,7 +164,7 @@ class QueueManager:
             )
             await asyncio.sleep(delay_time)
 
-    async def process_request(self, request_item: Dict[str, Any]) -> None:
+    async def process_request(self, request_item: QueueItem) -> None:
         """Process a single request item."""
         req_id = str(request_item["req_id"])
         request_data: ChatCompletionRequest = request_item["request_data"]
