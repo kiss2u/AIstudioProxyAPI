@@ -34,6 +34,7 @@ HTTP_PROXY = os.environ.get("HTTP_PROXY", "")
 HTTPS_PROXY = os.environ.get("HTTPS_PROXY", "")
 LOG_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "logs")
 LAUNCHER_LOG_FILE_PATH = os.path.join(LOG_DIR, "launch_app.log")
+DIRECT_LAUNCH = os.environ.get("DIRECT_LAUNCH", False)
 
 # --- WebSocket 端点正则表达式 ---
 import re
