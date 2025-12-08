@@ -454,7 +454,7 @@ class Launcher:
                     if DIRECT_LAUNCH:
                         selected_profile = available_profiles[0]
                         self.effective_active_auth_json_path = selected_profile["path"]
-                        logger.info(f"   直接启动模式：自动选择第一个可用认证文件: {selected_profile['name']}")
+                        logger.info(f"   快速启动：自动选择第一个可用认证文件: {selected_profile['name']}")
                     else:
                         print("-" * 60 + "\n   找到以下可用的认证文件:", flush=True)
                         for i, profile in enumerate(available_profiles):
