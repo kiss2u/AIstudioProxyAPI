@@ -19,6 +19,7 @@ from launcher.config import (
     SAVED_AUTH_DIR,
     determine_proxy_configuration,
     parse_args,
+    DIRECT_LAUNCH
 )
 from launcher.internal import run_internal_camoufox
 from launcher.logging_setup import setup_launcher_logging
@@ -77,7 +78,8 @@ class Launcher:
 
         self._check_deprecated_auth_file()
         self._determine_launch_mode()
-        self._handle_auth_file_selection()
+        if not DIRECT_LAUNCH:
+            self._handle_auth_file_selection()
         self._check_xvfb()
         self._check_server_port()
 
@@ -157,6 +159,12 @@ class Launcher:
                 default_interactive_choice = (
                     "3" if platform.system() == "Linux" else "1"
                 )
+
+            if DIRECT_LAUNCH:
+                self.final_launch_mode = (
+                        default_mode_from_env or "headless"
+                )
+                return
 
             logger.info("--- 请选择启动模式 (未通过命令行参数指定) ---")
             if env_launch_mode and default_mode_from_env:
@@ -443,47 +451,52 @@ class Launcher:
                 if available_profiles:
                     # 对可用配置文件列表进行排序，以确保一致的显示顺序
                     available_profiles.sort(key=lambda x: x["name"])
-                    print("-" * 60 + "\n   找到以下可用的认证文件:", flush=True)
-                    for i, profile in enumerate(available_profiles):
-                        print(f"     {i + 1}: {profile['name']}", flush=True)
-                    print(
-                        "     N: 不加载任何文件 (使用浏览器当前状态)\n" + "-" * 60,
-                        flush=True,
-                    )
-                    choice = input_with_timeout(
-                        f"   请选择要加载的认证文件编号 (输入 N 或直接回车则不加载, {self.args.auth_save_timeout}s超时): ",
-                        self.args.auth_save_timeout,
-                    )
-                    if choice.strip().lower() not in ["n", ""]:
-                        try:
-                            choice_index = int(choice.strip()) - 1
-                            if 0 <= choice_index < len(available_profiles):
-                                selected_profile = available_profiles[choice_index]
-                                self.effective_active_auth_json_path = selected_profile[
-                                    "path"
-                                ]
-                                logger.info(
-                                    f"   已选择加载认证文件: {selected_profile['name']}"
-                                )
-                                print(
-                                    f"   已选择加载: {selected_profile['name']}",
-                                    flush=True,
-                                )
-                            else:
-                                logger.info(
-                                    "   无效的选择编号或超时。将不加载认证文件。"
-                                )
-                                print(
-                                    "   无效的选择编号或超时。将不加载认证文件。",
-                                    flush=True,
-                                )
-                        except ValueError:
-                            logger.info("   无效的输入。将不加载认证文件。")
-                            print("   无效的输入。将不加载认证文件。", flush=True)
+                    if DIRECT_LAUNCH:
+                        selected_profile = available_profiles[0]
+                        self.effective_active_auth_json_path = selected_profile["path"]
+                        logger.info(f"   快速启动：自动选择第一个可用认证文件: {selected_profile['name']}")
                     else:
-                        logger.info("   好的，不加载认证文件或超时。")
-                        print("   好的，不加载认证文件或超时。", flush=True)
-                    print("-" * 60, flush=True)
+                        print("-" * 60 + "\n   找到以下可用的认证文件:", flush=True)
+                        for i, profile in enumerate(available_profiles):
+                            print(f"     {i + 1}: {profile['name']}", flush=True)
+                        print(
+                            "     N: 不加载任何文件 (使用浏览器当前状态)\n" + "-" * 60,
+                            flush=True,
+                        )
+                        choice = input_with_timeout(
+                            f"   请选择要加载的认证文件编号 (输入 N 或直接回车则不加载, {self.args.auth_save_timeout}s超时): ",
+                            self.args.auth_save_timeout,
+                        )
+                        if choice.strip().lower() not in ["n", ""]:
+                            try:
+                                choice_index = int(choice.strip()) - 1
+                                if 0 <= choice_index < len(available_profiles):
+                                    selected_profile = available_profiles[choice_index]
+                                    self.effective_active_auth_json_path = selected_profile[
+                                        "path"
+                                    ]
+                                    logger.info(
+                                        f"   已选择加载认证文件: {selected_profile['name']}"
+                                    )
+                                    print(
+                                        f"   已选择加载: {selected_profile['name']}",
+                                        flush=True,
+                                    )
+                                else:
+                                    logger.info(
+                                        "   无效的选择编号或超时。将不加载认证文件。"
+                                    )
+                                    print(
+                                        "   无效的选择编号或超时。将不加载认证文件。",
+                                        flush=True,
+                                    )
+                            except ValueError:
+                                logger.info("   无效的输入。将不加载认证文件。")
+                                print("   无效的输入。将不加载认证文件。", flush=True)
+                        else:
+                            logger.info("   好的，不加载认证文件或超时。")
+                            print("   好的，不加载认证文件或超时。", flush=True)
+                        print("-" * 60, flush=True)
                 else:
                     logger.info("   未找到认证文件。将使用浏览器当前状态。")
                     print("   未找到认证文件。将使用浏览器当前状态。", flush=True)

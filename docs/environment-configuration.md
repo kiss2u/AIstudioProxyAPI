@@ -69,6 +69,12 @@ ENDPOINT_CAPTURE_TIMEOUT=45
 STREAM_PORT=3120
 ```
 
+### 启动配置
+```env
+# 快速启动
+DIRECT_LAUNCH=false
+```
+
 ### 代理配置
 
 ```env
