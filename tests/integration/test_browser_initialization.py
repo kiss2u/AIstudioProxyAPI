@@ -41,10 +41,13 @@ async def test_init_storage_state_explicit_exists(temp_auth_file):
     mock_page.url = "https://aistudio.google.com/prompts/new_chat"
     mock_page.is_closed = MagicMock(return_value=False)
     mock_page.goto = AsyncMock()
-    mock_page.locator = MagicMock()
-    mock_page.locator.return_value.first.inner_text = AsyncMock(
-        return_value="Gemini 1.5 Pro"
-    )
+
+    # Create locator mock with count() support
+    mock_locator = MagicMock()
+    mock_locator.count = AsyncMock(return_value=1)  # Element exists
+    mock_locator.first = MagicMock()
+    mock_locator.first.inner_text = AsyncMock(return_value="Gemini 1.5 Pro")
+    mock_page.locator = MagicMock(return_value=mock_locator)
 
     # Mock expect_async
     mock_expect = MagicMock()
@@ -124,10 +127,13 @@ async def test_init_headless_auth_exists(temp_auth_file):
     mock_page.url = "https://aistudio.google.com/prompts/new_chat"
     mock_page.is_closed = MagicMock(return_value=False)
     mock_page.goto = AsyncMock()
-    mock_page.locator = MagicMock()
-    mock_page.locator.return_value.first.inner_text = AsyncMock(
-        return_value="Gemini 2.0 Flash"
-    )
+
+    # Create locator mock with count() support
+    mock_locator = MagicMock()
+    mock_locator.count = AsyncMock(return_value=1)  # Element exists
+    mock_locator.first = MagicMock()
+    mock_locator.first.inner_text = AsyncMock(return_value="Gemini 2.0 Flash")
+    mock_page.locator = MagicMock(return_value=mock_locator)
 
     mock_expect = MagicMock()
     mock_expect.return_value.to_be_visible = AsyncMock()
@@ -182,8 +188,13 @@ async def test_init_debug_auth_exists(temp_auth_file):
     mock_page.url = "https://aistudio.google.com/prompts/new_chat"
     mock_page.is_closed = MagicMock(return_value=False)
     mock_page.goto = AsyncMock()
-    mock_page.locator = MagicMock()
-    mock_page.locator.return_value.first.inner_text = AsyncMock(return_value="Model")
+
+    # Create locator mock with count() support
+    mock_locator = MagicMock()
+    mock_locator.count = AsyncMock(return_value=1)  # Element exists
+    mock_locator.first = MagicMock()
+    mock_locator.first.inner_text = AsyncMock(return_value="Model")
+    mock_page.locator = MagicMock(return_value=mock_locator)
 
     mock_expect = MagicMock()
     mock_expect.return_value.to_be_visible = AsyncMock()
@@ -237,8 +248,13 @@ async def test_init_debug_auth_missing_falls_back(temp_auth_file_missing):
     mock_page.url = "https://aistudio.google.com/prompts/new_chat"
     mock_page.is_closed = MagicMock(return_value=False)
     mock_page.goto = AsyncMock()
-    mock_page.locator = MagicMock()
-    mock_page.locator.return_value.first.inner_text = AsyncMock(return_value="Model")
+
+    # Create locator mock with count() support
+    mock_locator = MagicMock()
+    mock_locator.count = AsyncMock(return_value=1)  # Element exists
+    mock_locator.first = MagicMock()
+    mock_locator.first.inner_text = AsyncMock(return_value="Model")
+    mock_page.locator = MagicMock(return_value=mock_locator)
 
     mock_expect = MagicMock()
     mock_expect.return_value.to_be_visible = AsyncMock()
@@ -294,8 +310,13 @@ async def test_init_proxy_settings_applied():
     mock_page.url = "https://aistudio.google.com/prompts/new_chat"
     mock_page.is_closed = MagicMock(return_value=False)
     mock_page.goto = AsyncMock()
-    mock_page.locator = MagicMock()
-    mock_page.locator.return_value.first.inner_text = AsyncMock(return_value="Model")
+
+    # Create locator mock with count() support
+    mock_locator = MagicMock()
+    mock_locator.count = AsyncMock(return_value=1)  # Element exists
+    mock_locator.first = MagicMock()
+    mock_locator.first.inner_text = AsyncMock(return_value="Model")
+    mock_page.locator = MagicMock(return_value=mock_locator)
 
     mock_expect = MagicMock()
     mock_expect.return_value.to_be_visible = AsyncMock()
@@ -346,8 +367,13 @@ async def test_init_page_discovery_existing_page():
     mock_page.url = "https://aistudio.google.com/prompts/new_chat"
     mock_page.is_closed = MagicMock(return_value=False)
     mock_page.goto = AsyncMock()
-    mock_page.locator = MagicMock()
-    mock_page.locator.return_value.first.inner_text = AsyncMock(return_value="Model")
+
+    # Create locator mock with count() support
+    mock_locator = MagicMock()
+    mock_locator.count = AsyncMock(return_value=1)  # Element exists
+    mock_locator.first = MagicMock()
+    mock_locator.first.inner_text = AsyncMock(return_value="Model")
+    mock_page.locator = MagicMock(return_value=mock_locator)
 
     mock_context.pages = [mock_page]
 
@@ -412,8 +438,13 @@ async def test_init_login_url_transition():
     mock_page.is_closed = MagicMock(return_value=False)
     mock_page.goto = AsyncMock()
     mock_page.wait_for_url = AsyncMock()
-    mock_page.locator = MagicMock()
-    mock_page.locator.return_value.first.inner_text = AsyncMock(return_value="Model")
+
+    # Create locator mock with count() support
+    mock_locator = MagicMock()
+    mock_locator.count = AsyncMock(return_value=1)  # Element exists
+    mock_locator.first = MagicMock()
+    mock_locator.first.inner_text = AsyncMock(return_value="Model")
+    mock_page.locator = MagicMock(return_value=mock_locator)
 
     mock_expect = MagicMock()
     mock_expect.return_value.to_be_visible = AsyncMock()
@@ -468,6 +499,8 @@ async def test_init_model_name_extraction():
     # Mock 模型名选择器
     model_name = "Gemini 1.5 Pro Experimental"
     mock_locator = MagicMock()
+    mock_locator.count = AsyncMock(return_value=1)  # Element exists
+    mock_locator.first = MagicMock()
     mock_locator.first.inner_text = AsyncMock(return_value=model_name)
     mock_page.locator = MagicMock(return_value=mock_locator)
 
@@ -521,8 +554,13 @@ async def test_init_page_readiness_verification():
     mock_page.url = "https://aistudio.google.com/prompts/new_chat"
     mock_page.is_closed = MagicMock(return_value=False)
     mock_page.goto = AsyncMock()
-    mock_page.locator = MagicMock()
-    mock_page.locator.return_value.first.inner_text = AsyncMock(return_value="Model")
+
+    # Create locator mock with count() support
+    mock_locator = MagicMock()
+    mock_locator.count = AsyncMock(return_value=1)  # Element exists
+    mock_locator.first = MagicMock()
+    mock_locator.first.inner_text = AsyncMock(return_value="Model")
+    mock_page.locator = MagicMock(return_value=mock_locator)
 
     # Mock expect_async 来验证页面就绪检查
     mock_expect = MagicMock()
