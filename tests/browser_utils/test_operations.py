@@ -211,6 +211,7 @@ async def test_get_response_via_edit_button_success(mock_page: MagicMock):
     last_msg.get_by_label = MagicMock(return_value=edit_btn)
     last_msg.locator.return_value = textarea
     textarea.locator.return_value = textarea
+    textarea.count = AsyncMock(return_value=1)  # Add count() for defensive checks
 
     # Setup async actions
     last_msg.hover = AsyncMock()
@@ -439,6 +440,7 @@ async def test_get_response_via_edit_button_hover_failure():
     )
     last_msg.locator.return_value = textarea
     textarea.locator.return_value = textarea
+    textarea.count = AsyncMock(return_value=1)
 
     # Hover fails but we continue
     last_msg.hover = AsyncMock(side_effect=RuntimeError("Hover failed"))
@@ -539,20 +541,28 @@ async def test_get_response_via_edit_button_data_value_error():
     last_msg = MagicMock()
     edit_btn = MagicMock()
     finish_btn = MagicMock()
-    textarea = MagicMock()
+    autosize_textarea = MagicMock()
     actual_textarea = MagicMock()
 
     mock_page.locator.return_value.last = last_msg
     last_msg.get_by_label = MagicMock(
         side_effect=lambda label: edit_btn if label == "Edit" else finish_btn
     )
-    last_msg.locator.return_value = textarea
-    textarea.locator.return_value = actual_textarea
+
+    # Set up locator to return different objects based on selector
+    def locator_side_effect(selector):
+        if "ms-autosize-textarea" in selector:
+            return autosize_textarea
+        return actual_textarea
+
+    last_msg.locator = MagicMock(side_effect=locator_side_effect)
+    autosize_textarea.count = AsyncMock(return_value=1)
+    actual_textarea.count = AsyncMock(return_value=1)
     last_msg.hover = AsyncMock()
     edit_btn.click = AsyncMock()
 
     # data-value fails, input_value succeeds
-    textarea.get_attribute = AsyncMock(
+    autosize_textarea.get_attribute = AsyncMock(
         side_effect=PlaywrightAsyncError("Attribute error")
     )
     actual_textarea.input_value = AsyncMock(return_value="Input value content")
@@ -586,6 +596,7 @@ async def test_get_response_via_edit_button_cancelled_during_data_value():
     last_msg.get_by_label.return_value = edit_btn
     last_msg.locator.return_value = textarea
     textarea.locator.return_value = textarea
+    textarea.count = AsyncMock(return_value=1)  # Element exists
     last_msg.hover = AsyncMock()
     edit_btn.click = AsyncMock()
     textarea.get_attribute = AsyncMock(side_effect=asyncio.CancelledError)
@@ -608,20 +619,28 @@ async def test_get_response_via_edit_button_input_value_fallback():
     last_msg = MagicMock()
     edit_btn = MagicMock()
     finish_btn = MagicMock()
-    textarea = MagicMock()
+    autosize_textarea = MagicMock()
     actual_textarea = MagicMock()
 
     mock_page.locator.return_value.last = last_msg
     last_msg.get_by_label = MagicMock(
         side_effect=lambda label: edit_btn if label == "Edit" else finish_btn
     )
-    last_msg.locator.return_value = textarea
-    textarea.locator.return_value = actual_textarea
+
+    # Set up locator to return different objects based on selector
+    def locator_side_effect(selector):
+        if "ms-autosize-textarea" in selector:
+            return autosize_textarea
+        return actual_textarea
+
+    last_msg.locator = MagicMock(side_effect=locator_side_effect)
+    autosize_textarea.count = AsyncMock(return_value=1)
+    actual_textarea.count = AsyncMock(return_value=1)
     last_msg.hover = AsyncMock()
     edit_btn.click = AsyncMock()
 
     # data-value returns None, fallback to input_value
-    textarea.get_attribute = AsyncMock(return_value=None)
+    autosize_textarea.get_attribute = AsyncMock(return_value=None)
     actual_textarea.input_value = AsyncMock(return_value="Fallback content")
     finish_btn.click = AsyncMock()
 
@@ -683,16 +702,24 @@ async def test_get_response_via_edit_button_cancelled_during_input_value():
 
     last_msg = MagicMock()
     edit_btn = MagicMock()
-    textarea = MagicMock()
+    autosize_textarea = MagicMock()
     actual_textarea = MagicMock()
 
     mock_page.locator.return_value.last = last_msg
     last_msg.get_by_label.return_value = edit_btn
-    last_msg.locator.return_value = textarea
-    textarea.locator.return_value = actual_textarea
+
+    # Set up locator to return different objects based on selector
+    def locator_side_effect(selector):
+        if "ms-autosize-textarea" in selector:
+            return autosize_textarea
+        return actual_textarea
+
+    last_msg.locator = MagicMock(side_effect=locator_side_effect)
+    autosize_textarea.count = AsyncMock(return_value=1)  # Element exists
+    actual_textarea.count = AsyncMock(return_value=1)  # Element exists
     last_msg.hover = AsyncMock()
     edit_btn.click = AsyncMock()
-    textarea.get_attribute = AsyncMock(return_value=None)
+    autosize_textarea.get_attribute = AsyncMock(return_value=None)
     actual_textarea.input_value = AsyncMock(side_effect=asyncio.CancelledError)
 
     with patch("playwright.async_api.expect") as mock_expect:
@@ -717,6 +744,7 @@ async def test_get_response_via_edit_button_textarea_error():
     mock_page.locator.return_value.last = last_msg
     last_msg.get_by_label.return_value = edit_btn
     last_msg.locator.return_value = textarea
+    textarea.count = AsyncMock(return_value=1)  # Element exists
     last_msg.hover = AsyncMock()
     edit_btn.click = AsyncMock()
 
@@ -749,6 +777,7 @@ async def test_get_response_via_edit_button_cancelled_during_textarea():
     mock_page.locator.return_value.last = last_msg
     last_msg.get_by_label.return_value = edit_btn
     last_msg.locator.return_value = textarea
+    textarea.count = AsyncMock(return_value=1)  # Element exists
     last_msg.hover = AsyncMock()
     edit_btn.click = AsyncMock()
 
@@ -781,6 +810,7 @@ async def test_get_response_via_edit_button_finish_button_failure():
     )
     last_msg.locator.return_value = textarea
     textarea.locator.return_value = textarea
+    textarea.count = AsyncMock(return_value=1)  # Element exists
     last_msg.hover = AsyncMock()
     edit_btn.click = AsyncMock()
     textarea.get_attribute = AsyncMock(return_value="Content")
@@ -825,6 +855,7 @@ async def test_get_response_via_edit_button_cancelled_during_finish():
     )
     last_msg.locator.return_value = textarea
     textarea.locator.return_value = textarea
+    textarea.count = AsyncMock(return_value=1)  # Element exists
     last_msg.hover = AsyncMock()
     edit_btn.click = AsyncMock()
     textarea.get_attribute = AsyncMock(return_value="Content")
