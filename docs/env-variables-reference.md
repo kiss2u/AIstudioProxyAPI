@@ -269,6 +269,15 @@
 - **示例**: `DEFAULT_THINKING_BUDGET=16384`
 - **说明**: 当 API 请求未提供 `reasoning_effort` 参数时使用此值
 
+### DEFAULT_THINKING_LEVEL
+
+- **用途**: 默认思考等级
+- **类型**: 字符串
+- **默认值**: `high`
+- **可选值**: `high`, `low`
+- **示例**: `DEFAULT_THINKING_LEVEL=low`
+- **说明**: 仅适用于 gemini-3-pro-preview 等使用思考等级的模型。当 API 请求中未提供 `reasoning_effort` 参数时使用此值
+
 ### ENABLE_GOOGLE_SEARCH
 
 - **用途**: 是否默认启用 Google Search 功能
