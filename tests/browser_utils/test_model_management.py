@@ -611,22 +611,8 @@ async def test_exception_handling_coverage(mock_page):
     ):
         assert await _verify_and_apply_ui_state(mock_page) is False
 
-    # 3. switch_ai_studio_model JSON decode error
-    mock_page.evaluate.return_value = "invalid-json"
-    with patch("browser_utils.model_management.logger"):
-        # Should proceed with empty prefs
-        # We need to mock other things to make it reach a return or fail safely
-        # It will try to load current_prefs_for_modification -> {}
-        # Then check if promptModel matches -> None != full_model_path
-        # Then update storage -> json.dumps works on {}
-        # Then goto...
-        # Let's just verify it doesn't crash on the JSON error line
-
-        # To make it fail fast and return, we can let it fail later or mock expected calls
-        # We just want to cover the `except json.JSONDecodeError` block
-        pass
-        # Actually it's hard to isolate just that block without running the whole function.
-        # But we can try to call it and expect it to fail later or succeed.
+    # 3. switch_ai_studio_model JSON decode error is tested in test_handle_initial_model_state_exceptions
+    # The JSONDecodeError handler falls back to empty prefs and continues execution
 
 
 @pytest.mark.asyncio
@@ -669,22 +655,7 @@ async def test_load_excluded_models_edge_cases(tmp_path):
         load_excluded_models("non_existent.txt")
         assert "未找到" in mock_logger.info.call_args[0][0]
 
-    # 2. File exists but is empty
-    d = tmp_path / "config"
-    d.mkdir()
-    p = d / "empty.txt"
-    p.write_text("", encoding="utf-8")
-
-    with (
-        patch.dict(sys.modules, {"server": mock_server}),
-        patch("browser_utils.model_management.logger") as mock_logger,
-    ):
-        load_excluded_models(
-            str(p)
-        )  # We need to pass relative path logic or mock os.path.join
-        # The function uses os.path.join(os.path.dirname(__file__), '..', filename)
-        # So we better mock os.path.exists and open
-        pass
+    # 2. File exists but is empty - tested in the next block with mocked file I/O
 
     # Let's mock os.path.exists/open for easier testing of logic
     with (

@@ -73,29 +73,27 @@ def test_default_stop_sequences_empty_default():
     """
     # 保存原始模块和环境变量
     original_module = sys.modules.get("config.constants")
-    original_env = os.environ.get("DEFAULT_STOP_SEQUENCES")
 
     try:
-        # 删除环境变量 (如果存在)
-        if "DEFAULT_STOP_SEQUENCES" in os.environ:
-            del os.environ["DEFAULT_STOP_SEQUENCES"]
+        # 使用 patch.dict 确保环境变量不存在（覆盖 .env 文件加载的值）
+        env_overrides = {
+            k: v for k, v in os.environ.items() if k != "DEFAULT_STOP_SEQUENCES"
+        }
+        with (
+            patch.dict(os.environ, env_overrides, clear=True),
+            # Mock load_dotenv at the dotenv module level to prevent .env from reloading
+            patch("dotenv.load_dotenv"),
+        ):
+            # 删除已导入的模块
+            if "config.constants" in sys.modules:
+                del sys.modules["config.constants"]
 
-        # 删除已导入的模块
-        if "config.constants" in sys.modules:
-            del sys.modules["config.constants"]
+            # 重新导入
+            import config.constants as constants
 
-        # 重新导入
-        import config.constants as constants
-
-        # 验证: 默认值为空列表 (os.environ.get returns "[]" as default)
-        assert constants.DEFAULT_STOP_SEQUENCES == []
+            # 验证: 默认值为空列表 (os.environ.get returns "[]" as default)
+            assert constants.DEFAULT_STOP_SEQUENCES == []
     finally:
-        # 恢复环境变量
-        if original_env is not None:
-            os.environ["DEFAULT_STOP_SEQUENCES"] = original_env
-        elif "DEFAULT_STOP_SEQUENCES" in os.environ:
-            del os.environ["DEFAULT_STOP_SEQUENCES"]
-
         # 恢复原始模块
         if original_module is not None:
             sys.modules["config.constants"] = original_module

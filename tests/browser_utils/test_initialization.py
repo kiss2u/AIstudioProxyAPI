@@ -532,6 +532,10 @@ async def test_init_login_interactive_success(
             new_callable=AsyncMock,
         ),
         patch("browser_utils.initialization.core.setup_debug_listeners"),
+        patch(
+            "browser_utils.initialization.core.wait_for_model_list_and_handle_auth_save",
+            new_callable=AsyncMock,
+        ),
         patch("builtins.input", return_value=""),
         patch("builtins.print"),
     ):
@@ -578,6 +582,10 @@ async def test_init_login_interactive_suppress_wait(
             new_callable=AsyncMock,
         ),
         patch("browser_utils.initialization.core.setup_debug_listeners"),
+        patch(
+            "browser_utils.initialization.core.wait_for_model_list_and_handle_auth_save",
+            new_callable=AsyncMock,
+        ),
         patch("builtins.input") as mock_input,
     ):
         mock_browser_context.pages = []

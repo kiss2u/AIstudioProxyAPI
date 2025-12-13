@@ -458,7 +458,7 @@ async def test_init_login_url_transition():
         ),
         patch("browser_utils.initialization.core.setup_debug_listeners"),
         patch(
-            "browser_utils.initialization.auth.wait_for_model_list_and_handle_auth_save",
+            "browser_utils.initialization.core.wait_for_model_list_and_handle_auth_save",
             new_callable=AsyncMock,
         ),
         patch("builtins.input", return_value=""),
