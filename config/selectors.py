@@ -4,11 +4,15 @@ CSS选择器配置模块
 """
 
 # --- 输入相关选择器 ---
-# 主输入 textarea 同时兼容 aria-label 及普通 textarea，防止结构再调整
+# 主输入 textarea 同时兼容新旧 UI 结构 (ms-prompt-box / ms-prompt-input-wrapper)
 PROMPT_TEXTAREA_SELECTOR = (
     "ms-prompt-box ms-autosize-textarea textarea, "
     'ms-prompt-box textarea[aria-label="Enter a prompt"], '
-    "ms-prompt-box textarea"
+    "ms-prompt-box textarea, "
+    # Fallback for old/reverted UI structure (ms-prompt-input-wrapper)
+    "ms-prompt-input-wrapper ms-autosize-textarea textarea, "
+    'ms-prompt-input-wrapper textarea[aria-label*="prompt" i], '
+    "ms-prompt-input-wrapper textarea"
 )
 INPUT_SELECTOR = PROMPT_TEXTAREA_SELECTOR
 INPUT_SELECTOR2 = PROMPT_TEXTAREA_SELECTOR
@@ -18,6 +22,9 @@ INPUT_SELECTOR2 = PROMPT_TEXTAREA_SELECTOR
 SUBMIT_BUTTON_SELECTOR = (
     'ms-prompt-box ms-run-button button[aria-label="Run"], '
     'ms-prompt-box button[aria-label="Run"][type="submit"], '
+    # Fallback for old/reverted UI structure
+    'ms-prompt-input-wrapper ms-run-button button[aria-label="Run"], '
+    'ms-prompt-input-wrapper button[aria-label="Run"][type="submit"], '
     'button[aria-label="Run"].run-button, '
     'ms-run-button button[type="submit"].run-button'
 )

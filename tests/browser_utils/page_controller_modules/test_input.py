@@ -110,6 +110,7 @@ async def test_submit_prompt_success(
             "autosize" in selector
             or "text-wrapper" in selector
             or "ms-prompt-box" in selector
+            or "ms-prompt-input-wrapper" in selector
         ):
             return autosize
         return MagicMock()

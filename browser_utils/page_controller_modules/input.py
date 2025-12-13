@@ -13,6 +13,11 @@ from config import (
     SUBMIT_BUTTON_SELECTOR,
     UPLOAD_BUTTON_SELECTOR,
 )
+from config.selector_utils import (
+    AUTOSIZE_WRAPPER_SELECTORS,
+    DRAG_DROP_TARGET_SELECTORS,
+    build_combined_selector,
+)
 from logging_utils import set_request_id
 from models import ClientDisconnectedError
 
@@ -29,9 +34,16 @@ class InputController(BaseController):
         set_request_id(self.req_id)
         self.logger.info(f"填充并提交提示 ({len(prompt)} chars)...")
         prompt_textarea_locator = self.page.locator(PROMPT_TEXTAREA_SELECTOR)
-        autosize_wrapper_locator = self.page.locator("ms-prompt-box .text-wrapper")
+        # 使用集中管理的选择器，支持新旧 UI 结构
+        autosize_wrapper_locator = self.page.locator(
+            build_combined_selector(
+                AUTOSIZE_WRAPPER_SELECTORS[:2]
+            )  # .text-wrapper 元素
+        )
         legacy_autosize_wrapper = self.page.locator(
-            "ms-prompt-box ms-autosize-textarea"
+            build_combined_selector(
+                AUTOSIZE_WRAPPER_SELECTORS[2:]
+            )  # ms-autosize-textarea 元素
         )
         submit_button_locator = self.page.locator(SUBMIT_BUTTON_SELECTOR)
 
@@ -381,12 +393,11 @@ class InputController(BaseController):
         if not payloads:
             raise Exception("无可用文件用于拖放")
 
-        candidates = [
-            target_locator,
-            self.page.locator(PROMPT_TEXTAREA_SELECTOR),
-            self.page.locator("ms-prompt-box .text-wrapper"),
-            self.page.locator("ms-prompt-box"),
-        ]
+        # 使用集中管理的选择器列表作为拖放候选目标
+        candidates = [target_locator, self.page.locator(PROMPT_TEXTAREA_SELECTOR)]
+        candidates.extend(
+            [self.page.locator(sel) for sel in DRAG_DROP_TARGET_SELECTORS]
+        )
 
         last_err = None
         for idx, cand in enumerate(candidates):

@@ -26,6 +26,10 @@ from config import (
     USER_INPUT_END_MARKER_SERVER,
     USER_INPUT_START_MARKER_SERVER,
 )
+from config.selector_utils import (
+    INPUT_WRAPPER_SELECTORS,
+    find_first_available_locator,
+)
 
 from .auth import wait_for_model_list_and_handle_auth_save
 from .debug import setup_debug_listeners
@@ -293,11 +297,23 @@ async def initialize_page_logic(
         await found_page.bring_to_front()
 
         try:
-            input_wrapper_locator = found_page.locator(
-                "ms-prompt-box .prompt-box-container"
+            # 使用集中管理的选择器回退逻辑查找输入容器
+            # 支持新旧 UI 结构 (ms-prompt-box / ms-prompt-input-wrapper)
+            (
+                input_wrapper_locator,
+                matched_selector,
+            ) = await find_first_available_locator(
+                found_page,
+                INPUT_WRAPPER_SELECTORS,
+                description="输入容器",
+                log_result=True,
             )
-            if await input_wrapper_locator.count() == 0:
-                input_wrapper_locator = found_page.locator("ms-prompt-box")
+            if not input_wrapper_locator:
+                raise RuntimeError(
+                    "无法找到输入容器元素。已尝试的选择器: "
+                    + ", ".join(INPUT_WRAPPER_SELECTORS)
+                )
+            logger.info(f"-> 输入容器已定位 (选择器: {matched_selector})")
             await expect_async(input_wrapper_locator).to_be_visible(timeout=35000)
             await expect_async(found_page.locator(INPUT_SELECTOR)).to_be_visible(
                 timeout=10000
