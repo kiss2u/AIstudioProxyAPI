@@ -117,7 +117,9 @@ def test_extract_data_url_to_local_success():
 
 def test_extract_data_url_to_local_invalid_format():
     """Test data URL extraction fails gracefully with invalid format."""
-    with patch("server.logger") as mock_logger:
+    with patch("logging.getLogger") as mock_get_logger:
+        mock_logger = MagicMock()
+        mock_get_logger.return_value = mock_logger
         assert extract_data_url_to_local("invalid-url") is None
         mock_logger.error.assert_called()
 
@@ -127,9 +129,11 @@ def test_extract_data_url_to_local_bad_b64():
     import binascii
 
     with (
-        patch("server.logger") as mock_logger,
+        patch("logging.getLogger") as mock_get_logger,
         patch("base64.b64decode", side_effect=binascii.Error("Invalid")),
     ):
+        mock_logger = MagicMock()
+        mock_get_logger.return_value = mock_logger
         assert extract_data_url_to_local("data:text/plain;base64,!!!") is None
         mock_logger.error.assert_called()
 
@@ -634,12 +638,14 @@ def test_extract_data_url_to_local_write_failure():
     data_url = f"data:text/plain;base64,{b64_data}"
 
     with (
-        patch("server.logger") as mock_logger,
+        patch("logging.getLogger") as mock_get_logger,
         patch("config.UPLOAD_FILES_DIR", "/tmp/uploads"),
         patch("os.makedirs"),
         patch("os.path.exists", return_value=False),
         patch("builtins.open", side_effect=IOError("Disk full")),
     ):
+        mock_logger = MagicMock()
+        mock_get_logger.return_value = mock_logger
         # 执行
         result = extract_data_url_to_local(data_url, "req1")
 
@@ -661,11 +667,13 @@ def test_save_blob_to_local_file_exists():
     data = b"binary data"
 
     with (
-        patch("server.logger") as mock_logger,
+        patch("logging.getLogger") as mock_get_logger,
         patch("config.UPLOAD_FILES_DIR", "/tmp/uploads"),
         patch("os.makedirs"),
         patch("os.path.exists", return_value=True),  # 文件存在
     ):
+        mock_logger = MagicMock()
+        mock_get_logger.return_value = mock_logger
         # 执行
         result = save_blob_to_local(data, mime_type="image/png", req_id="req1")
 
@@ -687,12 +695,14 @@ def test_save_blob_to_local_write_failure():
     data = b"test binary"
 
     with (
-        patch("server.logger") as mock_logger,
+        patch("logging.getLogger") as mock_get_logger,
         patch("config.UPLOAD_FILES_DIR", "/tmp/uploads"),
         patch("os.makedirs"),
         patch("os.path.exists", return_value=False),
         patch("builtins.open", side_effect=IOError("Permission denied")),
     ):
+        mock_logger = MagicMock()
+        mock_get_logger.return_value = mock_logger
         # 执行
         result = save_blob_to_local(data, mime_type="application/pdf")
 

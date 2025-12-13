@@ -15,30 +15,37 @@ logger = logging.getLogger("AIStudioProxyServer")
 
 # --- 输入区域容器选择器 (按优先级排序) ---
 # Google AI Studio 会不定期更改 UI 结构，此列表包含所有已知的容器选择器
-# 优先尝试新 UI，回退到旧 UI
+# 优先尝试当前 UI，回退到旧 UI
 INPUT_WRAPPER_SELECTORS: List[str] = [
-    # 新 UI 结构 (ms-prompt-box) - 2024年12月后
-    "ms-prompt-box .prompt-box-container",
-    "ms-prompt-box",
-    # 旧 UI 结构 (ms-prompt-input-wrapper) - 2024年12月前及可能的回退版本
+    # 当前 UI 结构 (ms-prompt-input-wrapper / ms-chunk-editor) - 2024年12月后
     "ms-prompt-input-wrapper .prompt-input-wrapper",
     "ms-prompt-input-wrapper",
+    "ms-chunk-editor",
+    # 过渡期 UI (ms-prompt-box) - 已弃用但保留作为回退
+    "ms-prompt-box .prompt-box-container",
+    "ms-prompt-box",
 ]
 
 # --- 自动调整容器选择器 ---
 AUTOSIZE_WRAPPER_SELECTORS: List[str] = [
-    "ms-prompt-box .text-wrapper",
-    "ms-prompt-box ms-autosize-textarea",
+    # 当前 UI 结构
     "ms-prompt-input-wrapper .text-wrapper",
     "ms-prompt-input-wrapper ms-autosize-textarea",
+    "ms-chunk-input .text-wrapper",
+    "ms-autosize-textarea",
+    # 过渡期 UI (ms-prompt-box) - 已弃用但保留作为回退
+    "ms-prompt-box .text-wrapper",
+    "ms-prompt-box ms-autosize-textarea",
 ]
 
 # --- 拖放目标选择器 ---
 DRAG_DROP_TARGET_SELECTORS: List[str] = [
-    "ms-prompt-box .text-wrapper",
     "ms-prompt-input-wrapper .text-wrapper",
-    "ms-prompt-box",
+    "ms-chunk-input .text-wrapper",
     "ms-prompt-input-wrapper",
+    # 过渡期 UI (ms-prompt-box) - 已弃用但保留作为回退
+    "ms-prompt-box .text-wrapper",
+    "ms-prompt-box",
 ]
 
 

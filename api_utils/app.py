@@ -172,6 +172,19 @@ async def _shutdown_resources() -> None:
 
     if state.STREAM_PROCESS:
         state.STREAM_PROCESS.terminate()
+        # Wait for process to terminate with timeout to avoid atexit hang
+        state.STREAM_PROCESS.join(timeout=3)
+        if state.STREAM_PROCESS.is_alive():
+            logger.warning("STREAM proxy did not terminate, killing...")
+            state.STREAM_PROCESS.kill()
+            state.STREAM_PROCESS.join(timeout=1)
+        # Close the queue to prevent resource leaks
+        if state.STREAM_QUEUE:
+            try:
+                state.STREAM_QUEUE.close()
+                state.STREAM_QUEUE.join_thread()
+            except Exception:
+                pass
         logger.info("STREAM proxy terminated.")
 
     if state.worker_task and not state.worker_task.done():

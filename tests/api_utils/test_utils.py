@@ -17,8 +17,11 @@ from models import FunctionCall, Message, MessageContentItem, ToolCall
 @pytest.fixture
 def mock_tools_registry():
     with (
-        patch("api_utils.utils.register_runtime_tools") as mock_reg,
-        patch("api_utils.utils.execute_tool_call", new_callable=AsyncMock) as mock_exec,
+        patch("api_utils.utils_ext.tools_execution.register_runtime_tools") as mock_reg,
+        patch(
+            "api_utils.utils_ext.tools_execution.execute_tool_call",
+            new_callable=AsyncMock,
+        ) as mock_exec,
     ):
         yield mock_reg, mock_exec
 
@@ -33,11 +36,26 @@ def mock_logger():
 def mock_file_utils():
     """Fixture providing mocked file utility functions for cross-platform testing."""
     with (
-        patch("api_utils.utils.extract_data_url_to_local") as mock_extract,
-        patch("api_utils.utils.save_blob_to_local") as mock_save,
-        patch("api_utils.utils.os.path.exists") as mock_exists,
+        patch("api_utils.utils_ext.files.extract_data_url_to_local") as mock_extract,
+        patch("api_utils.utils_ext.files.save_blob_to_local") as mock_save,
+        # Patch exists globally to avoid conflicts between multiple module-level patches
+        patch("os.path.exists") as mock_exists,
+        patch(
+            "api_utils.utils_ext.prompts.extract_data_url_to_local"
+        ) as mock_extract_prompts,
+        patch("api_utils.utils_ext.prompts.save_blob_to_local") as mock_save_prompts,
     ):
+        # Configure all mocks to behave consistently
         mock_exists.return_value = True
+
+        # Link prompts mocks to files mocks
+        mock_extract_prompts.side_effect = lambda *args, **kwargs: mock_extract(
+            *args, **kwargs
+        )
+        mock_save_prompts.side_effect = lambda *args, **kwargs: mock_save(
+            *args, **kwargs
+        )
+
         yield mock_extract, mock_save, mock_exists
 
 
@@ -903,9 +921,15 @@ def test_collect_and_validate_attachments_detailed(
     def side_effect(path):
         from pathlib import Path
 
-        return Path(path).exists()
+        # Handle string paths and Path objects
+        path_str = str(path)
+        # Check if it looks like one of our temp files that we created/didn't create
+        if str(tmp_path) in path_str:
+            return Path(path_str).exists()
+        return True  # Default to True for other files logic might check
 
     mock_exists.side_effect = side_effect
+    mock_exists.return_value = None  # Clear return_value so side_effect is used
 
     mock_extract.side_effect = lambda url, **kwargs: f"/tmp/{url.split('/')[-1]}"
 
@@ -1472,6 +1496,10 @@ def test_prepare_combined_prompt_assistant_empty_with_tool_calls(mock_logger):
     messages = [
         Message(role="assistant", content="", tool_calls=[tool_call])  # Empty content
     ]
+
+    prompt, _ = prepare_combined_prompt(messages, "req1")
+
+    assert "请求调用函数: func" in prompt
 
     prompt, _ = prepare_combined_prompt(messages, "req1")
 

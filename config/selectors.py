@@ -4,15 +4,20 @@ CSS选择器配置模块
 """
 
 # --- 输入相关选择器 ---
-# 主输入 textarea 同时兼容新旧 UI 结构 (ms-prompt-box / ms-prompt-input-wrapper)
+# 主输入 textarea 兼容当前和旧 UI 结构
+# 当前结构: ms-prompt-input-wrapper > ... > ms-autosize-textarea > textarea.textarea
 PROMPT_TEXTAREA_SELECTOR = (
-    "ms-prompt-box ms-autosize-textarea textarea, "
-    'ms-prompt-box textarea[aria-label="Enter a prompt"], '
-    "ms-prompt-box textarea, "
-    # Fallback for old/reverted UI structure (ms-prompt-input-wrapper)
+    # 当前 UI 结构 (2024年12月后)
+    "textarea.textarea, "  # 最直接的选择器
+    "ms-autosize-textarea textarea, "
+    "ms-chunk-input textarea, "
     "ms-prompt-input-wrapper ms-autosize-textarea textarea, "
     'ms-prompt-input-wrapper textarea[aria-label*="prompt" i], '
-    "ms-prompt-input-wrapper textarea"
+    "ms-prompt-input-wrapper textarea, "
+    # 过渡期 UI (ms-prompt-box) - 已弃用但保留作为回退
+    "ms-prompt-box ms-autosize-textarea textarea, "
+    'ms-prompt-box textarea[aria-label="Enter a prompt"], '
+    "ms-prompt-box textarea"
 )
 INPUT_SELECTOR = PROMPT_TEXTAREA_SELECTOR
 INPUT_SELECTOR2 = PROMPT_TEXTAREA_SELECTOR
@@ -20,13 +25,14 @@ INPUT_SELECTOR2 = PROMPT_TEXTAREA_SELECTOR
 # --- 按钮选择器 ---
 # 发送按钮：优先匹配 prompt 区域内 aria-label="Run" 的提交按钮
 SUBMIT_BUTTON_SELECTOR = (
-    'ms-prompt-box ms-run-button button[aria-label="Run"], '
-    'ms-prompt-box button[aria-label="Run"][type="submit"], '
-    # Fallback for old/reverted UI structure
+    # 当前 UI 结构
     'ms-prompt-input-wrapper ms-run-button button[aria-label="Run"], '
     'ms-prompt-input-wrapper button[aria-label="Run"][type="submit"], '
     'button[aria-label="Run"].run-button, '
-    'ms-run-button button[type="submit"].run-button'
+    'ms-run-button button[type="submit"].run-button, '
+    # 过渡期 UI (ms-prompt-box) - 已弃用但保留作为回退
+    'ms-prompt-box ms-run-button button[aria-label="Run"], '
+    'ms-prompt-box button[aria-label="Run"][type="submit"]'
 )
 CLEAR_CHAT_BUTTON_SELECTOR = 'button[data-test-clear="outside"][aria-label="New chat"], button[aria-label="New chat"]'
 CLEAR_CHAT_CONFIRM_BUTTON_SELECTOR = (

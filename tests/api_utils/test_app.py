@@ -543,6 +543,102 @@ async def test_shutdown_resources_worker_timeout():
 
 
 @pytest.mark.asyncio
+async def test_shutdown_resources_process_join_and_terminate():
+    """Test _shutdown_resources calls join() after terminate() with timeout.
+
+    Regression test: Ensures the STREAM_PROCESS cleanup properly joins after
+    terminate to prevent multiprocessing atexit handler hangs on Ctrl+C.
+    """
+    mock_stream_process = MagicMock()
+    mock_stream_process.is_alive.return_value = False  # Process terminates successfully
+    mock_stream_queue = MagicMock()
+
+    state.STREAM_PROCESS = mock_stream_process
+    state.STREAM_QUEUE = mock_stream_queue
+
+    with patch("api_utils.app._close_page_logic", new_callable=AsyncMock):
+        await _shutdown_resources()
+
+    # Verify terminate was called
+    mock_stream_process.terminate.assert_called_once()
+    # Verify join was called with timeout (NOT blocking forever)
+    mock_stream_process.join.assert_called_with(timeout=3)
+    # Verify kill was NOT called since process terminated successfully
+    mock_stream_process.kill.assert_not_called()
+    # Verify queue was closed
+    mock_stream_queue.close.assert_called_once()
+    mock_stream_queue.join_thread.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_shutdown_resources_process_kill_fallback():
+    """Test _shutdown_resources kills process if terminate times out.
+
+    Regression test: Ensures the STREAM_PROCESS is killed if it doesn't
+    respond to terminate within the timeout period.
+    """
+    mock_stream_process = MagicMock()
+    # Process is still alive after terminate
+    mock_stream_process.is_alive.return_value = True
+    mock_stream_queue = MagicMock()
+
+    state.STREAM_PROCESS = mock_stream_process
+    state.STREAM_QUEUE = mock_stream_queue
+
+    with patch("api_utils.app._close_page_logic", new_callable=AsyncMock):
+        await _shutdown_resources()
+
+    # Verify terminate was called
+    mock_stream_process.terminate.assert_called_once()
+    # Verify join was called (first time with timeout=3)
+    assert mock_stream_process.join.call_count >= 1
+    # Verify kill was called since process was still alive
+    mock_stream_process.kill.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_shutdown_resources_queue_cleanup_error_handling():
+    """Test _shutdown_resources handles queue cleanup errors gracefully.
+
+    Regression test: Ensures queue cleanup exceptions don't prevent
+    the rest of shutdown from completing.
+    """
+    mock_stream_process = MagicMock()
+    mock_stream_process.is_alive.return_value = False
+    mock_stream_queue = MagicMock()
+    # Simulate queue cleanup error
+    mock_stream_queue.close.side_effect = Exception("Queue already closed")
+
+    state.STREAM_PROCESS = mock_stream_process
+    state.STREAM_QUEUE = mock_stream_queue
+
+    # Should not raise exception
+    with patch("api_utils.app._close_page_logic", new_callable=AsyncMock):
+        await _shutdown_resources()
+
+    # Verify process cleanup still happened
+    mock_stream_process.terminate.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_shutdown_resources_no_process_no_queue():
+    """Test _shutdown_resources handles case where process/queue don't exist.
+
+    Regression test: Ensures shutdown doesn't fail when resources were never
+    created (e.g., startup failed early).
+    """
+    state.STREAM_PROCESS = None
+    state.STREAM_QUEUE = None
+    state.worker_task = None
+    state.page_instance = None
+    state.browser_instance = None
+    state.playwright_manager = None
+
+    # Should not raise exception
+    await _shutdown_resources()
+
+
+@pytest.mark.asyncio
 async def test_lifespan_direct_debug_mode():
     """Test lifespan with direct_debug_no_browser mode."""
     app_mock = MagicMock()

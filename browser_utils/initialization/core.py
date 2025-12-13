@@ -28,7 +28,6 @@ from config import (
 )
 from config.selector_utils import (
     INPUT_WRAPPER_SELECTORS,
-    find_first_available_locator,
 )
 
 from .auth import wait_for_model_list_and_handle_auth_save
@@ -298,15 +297,18 @@ async def initialize_page_logic(
 
         try:
             # 使用集中管理的选择器回退逻辑查找输入容器
-            # 支持新旧 UI 结构 (ms-prompt-box / ms-prompt-input-wrapper)
+            # 支持当前和旧 UI 结构 (ms-prompt-input-wrapper / ms-chunk-editor / ms-prompt-box)
+            # 使用 find_first_visible_locator 等待元素可见，解决无头模式下的时序问题
+            from config.selector_utils import find_first_visible_locator
+
             (
                 input_wrapper_locator,
                 matched_selector,
-            ) = await find_first_available_locator(
+            ) = await find_first_visible_locator(
                 found_page,
                 INPUT_WRAPPER_SELECTORS,
                 description="输入容器",
-                log_result=True,
+                timeout_per_selector=30000,  # 每个选择器等待30秒
             )
             if not input_wrapper_locator:
                 raise RuntimeError(
@@ -314,7 +316,7 @@ async def initialize_page_logic(
                     + ", ".join(INPUT_WRAPPER_SELECTORS)
                 )
             logger.info(f"-> 输入容器已定位 (选择器: {matched_selector})")
-            await expect_async(input_wrapper_locator).to_be_visible(timeout=35000)
+            # 容器已通过 find_first_visible_locator 确认可见，直接检查输入框
             await expect_async(found_page.locator(INPUT_SELECTOR)).to_be_visible(
                 timeout=10000
             )

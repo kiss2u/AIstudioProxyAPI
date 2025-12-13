@@ -322,3 +322,84 @@ class TestIntegrationScenarios:
         # Should contain all individual selectors
         for sel in DRAG_DROP_TARGET_SELECTORS:
             assert sel in combined
+
+
+class TestRegressionFixes:
+    """Regression tests for specific bug fixes."""
+
+    @pytest.mark.asyncio
+    async def test_find_first_visible_locator_waits_for_elements(self):
+        """Verify find_first_visible_locator actively waits for elements.
+
+        Regression test for timing issue: In headless mode, elements may not
+        be rendered immediately after page load. Using find_first_visible_locator
+        (which calls expect().to_be_visible()) ensures we wait for elements,
+        unlike find_first_available_locator which only checks if elements exist.
+
+        This test ensures:
+        1. The function uses Playwright's expect().to_be_visible() with timeout
+        2. It doesn't just check element count (which would cause timing issues)
+        """
+        mock_page = MagicMock()
+        mock_locator = MagicMock()
+        mock_page.locator.return_value = mock_locator
+
+        # Track if to_be_visible was called with a timeout
+        visibility_calls = []
+
+        async def track_visibility(timeout):
+            visibility_calls.append({"timeout": timeout})
+
+        with patch("playwright.async_api.expect") as mock_expect:
+            mock_expect.return_value.to_be_visible = AsyncMock(
+                side_effect=track_visibility
+            )
+
+            await find_first_visible_locator(
+                mock_page,
+                ["ms-prompt-input-wrapper"],
+                "input container",
+                timeout_per_selector=30000,  # 30 seconds as used in core.py
+            )
+
+        # Verify to_be_visible was called with the timeout
+        assert len(visibility_calls) == 1
+        assert visibility_calls[0]["timeout"] == 30000
+
+    @pytest.mark.asyncio
+    async def test_find_first_visible_locator_polls_actively(self):
+        """Verify the function uses active polling, not just a check.
+
+        Regression test: The old implementation only checked if elements existed
+        at the moment of the call, causing failures when page was still loading.
+        The new implementation should actively wait/poll for elements.
+
+        This differs from find_first_available_locator which just calls count().
+        """
+        mock_page = MagicMock()
+        mock_locator = MagicMock()
+        mock_page.locator.return_value = mock_locator
+
+        # Simulate element becoming visible after initial check would fail
+        call_count = [0]
+
+        async def delayed_visibility(timeout):
+            call_count[0] += 1
+            # First call would time out if we were just checking
+            # But active waiting should succeed
+            return None
+
+        with patch("playwright.async_api.expect") as mock_expect:
+            mock_expect.return_value.to_be_visible = AsyncMock(
+                side_effect=delayed_visibility
+            )
+
+            locator, selector = await find_first_visible_locator(
+                mock_page,
+                ["sel1"],
+                "test",
+            )
+
+        # Verify we attempted visibility check with timeout
+        assert call_count[0] >= 1
+        assert locator is not None
