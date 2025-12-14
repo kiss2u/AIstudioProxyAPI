@@ -1,6 +1,6 @@
 import os
-import sys
 from unittest.mock import MagicMock, patch
+
 import pytest
 
 from launcher.runner import Launcher
@@ -19,7 +19,10 @@ class TestConfigPrecedence:
     @pytest.fixture
     def mock_launcher(self):
         """Creates a Launcher instance with mocked dependencies."""
-        with patch("launcher.runner.parse_args") as mock_parse:
+        with (
+            patch("launcher.runner.parse_args") as mock_parse,
+            patch("atexit.register"),  # Prevent atexit cleanup hooks from registering
+        ):
             # Setup a basic mock args object with defaults
             mock_args = MagicMock()
             # Defaults for boolean flags as defined in argparse (usually False)

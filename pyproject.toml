@@ -49,7 +49,7 @@ build-backend = "poetry.core.masonry.api"
 asyncio_mode = "auto"
 testpaths = ["tests"]
 python_files = "test_*.py"
-addopts = "-v --cov=api_utils --cov=browser_utils --cov=stream --cov=config --cov=models --cov-report=term-missing --ignore=tests/browser_utils/test_operations_old.py --tb=short"
+addopts = "-v --cov=api_utils --cov=browser_utils --cov=stream --cov=config --cov=models --cov=launcher --cov=logging_utils --cov=server.py --cov-report=term-missing --ignore=tests/browser_utils/test_operations_old.py --tb=short"
 timeout = 120
 timeout_method = "thread"
 markers = [
@@ -64,6 +64,15 @@ env = [
 omit = [
     "tests/*",
     "**/__init__.py",
+    "launch_camoufox.py",
+    "monkeytype_config.py",
+    "deprecated/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "if __name__ == .__main__.:",
+    "pragma: no cover",
 ]
 
 [tool.ruff]

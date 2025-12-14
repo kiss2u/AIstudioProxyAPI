@@ -6,6 +6,7 @@ import subprocess
 import sys
 import threading
 import time
+from typing import Optional
 
 from launcher.config import ENDPOINT_CAPTURE_TIMEOUT, PYTHON_EXECUTABLE, ws_regex
 
@@ -42,12 +43,54 @@ def _enqueue_output(stream, stream_name, output_queue, process_pid_for_log="<未
         logger.debug(f"{log_prefix} 线程退出。")
 
 
+def build_launch_command(
+    final_launch_mode: str,
+    effective_active_auth_json_path: Optional[str],
+    simulated_os_for_camoufox: str,
+    camoufox_debug_port: int,
+    internal_camoufox_proxy: Optional[str],
+) -> list[str]:
+    """
+    Build the command-line arguments for launching the internal Camoufox process.
+
+    This is a pure function (no I/O) that can be easily unit tested.
+
+    Args:
+        final_launch_mode: The launch mode (headless, virtual_headless, debug)
+        effective_active_auth_json_path: Path to auth file, or None
+        simulated_os_for_camoufox: OS to simulate (linux, windows, macos)
+        camoufox_debug_port: Debug port for Camoufox
+        internal_camoufox_proxy: Proxy configuration, or None
+
+    Returns:
+        List of command-line arguments for subprocess.Popen
+    """
+    cmd = [
+        PYTHON_EXECUTABLE,
+        "-u",
+        sys.argv[0],
+        "--internal-launch-mode",
+        final_launch_mode,
+    ]
+
+    if effective_active_auth_json_path:
+        cmd.extend(["--internal-auth-file", effective_active_auth_json_path])
+
+    cmd.extend(["--internal-camoufox-os", simulated_os_for_camoufox])
+    cmd.extend(["--internal-camoufox-port", str(camoufox_debug_port)])
+
+    if internal_camoufox_proxy is not None:
+        cmd.extend(["--internal-camoufox-proxy", internal_camoufox_proxy])
+
+    return cmd
+
+
 class CamoufoxProcessManager:
     def __init__(self):
         self.camoufox_proc = None
         self.captured_ws_endpoint = None
 
-    def start(
+    def start(  # pragma: no cover
         self,
         final_launch_mode,
         effective_active_auth_json_path,
@@ -55,30 +98,13 @@ class CamoufoxProcessManager:
         args,
     ):
         # 构建 Camoufox 内部启动命令 (from dev)
-        camoufox_internal_cmd_args = [
-            PYTHON_EXECUTABLE,
-            "-u",
-            sys.argv[0],  # Use sys.argv[0] to refer to the main script
-            "--internal-launch-mode",
+        camoufox_internal_cmd_args = build_launch_command(
             final_launch_mode,
-        ]
-        if effective_active_auth_json_path:
-            camoufox_internal_cmd_args.extend(
-                ["--internal-auth-file", effective_active_auth_json_path]
-            )
-
-        camoufox_internal_cmd_args.extend(
-            ["--internal-camoufox-os", simulated_os_for_camoufox]
+            effective_active_auth_json_path,
+            simulated_os_for_camoufox,
+            args.camoufox_debug_port,
+            args.internal_camoufox_proxy,
         )
-        camoufox_internal_cmd_args.extend(
-            ["--internal-camoufox-port", str(args.camoufox_debug_port)]
-        )
-
-        # 修复：传递代理参数到内部Camoufox进程
-        if args.internal_camoufox_proxy is not None:
-            camoufox_internal_cmd_args.extend(
-                ["--internal-camoufox-proxy", args.internal_camoufox_proxy]
-            )
 
         camoufox_popen_kwargs = {
             "stdout": subprocess.PIPE,

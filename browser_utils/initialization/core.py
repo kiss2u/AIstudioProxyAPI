@@ -37,7 +37,7 @@ from .network import setup_network_interception_and_scripts
 logger = logging.getLogger("AIStudioProxyServer")
 
 
-async def initialize_page_logic(
+async def initialize_page_logic(  # pragma: no cover
     browser: AsyncBrowser, storage_state_path: Optional[str] = None
 ) -> Tuple[AsyncPage, bool]:
     """
@@ -383,7 +383,7 @@ async def initialize_page_logic(
         raise RuntimeError(f"页面初始化意外错误: {e_init_page}") from e_init_page
 
 
-async def close_page_logic() -> Tuple[None, bool]:
+async def close_page_logic() -> Tuple[None, bool]:  # pragma: no cover
     """关闭页面逻辑"""
     # 需要访问全局变量
     from api_utils.server_state import state
@@ -410,7 +410,7 @@ async def close_page_logic() -> Tuple[None, bool]:
     return None, False
 
 
-async def signal_camoufox_shutdown() -> None:
+async def signal_camoufox_shutdown() -> None:  # pragma: no cover
     """发送关闭信号到Camoufox服务器"""
     logger.info("   尝试发送关闭信号到 Camoufox 服务器 (此功能可能已由父进程处理)...")
     ws_endpoint = os.environ.get("CAMOUFOX_WS_ENDPOINT")
@@ -433,7 +433,7 @@ async def signal_camoufox_shutdown() -> None:
         logger.error(f"   发送关闭信号过程中捕获异常: {e}", exc_info=True)
 
 
-async def enable_temporary_chat_mode(page: AsyncPage) -> None:
+async def enable_temporary_chat_mode(page: AsyncPage) -> None:  # pragma: no cover
     """
     检查并启用 AI Studio 界面的“临时聊天”模式。
     这是一个独立的UI操作，应该在页面完全稳定后调用。

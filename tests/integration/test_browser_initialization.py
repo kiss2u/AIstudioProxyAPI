@@ -55,6 +55,7 @@ async def test_init_storage_state_explicit_exists(temp_auth_file):
 
     with (
         patch("browser_utils.initialization.core.expect_async", mock_expect),
+        patch("playwright.async_api.expect", mock_expect),
         patch(
             "browser_utils.initialization.core.setup_network_interception_and_scripts",
             new_callable=AsyncMock,
@@ -144,6 +145,7 @@ async def test_init_headless_auth_exists(temp_auth_file):
             {"LAUNCH_MODE": "headless", "ACTIVE_AUTH_JSON_PATH": str(temp_auth_file)},
         ),
         patch("browser_utils.initialization.core.expect_async", mock_expect),
+        patch("playwright.async_api.expect", mock_expect),
         patch(
             "browser_utils.initialization.core.setup_network_interception_and_scripts",
             new_callable=AsyncMock,
@@ -205,6 +207,7 @@ async def test_init_debug_auth_exists(temp_auth_file):
             {"LAUNCH_MODE": "debug", "ACTIVE_AUTH_JSON_PATH": str(temp_auth_file)},
         ),
         patch("browser_utils.initialization.core.expect_async", mock_expect),
+        patch("playwright.async_api.expect", mock_expect),
         patch(
             "browser_utils.initialization.core.setup_network_interception_and_scripts",
             new_callable=AsyncMock,
@@ -268,6 +271,7 @@ async def test_init_debug_auth_missing_falls_back(temp_auth_file_missing):
             },
         ),
         patch("browser_utils.initialization.core.expect_async", mock_expect),
+        patch("playwright.async_api.expect", mock_expect),
         patch(
             "browser_utils.initialization.core.setup_network_interception_and_scripts",
             new_callable=AsyncMock,
@@ -330,6 +334,7 @@ async def test_init_proxy_settings_applied():
     with (
         patch.dict("os.environ", {"LAUNCH_MODE": "debug"}),
         patch("browser_utils.initialization.core.expect_async", mock_expect),
+        patch("playwright.async_api.expect", mock_expect),
         patch(
             "browser_utils.initialization.core.setup_network_interception_and_scripts",
             new_callable=AsyncMock,
@@ -383,6 +388,7 @@ async def test_init_page_discovery_existing_page():
     with (
         patch.dict("os.environ", {"LAUNCH_MODE": "debug"}),
         patch("browser_utils.initialization.core.expect_async", mock_expect),
+        patch("playwright.async_api.expect", mock_expect),
         patch(
             "browser_utils.initialization.core.setup_network_interception_and_scripts",
             new_callable=AsyncMock,
@@ -452,6 +458,7 @@ async def test_init_login_url_transition():
     with (
         patch.dict("os.environ", {"LAUNCH_MODE": "debug", "SUPPRESS_LOGIN_WAIT": "0"}),
         patch("browser_utils.initialization.core.expect_async", mock_expect),
+        patch("playwright.async_api.expect", mock_expect),
         patch(
             "browser_utils.initialization.core.setup_network_interception_and_scripts",
             new_callable=AsyncMock,
@@ -510,6 +517,7 @@ async def test_init_model_name_extraction():
     with (
         patch.dict("os.environ", {"LAUNCH_MODE": "debug"}),
         patch("browser_utils.initialization.core.expect_async", mock_expect),
+        patch("playwright.async_api.expect", mock_expect),
         patch(
             "browser_utils.initialization.core.setup_network_interception_and_scripts",
             new_callable=AsyncMock,
@@ -571,6 +579,7 @@ async def test_init_page_readiness_verification():
     with (
         patch.dict("os.environ", {"LAUNCH_MODE": "debug"}),
         patch("browser_utils.initialization.core.expect_async", mock_expect),
+        patch("playwright.async_api.expect", mock_expect),
         patch(
             "browser_utils.initialization.core.setup_network_interception_and_scripts",
             new_callable=AsyncMock,

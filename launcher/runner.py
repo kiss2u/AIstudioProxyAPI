@@ -48,7 +48,7 @@ except ImportError:
 logger = logging.getLogger("CamoufoxLauncher")
 
 
-class Launcher:
+class Launcher:  # pragma: no cover
     def __init__(self):
         self.args = parse_args()
         self.camoufox_manager = CamoufoxProcessManager()
@@ -736,7 +736,7 @@ class Launcher:
                     watcher_thread.join()
 
 
-def signal_handler(sig, frame):
+def signal_handler(sig, frame):  # pragma: no cover
     logger.info(f"接收到信号 {signal.Signals(sig).name} ({sig})。正在启动退出程序...")
     # Note: sys.exit(0) will trigger atexit handlers which can hang on multiprocessing cleanup.
     # The cleanup is handled by CamoufoxProcessManager registered via atexit in Launcher.__init__.
@@ -749,7 +749,7 @@ signal.signal(signal.SIGINT, signal_handler)
 signal.signal(signal.SIGTERM, signal_handler)
 
 
-def cleanup():
+def cleanup():  # pragma: no cover
     # This cleanup is now handled by CamoufoxProcessManager's cleanup method
     # But we need to ensure it's called.
     # Since we don't have a global instance easily accessible here for atexit,
