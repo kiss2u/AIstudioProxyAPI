@@ -628,6 +628,7 @@ async def test_set_thinking_level_errors(mock_controller):
 async def test_control_thinking_mode_toggle_fallback(mock_controller):
     # Test fallback to aria-label based toggle click
     toggle = MagicMock()
+    toggle.count = AsyncMock(return_value=1)  # Element exists
     toggle.get_attribute = AsyncMock(return_value="false")
     toggle.click = AsyncMock(side_effect=Exception("Click failed"))
 
@@ -666,6 +667,7 @@ async def test_control_thinking_mode_toggle_fallback(mock_controller):
 async def test_control_thinking_budget_toggle_fallback(mock_controller):
     # Test fallback to aria-label based toggle click
     toggle = MagicMock()
+    toggle.count = AsyncMock(return_value=1)  # Element exists
     toggle.get_attribute = AsyncMock(return_value="false")
     toggle.click = AsyncMock(side_effect=Exception("Click failed"))
 
