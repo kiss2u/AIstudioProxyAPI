@@ -267,7 +267,9 @@ def test_setup_server_logging_file_handler(
     # Verify RotatingFileHandler was created
     mock_rotating_file_handler.assert_called_once()
     call_kwargs = mock_rotating_file_handler.call_args[1]
-    assert call_kwargs["maxBytes"] == 5 * 1024 * 1024  # 5 MB
+    assert (
+        call_kwargs["maxBytes"] == 10 * 1024 * 1024
+    )  # 10 MB (configurable via LOG_FILE_MAX_BYTES)
     assert call_kwargs["backupCount"] == 5
     assert call_kwargs["encoding"] == "utf-8"
     assert call_kwargs["mode"] == "w"

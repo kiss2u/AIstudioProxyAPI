@@ -1,5 +1,10 @@
 # 日志设置功能
 # Grid logging system v2.0
+from .core.error_handler import (
+    install_asyncio_handler_on_loop,
+    log_error,
+    setup_global_exception_handlers,
+)
 from .grid_logger import (
     # Source mapping
     SOURCE_MAP,
@@ -10,6 +15,8 @@ from .grid_logger import (
     Colors,
     Columns,
     GridFormatter,
+    # JSON formatter for structured logging
+    JSONFormatter,
     PlainGridFormatter,
     ProgressLine,
     SemanticHighlighter,
@@ -70,4 +77,10 @@ __all__ = [
     "format_object",
     "log_object",
     "flush_burst_buffer",
+    # JSON formatter
+    "JSONFormatter",
+    # Error handling utilities
+    "log_error",
+    "setup_global_exception_handlers",
+    "install_asyncio_handler_on_loop",
 ]

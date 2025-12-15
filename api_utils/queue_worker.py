@@ -13,10 +13,9 @@ from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from playwright.async_api import Locator
 
+from api_utils.context_types import QueueItem
 from logging_utils import set_request_id, set_source
 from models import ChatCompletionRequest
-
-from api_utils.context_types import QueueItem
 
 from .error_utils import (
     client_cancelled,

@@ -42,6 +42,7 @@ from logging_utils.core.logger import (
 from logging_utils.core.rendering import (
     BurstBuffer,
     GridFormatter,
+    JSONFormatter,
     PlainGridFormatter,
     ProgressLine,
     SemanticHighlighter,
@@ -67,6 +68,7 @@ __all__ = [
     "_burst_buffer",
     "_format_value",
     "GridFormatter",
+    "JSONFormatter",
     "PlainGridFormatter",
     "format_object",
     "log_object",

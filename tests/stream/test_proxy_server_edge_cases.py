@@ -107,7 +107,8 @@ async def test_handle_connect_start_tls_fail(proxy_server, mock_deps):
         await proxy_server._handle_connect(mock_reader, mock_writer, "example.com:443")
 
         proxy_server.logger.error.assert_called_with(
-            "loop.start_tls returned None for example.com:443, which is unexpected. Closing connection."
+            "loop.start_tls returned None for example.com:443, which is unexpected. Closing connection.",
+            exc_info=True,
         )
         mock_writer.close.assert_called()
 

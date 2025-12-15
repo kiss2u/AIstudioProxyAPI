@@ -35,7 +35,7 @@ class ScriptManager:
                 logger.info(f"成功加载脚本: {script_name}")
                 return script_content
         except Exception as e:
-            logger.error(f"加载脚本失败 {script_name}: {e}")
+            logger.error(f"加载脚本失败 {script_name}: {e}", exc_info=True)
             return None
 
     def load_model_config(self, config_path: str) -> Optional[List[Dict[str, Any]]]:
@@ -52,7 +52,7 @@ class ScriptManager:
                 logger.info(f"成功加载模型配置: {len(models)} 个模型")
                 return models
         except Exception as e:
-            logger.error(f"加载模型配置失败 {config_path}: {e}")
+            logger.error(f"加载模型配置失败 {config_path}: {e}", exc_info=True)
             return None
 
     def generate_dynamic_script(
@@ -125,7 +125,7 @@ class ScriptManager:
             return new_script
 
         except Exception as e:
-            logger.error(f"生成动态脚本失败: {e}")
+            logger.error(f"生成动态脚本失败: {e}", exc_info=True)
             return base_script
 
     async def inject_script_to_page(
@@ -144,7 +144,7 @@ class ScriptManager:
         except asyncio.CancelledError:
             raise
         except Exception as e:
-            logger.error(f"注入脚本到页面失败 {script_name}: {e}")
+            logger.error(f"注入脚本到页面失败 {script_name}: {e}", exc_info=True)
             return False
 
     def _clean_userscript_headers(self, script_content: str) -> str:

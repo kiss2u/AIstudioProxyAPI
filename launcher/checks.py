@@ -65,7 +65,9 @@ def check_dependencies(
         if server_app_check:
             logger.info("  成功从 'server.py' 导入 'app' 对象。")
     except ImportError as e_import_server:
-        logger.error(f"  无法从 'server.py' 导入 'app' 对象: {e_import_server}")
+        logger.error(
+            f"  无法从 'server.py' 导入 'app' 对象: {e_import_server}", exc_info=True
+        )
         logger.error("     请确保 'server.py' 文件存在且没有导入错误。")
         dependencies_ok = False
 

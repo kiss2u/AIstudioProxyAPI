@@ -86,7 +86,7 @@ class ProxyServer:
         except asyncio.CancelledError:
             raise
         except Exception as e:
-            self.logger.error(f"Error handling client: {e}")
+            self.logger.error(f"Error handling client: {e}", exc_info=True)
         finally:
             writer.close()
             try:
@@ -144,7 +144,8 @@ class ProxyServer:
 
             if new_transport is None:
                 self.logger.error(
-                    f"loop.start_tls returned None for {host}:{port}, which is unexpected. Closing connection."
+                    f"loop.start_tls returned None for {host}:{port}, which is unexpected. Closing connection.",
+                    exc_info=True,
                 )
                 writer.close()
                 return
@@ -174,7 +175,9 @@ class ProxyServer:
             except asyncio.CancelledError:
                 raise
             except Exception as e:
-                self.logger.error(f"Error connecting to server {host}:{port}: {e}")
+                self.logger.error(
+                    f"Error connecting to server {host}:{port}: {e}", exc_info=True
+                )
                 client_writer.close()
                 try:
                     await client_writer.wait_closed()
@@ -200,7 +203,9 @@ class ProxyServer:
             except asyncio.CancelledError:
                 raise
             except Exception as e:
-                self.logger.error(f"Error connecting to server {host}:{port}: {e}")
+                self.logger.error(
+                    f"Error connecting to server {host}:{port}: {e}", exc_info=True
+                )
                 writer.close()
                 try:
                     await writer.wait_closed()
@@ -231,7 +236,7 @@ class ProxyServer:
             except asyncio.CancelledError:
                 raise
             except Exception as e:
-                self.logger.error(f"Error forwarding data: {e}")
+                self.logger.error(f"Error forwarding data: {e}", exc_info=True)
             finally:
                 writer.close()
                 try:
@@ -342,7 +347,7 @@ class ProxyServer:
             except asyncio.CancelledError:
                 raise
             except Exception as e:
-                self.logger.error(f"Error processing client data: {e}")
+                self.logger.error(f"Error processing client data: {e}", exc_info=True)
             finally:
                 server_writer.close()
                 try:
@@ -426,7 +431,8 @@ class ProxyServer:
                                 raise
                             except Exception as e:
                                 self.logger.error(
-                                    f"Error during response interception: {e}"
+                                    f"Error during response interception: {e}",
+                                    exc_info=True,
                                 )
 
                     # Not enough data to parse headers, forward as is
@@ -436,7 +442,7 @@ class ProxyServer:
             except asyncio.CancelledError:
                 raise
             except Exception as e:
-                self.logger.error(f"Error processing server data: {e}")
+                self.logger.error(f"Error processing server data: {e}", exc_info=True)
             finally:
                 client_writer.close()
                 try:
@@ -485,7 +491,7 @@ class ProxyServer:
                 self.queue.put("READY")
                 self.logger.info("Sent 'READY' signal to the main process.")
             except Exception as e:
-                self.logger.error(f"Failed to send 'READY' signal: {e}")
+                self.logger.error(f"Failed to send 'READY' signal: {e}", exc_info=True)
 
         async with server:
             await server.serve_forever()

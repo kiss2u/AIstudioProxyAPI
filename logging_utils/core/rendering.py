@@ -659,3 +659,82 @@ class ProgressLine:
                 sys.stdout.write(f" - {Colors.STRING}{message}{Colors.RESET}")
             sys.stdout.write("\n")
             sys.stdout.flush()
+
+
+# =============================================================================
+# JSON Formatter (Structured Logging)
+# =============================================================================
+
+
+class JSONFormatter(logging.Formatter):
+    """
+    JSON formatter for structured logging.
+
+    Outputs logs as JSON lines for easy parsing by log aggregation tools
+    like ELK, Datadog, CloudWatch, etc.
+
+    Enable via JSON_LOGS=true environment variable.
+
+    Format:
+    {"timestamp": "2024-12-15T15:30:00.123Z", "level": "ERROR", "source": "API",
+     "request_id": "abc1234", "message": "...", "exception": "..."}
+    """
+
+    def format(self, record: logging.LogRecord) -> str:
+        """Format log record as JSON."""
+        import json
+        from datetime import timezone
+
+        # Get context variables
+        try:
+            req_id = request_id_var.get()
+        except LookupError:
+            req_id = ""
+
+        try:
+            source = source_var.get()
+        except LookupError:
+            source = "SYS"
+
+        source_normalized = normalize_source(source)
+
+        # Build timestamp in ISO 8601 format with milliseconds
+        now = datetime.now(timezone.utc)
+        timestamp = (
+            now.strftime("%Y-%m-%dT%H:%M:%S.") + f"{int(now.microsecond / 1000):03d}Z"
+        )
+
+        # Base log entry
+        log_entry: dict[str, Any] = {
+            "timestamp": timestamp,
+            "level": record.levelname,
+            "source": source_normalized.strip(),
+            "message": record.getMessage(),
+        }
+
+        # Add request ID if present
+        if req_id and req_id.strip():
+            log_entry["request_id"] = req_id.strip()
+
+        # Add logger name
+        if record.name:
+            log_entry["logger"] = record.name
+
+        # Add exception info if present
+        if record.exc_info and record.exc_info[1] is not None:
+            import traceback as tb
+
+            log_entry["exception"] = {
+                "type": type(record.exc_info[1]).__name__,
+                "message": str(record.exc_info[1]),
+                "traceback": "".join(tb.format_exception(*record.exc_info)),
+            }
+
+        # Add extra fields from record
+        # Common extra fields that might be useful
+        for key in ("funcName", "lineno", "pathname"):
+            value = getattr(record, key, None)
+            if value:
+                log_entry[key] = value
+
+        return json.dumps(log_entry, ensure_ascii=False, default=str)

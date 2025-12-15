@@ -6,11 +6,21 @@ from datetime import datetime
 from typing import Any, Optional, Tuple
 from zoneinfo import ZoneInfo
 
-from config import ACTIVE_AUTH_DIR, APP_LOG_FILE_PATH, LOG_DIR, SAVED_AUTH_DIR
+from config import (
+    ACTIVE_AUTH_DIR,
+    APP_LOG_FILE_PATH,
+    JSON_LOGS_ENABLED,
+    LOG_DIR,
+    LOG_FILE_BACKUP_COUNT,
+    LOG_FILE_MAX_BYTES,
+    SAVED_AUTH_DIR,
+)
 from models import StreamToLogger, WebSocketConnectionManager, WebSocketLogHandler
 
+from .core.error_handler import setup_global_exception_handlers
 from .grid_logger import (
     GridFormatter,
+    JSONFormatter,
     PlainGridFormatter,
 )
 
@@ -122,10 +132,16 @@ def setup_server_logging(
             )
 
     # 添加文件处理器
+    # Use JSONFormatter for file logging if JSON_LOGS_ENABLED, otherwise PlainGridFormatter
+    if JSON_LOGS_ENABLED:
+        file_log_formatter = JSONFormatter()
+    else:
+        file_log_formatter = PlainGridFormatter()
+
     file_handler = logging.handlers.RotatingFileHandler(
         APP_LOG_FILE_PATH,
-        maxBytes=5 * 1024 * 1024,
-        backupCount=5,
+        maxBytes=LOG_FILE_MAX_BYTES,
+        backupCount=LOG_FILE_BACKUP_COUNT,
         encoding="utf-8",
         mode="w",
     )
@@ -198,6 +214,9 @@ def setup_server_logging(
     logger_instance.info(
         f"Print 重定向 (由 SERVER_REDIRECT_PRINT 环境变量控制): {'启用' if redirect_print else '禁用'}"
     )
+
+    # 安装全局异常处理器以捕获未处理的异常
+    setup_global_exception_handlers()
 
     return original_stdout, original_stderr
 
