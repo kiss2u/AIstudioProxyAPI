@@ -24,7 +24,6 @@ from browser_utils.debug_utils import (
     get_texas_timestamp,
     save_comprehensive_snapshot,
     save_error_snapshot_enhanced,
-    save_error_snapshot_legacy,
 )
 
 # === Smart Fixtures to Reduce Mocking ===
@@ -715,36 +714,3 @@ class TestSaveErrorSnapshotEnhanced:
             # Verify exception was passed
             call_kwargs = mock_save.call_args[1]
             assert call_kwargs["error_exception"] == error_exc
-
-
-# === Section 7: Legacy Snapshot Tests ===
-
-
-class TestSaveErrorSnapshotLegacy:
-    """测试遗留错误快照函数"""
-
-    @pytest.mark.asyncio
-    async def test_legacy_snapshot_delegates_to_enhanced(self):
-        """测试遗留函数委托给增强函数"""
-        with patch(
-            "browser_utils.debug_utils.save_error_snapshot_enhanced"
-        ) as mock_enhanced:
-            await save_error_snapshot_legacy(error_name="legacy_error_req9999")
-
-            # Verify enhanced was called
-            mock_enhanced.assert_called_once()
-            call_kwargs = mock_enhanced.call_args[1]
-            assert call_kwargs["error_name"] == "legacy_error_req9999"
-            assert call_kwargs["error_stage"] == "Legacy snapshot call"
-            assert call_kwargs["additional_context"]["legacy_call"] is True
-
-    @pytest.mark.asyncio
-    async def test_legacy_snapshot_default_error_name(self):
-        """测试默认错误名称"""
-        with patch(
-            "browser_utils.debug_utils.save_error_snapshot_enhanced"
-        ) as mock_enhanced:
-            await save_error_snapshot_legacy()
-
-            call_kwargs = mock_enhanced.call_args[1]
-            assert call_kwargs["error_name"] == "error"

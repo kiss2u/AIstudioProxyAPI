@@ -5,7 +5,7 @@ from .debug_utils import (
     capture_playwright_state,
     get_texas_timestamp,
     save_comprehensive_snapshot,
-    save_error_snapshot_legacy,
+    save_error_snapshot_enhanced,
 )
 from .initialization import (
     _close_page_logic,
@@ -63,7 +63,7 @@ __all__ = [
     "PageController",
     # Debug utilities (comprehensive error snapshots)
     "save_comprehensive_snapshot",
-    "save_error_snapshot_legacy",
+    "save_error_snapshot_enhanced",
     "get_texas_timestamp",
     "capture_dom_structure",
     "capture_playwright_state",
