@@ -1,7 +1,6 @@
 import argparse
 import os
 import sys
-from dataclasses import dataclass
 from typing import Dict, Optional
 
 from launcher.utils import get_proxy_from_gsettings
@@ -30,8 +29,6 @@ AUTH_PROFILES_DIR = os.path.join(
 )
 ACTIVE_AUTH_DIR = os.path.join(AUTH_PROFILES_DIR, "active")
 SAVED_AUTH_DIR = os.path.join(AUTH_PROFILES_DIR, "saved")
-HTTP_PROXY = os.environ.get("HTTP_PROXY", "")
-HTTPS_PROXY = os.environ.get("HTTPS_PROXY", "")
 LOG_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "logs")
 LAUNCHER_LOG_FILE_PATH = os.path.join(LOG_DIR, "launch_app.log")
 DIRECT_LAUNCH = os.environ.get("DIRECT_LAUNCH", False)
@@ -40,29 +37,6 @@ DIRECT_LAUNCH = os.environ.get("DIRECT_LAUNCH", False)
 import re
 
 ws_regex = re.compile(r"(ws://\S+)")
-
-
-@dataclass
-class LauncherConfig:
-    server_port: int
-    stream_port: int
-    helper_endpoint: str
-    camoufox_debug_port: int
-    launch_mode: str
-    active_auth_json: Optional[str]
-    auto_save_auth: bool
-    save_auth_as: Optional[str]
-    auth_save_timeout: int
-    exit_on_auth_save: bool
-    server_log_level: str
-    server_redirect_print: bool
-    debug_logs: bool
-    trace_logs: bool
-    internal_launch_mode: Optional[str] = None
-    internal_auth_file: Optional[str] = None
-    internal_camoufox_port: int = DEFAULT_CAMOUFOX_PORT
-    internal_camoufox_proxy: Optional[str] = None
-    internal_camoufox_os: str = "random"
 
 
 def determine_proxy_configuration(

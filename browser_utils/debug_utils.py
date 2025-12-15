@@ -694,20 +694,3 @@ async def save_error_snapshot_enhanced(
         locators=locators,
         error_exception=error_exception,
     )
-
-
-async def save_error_snapshot_legacy(error_name: str = "error") -> None:
-    """
-    Legacy error snapshot function for backward compatibility.
-
-    DEPRECATED: Use save_error_snapshot_enhanced() or save_comprehensive_snapshot() instead.
-
-    Args:
-        error_name: Error name with optional req_id suffix (e.g., "error_hbfu521")
-    """
-    # Delegate to enhanced function with minimal context
-    await save_error_snapshot_enhanced(
-        error_name=error_name,
-        error_stage="Legacy snapshot call",
-        additional_context={"legacy_call": True},
-    )

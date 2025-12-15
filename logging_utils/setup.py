@@ -73,19 +73,6 @@ class ColoredFormatter(logging.Formatter):
         return super().format(record)
 
 
-class USCentralFormatter(logging.Formatter):
-    """Formatter that enforces US/Central time."""
-
-    def formatTime(self, record: logging.LogRecord, datefmt: Any = None) -> str:
-        dt = datetime.fromtimestamp(record.created, tz=ZoneInfo("America/Chicago"))
-        if datefmt:
-            s = dt.strftime(datefmt)
-        else:
-            s = dt.strftime("%Y-%m-%d %H:%M:%S")
-            s = "%s,%03d" % (s, record.msecs)
-        return s
-
-
 def setup_server_logging(
     logger_instance: logging.Logger,
     log_ws_manager: Optional[WebSocketConnectionManager],

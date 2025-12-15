@@ -59,7 +59,6 @@ class ResponseController(BaseController):
                 edit_button_locator,
                 self.req_id,
                 check_client_disconnected,
-                None,
             )
 
             if not completion_detected:

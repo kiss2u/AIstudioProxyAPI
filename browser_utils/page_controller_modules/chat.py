@@ -290,11 +290,6 @@ class ChatController(BaseController):
                 else:
                     raise
 
-            await self._check_disconnect(
-                check_client_disconnected,
-                f"清空聊天 - 消失检查尝试 {attempt_disappear + 1} 后",
-            )
-
     async def _dismiss_backdrops(self):
         """尝试关闭可能残留的 cdk 透明遮罩层以避免点击被拦截。"""
         try:

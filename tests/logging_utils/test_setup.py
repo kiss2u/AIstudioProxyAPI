@@ -18,7 +18,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from logging_utils.setup import (
-    USCentralFormatter,
     restore_original_streams,
     setup_server_logging,
 )
@@ -78,84 +77,6 @@ def mock_file_ops():
     ):
         mock_exists.return_value = False
         yield mock_exists, mock_remove
-
-
-# ==================== USCentralFormatter TESTS ====================
-
-
-def test_uscentralformatter_without_datefmt():
-    """Test USCentralFormatter with default datetime format."""
-    formatter = USCentralFormatter()
-
-    # Create a mock log record
-    record = logging.LogRecord(
-        name="test",
-        level=logging.INFO,
-        pathname="test.py",
-        lineno=1,
-        msg="Test message",
-        args=(),
-        exc_info=None,
-    )
-    record.created = 1732662000.123  # Known timestamp
-    record.msecs = 123
-
-    # Format the time
-    formatted_time = formatter.formatTime(record)
-
-    # Should return US/Central timezone formatted string
-    assert formatted_time is not None
-    assert "," in formatted_time  # Should include milliseconds
-    assert "123" in formatted_time  # Milliseconds should be present
-
-
-def test_uscentralformatter_with_custom_datefmt():
-    """Test USCentralFormatter with custom datefmt."""
-    formatter = USCentralFormatter()
-
-    record = logging.LogRecord(
-        name="test",
-        level=logging.INFO,
-        pathname="test.py",
-        lineno=1,
-        msg="Test message",
-        args=(),
-        exc_info=None,
-    )
-    record.created = 1732662000.123
-    record.msecs = 123
-
-    # Format with custom datefmt
-    formatted_time = formatter.formatTime(record, datefmt="%Y/%m/%d %H:%M")
-
-    # Should use custom format without milliseconds
-    assert formatted_time is not None
-    assert "/" in formatted_time
-    assert "," not in formatted_time  # No milliseconds with custom format
-
-
-def test_uscentralformatter_timezone():
-    """Test that USCentralFormatter uses America/Chicago timezone."""
-    formatter = USCentralFormatter()
-
-    record = logging.LogRecord(
-        name="test",
-        level=logging.INFO,
-        pathname="test.py",
-        lineno=1,
-        msg="Test message",
-        args=(),
-        exc_info=None,
-    )
-    # Use a known timestamp
-    record.created = 1732662000.0  # 2024-11-26 ~18:00:00 UTC
-    record.msecs = 0
-
-    formatted_time = formatter.formatTime(record)
-
-    # Verify it's a valid datetime string (format check)
-    assert len(formatted_time) > 10
-    assert "-" in formatted_time or ":" in formatted_time
 
 
 # ==================== setup_server_logging BASIC TESTS ====================

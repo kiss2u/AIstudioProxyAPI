@@ -158,14 +158,6 @@
 - **示例**: `AUTH_SAVE_TIMEOUT=60`
 - **说明**: 等待认证文件保存完成的最大时间
 
-### AUTO_CONFIRM_LOGIN
-
-- **用途**: 自动确认登录
-- **类型**: 布尔值
-- **默认值**: `true`
-- **示例**: `AUTO_CONFIRM_LOGIN=false`
-- **说明**: 启用后会自动点击登录确认按钮
-
 ### ONLY_COLLECT_CURRENT_USER_ATTACHMENTS
 
 - **用途**: 仅收集当前用户附件
@@ -450,8 +442,8 @@
 
 - **用途**: 是否启用油猴脚本注入功能 (v3.0)
 - **类型**: 布尔值
-- **默认值**: `true`
-- **示例**: `ENABLE_SCRIPT_INJECTION=false`
+- **默认值**: `false`
+- **示例**: `ENABLE_SCRIPT_INJECTION=true`
 - **说明**: 启用后，系统将自动从油猴脚本解析模型列表并注入到 API 响应中。v3.0 版本使用 Playwright 原生网络拦截，提供更高的可靠性。
 
 ### USERSCRIPT_PATH

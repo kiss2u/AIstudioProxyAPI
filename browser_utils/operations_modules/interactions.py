@@ -349,7 +349,6 @@ async def _wait_for_response_completion(
     edit_button_locator: Locator,
     req_id: str,
     check_client_disconnected_func: Callable,
-    current_chat_id: Optional[str],
     timeout_ms=RESPONSE_COMPLETION_TIMEOUT,
     initial_wait_ms=INITIAL_WAIT_MS_BEFORE_POLLING,
 ) -> bool:

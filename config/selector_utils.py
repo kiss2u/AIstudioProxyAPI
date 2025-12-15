@@ -38,68 +38,6 @@ AUTOSIZE_WRAPPER_SELECTORS: List[str] = [
     "ms-prompt-box ms-autosize-textarea",
 ]
 
-# --- 拖放目标选择器 ---
-DRAG_DROP_TARGET_SELECTORS: List[str] = [
-    "ms-prompt-input-wrapper .text-wrapper",
-    "ms-chunk-input .text-wrapper",
-    "ms-prompt-input-wrapper",
-    # 过渡期 UI (ms-prompt-box) - 已弃用但保留作为回退
-    "ms-prompt-box .text-wrapper",
-    "ms-prompt-box",
-]
-
-
-async def find_first_available_locator(
-    page: Page,
-    selectors: List[str],
-    description: str = "element",
-    log_result: bool = True,
-) -> Tuple[Optional[Locator], Optional[str]]:
-    """
-    尝试多个选择器并返回第一个找到元素的 Locator。
-
-    此函数实现了健壮的回退逻辑，用于处理 Google AI Studio 的 UI 变化。
-    按顺序尝试每个选择器，返回第一个成功找到元素的选择器。
-
-    Args:
-        page: Playwright 页面实例
-        selectors: 要尝试的选择器列表（按优先级排序）
-        description: 元素描述（用于日志记录）
-        log_result: 是否记录找到的选择器
-
-    Returns:
-        Tuple[Optional[Locator], Optional[str]]:
-            - 找到元素的 Locator，如果都失败则为 None
-            - 成功的选择器字符串，如果都失败则为 None
-
-    Example:
-        locator, selector = await find_first_available_locator(
-            page, INPUT_WRAPPER_SELECTORS, "输入容器"
-        )
-        if locator:
-            await locator.click()
-    """
-    for selector in selectors:
-        try:
-            locator = page.locator(selector)
-            count = await locator.count()
-            if count > 0:
-                if log_result:
-                    logger.debug(
-                        f"   {description}: 使用选择器 '{selector}' (找到 {count} 个)"
-                    )
-                return locator, selector
-        except asyncio.CancelledError:
-            raise
-        except Exception as e:
-            # 选择器检查失败，继续尝试下一个
-            logger.debug(f"   {description}: 选择器 '{selector}' 检查失败: {e}")
-            continue
-
-    if log_result:
-        logger.warning(f"   {description}: 所有选择器均未找到元素")
-    return None, None
-
 
 async def find_first_visible_locator(
     page: Page,

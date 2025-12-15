@@ -5,7 +5,7 @@ from .debug_utils import (
     capture_playwright_state,
     get_texas_timestamp,
     save_comprehensive_snapshot,
-    save_error_snapshot_legacy,
+    save_error_snapshot_enhanced,
 )
 from .initialization import (
     _close_page_logic,
@@ -34,7 +34,6 @@ from .operations import (
     save_error_snapshot,
 )
 from .page_controller import PageController
-from .script_manager import ScriptManager, script_manager
 
 __all__ = [
     # 初始化相关
@@ -60,14 +59,11 @@ __all__ = [
     "_force_ui_state_settings",
     "_force_ui_state_with_retry",
     "_verify_and_apply_ui_state",
-    # 脚本管理相关
-    "ScriptManager",
-    "script_manager",
     # Page Controller
     "PageController",
     # Debug utilities (comprehensive error snapshots)
     "save_comprehensive_snapshot",
-    "save_error_snapshot_legacy",
+    "save_error_snapshot_enhanced",
     "get_texas_timestamp",
     "capture_dom_structure",
     "capture_playwright_state",
