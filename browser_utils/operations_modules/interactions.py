@@ -16,6 +16,7 @@ from playwright.async_api import (
 
 from browser_utils.operations_modules.errors import save_error_snapshot
 from config import (
+    CHAT_TURN_SELECTOR,
     CLICK_TIMEOUT_MS,
     DEBUG_LOGS_ENABLED,
     INITIAL_WAIT_MS_BEFORE_POLLING,
@@ -79,7 +80,7 @@ async def get_response_via_edit_button(
 ) -> Optional[str]:
     """通过编辑按钮获取响应"""
     logger.info(" (Helper) 尝试通过编辑按钮获取响应...")
-    last_message_container = page.locator("ms-chat-turn").last
+    last_message_container = page.locator(CHAT_TURN_SELECTOR).last
     edit_button = last_message_container.get_by_label("Edit")
     finish_edit_button = last_message_container.get_by_label("Stop editing")
     autosize_textarea_locator = last_message_container.locator("ms-autosize-textarea")
@@ -115,7 +116,9 @@ async def get_response_via_edit_button(
         except asyncio.CancelledError:
             raise
         except Exception as edit_btn_err:
-            logger.error(f"   - 'Edit' 按钮不可见或点击失败: {edit_btn_err}")
+            logger.error(
+                f"   - 'Edit' 按钮不可见或点击失败: {edit_btn_err}", exc_info=True
+            )
             await save_error_snapshot(f"edit_response_edit_button_failed_{req_id}")
             return None
 
@@ -192,7 +195,9 @@ async def get_response_via_edit_button(
         except asyncio.CancelledError:
             raise
         except Exception as textarea_err:
-            logger.error(f"   - 定位或处理文本区域时失败: {textarea_err}")
+            logger.error(
+                f"   - 定位或处理文本区域时失败: {textarea_err}", exc_info=True
+            )
             textarea_failed = True
             response_content = None
             check_client_disconnected("编辑响应 - 获取文本区域错误后: ")
@@ -239,7 +244,7 @@ async def get_response_via_copy_button(
 ) -> Optional[str]:
     """通过复制按钮获取响应"""
     logger.info(" (Helper) 尝试通过复制按钮获取响应...")
-    last_message_container = page.locator("ms-chat-turn").last
+    last_message_container = page.locator(CHAT_TURN_SELECTOR).last
     more_options_button = last_message_container.get_by_label("Open options")
     copy_markdown_button = page.get_by_role("menuitem", name="Copy markdown")
 
@@ -322,7 +327,7 @@ async def get_response_via_copy_button(
                     f"   - 读取剪贴板失败: 可能是权限问题。错误: {clipboard_err}"
                 )
             else:
-                logger.error(f"   - 读取剪贴板失败: {clipboard_err}")
+                logger.error(f"   - 读取剪贴板失败: {clipboard_err}", exc_info=True)
             await save_error_snapshot(f"copy_response_clipboard_read_failed_{req_id}")
             return None
 

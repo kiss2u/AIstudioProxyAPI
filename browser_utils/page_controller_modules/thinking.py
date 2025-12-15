@@ -15,9 +15,13 @@ from config import (
     ENABLE_THINKING_MODE_TOGGLE_SELECTOR,
     SET_THINKING_BUDGET_TOGGLE_SELECTOR,
     THINKING_BUDGET_INPUT_SELECTOR,
+    THINKING_BUDGET_TOGGLE_OLD_ROOT_SELECTOR,
+    THINKING_BUDGET_TOGGLE_PARENT_SELECTOR,
     THINKING_LEVEL_OPTION_HIGH_SELECTOR,
     THINKING_LEVEL_OPTION_LOW_SELECTOR,
     THINKING_LEVEL_SELECT_SELECTOR,
+    THINKING_MODE_TOGGLE_OLD_ROOT_SELECTOR,
+    THINKING_MODE_TOGGLE_PARENT_SELECTOR,
 )
 from models import ClientDisconnectedError
 
@@ -440,6 +444,23 @@ class ThinkingController(BaseController):
 
         try:
             toggle_locator = self.page.locator(toggle_selector)
+
+            # First check if element exists at all (for non-thinking models like gemini-2.0-flash)
+            element_count = await toggle_locator.count()
+            if element_count == 0:
+                if not should_be_enabled:
+                    # Trying to disable on a model without thinking toggle - just skip
+                    self.logger.info(
+                        " 主思考开关不存在（当前模型不支持思考模式），无需关闭。"
+                    )
+                    return True
+                else:
+                    # User wants to enable but toggle doesn't exist
+                    self.logger.warning(
+                        " 主思考开关不存在（当前模型可能不支持思考模式），无法开启。"
+                    )
+                    return False
+
             await expect_async(toggle_locator).to_be_visible(timeout=5000)
             try:
                 await toggle_locator.scroll_into_view_if_needed()
@@ -467,12 +488,20 @@ class ThinkingController(BaseController):
                     raise
                 except Exception:
                     try:
-                        root = self.page.locator(
-                            'mat-slide-toggle[data-test-toggle="enable-thinking"]'
+                        # 新版UI: 尝试直接点击带 aria-label 的开关父容器
+                        alt_toggle = self.page.locator(
+                            THINKING_MODE_TOGGLE_PARENT_SELECTOR
                         )
-                        label = root.locator("label.mdc-label")
-                        await expect_async(label).to_be_visible(timeout=2000)
-                        await label.click(timeout=CLICK_TIMEOUT_MS)
+                        if await alt_toggle.count() > 0:
+                            await alt_toggle.click(timeout=CLICK_TIMEOUT_MS)
+                        else:
+                            # 旧版UI回退: data-test-toggle
+                            root = self.page.locator(
+                                THINKING_MODE_TOGGLE_OLD_ROOT_SELECTOR
+                            )
+                            label = root.locator("label.mdc-label")
+                            await expect_async(label).to_be_visible(timeout=2000)
+                            await label.click(timeout=CLICK_TIMEOUT_MS)
                     except Exception:
                         raise
                 await self._check_disconnect(
@@ -525,6 +554,23 @@ class ThinkingController(BaseController):
 
         try:
             toggle_locator = self.page.locator(toggle_selector)
+
+            # First check if element exists at all (for non-thinking models)
+            element_count = await toggle_locator.count()
+            if element_count == 0:
+                if not should_be_checked:
+                    # Trying to disable on a model without budget toggle - just skip
+                    self.logger.info(
+                        " 思考预算开关不存在（当前模型不支持），无需禁用。"
+                    )
+                    return
+                else:
+                    # User wants to enable but toggle doesn't exist
+                    self.logger.warning(
+                        " 思考预算开关不存在（当前模型可能不支持），无法启用。"
+                    )
+                    return
+
             await expect_async(toggle_locator).to_be_visible(timeout=5000)
             try:
                 await toggle_locator.scroll_into_view_if_needed()
@@ -553,12 +599,20 @@ class ThinkingController(BaseController):
                     raise
                 except Exception:
                     try:
-                        root = self.page.locator(
-                            'mat-slide-toggle[data-test-toggle="manual-budget"]'
+                        # 新版UI: 尝试直接点击带 aria-label 的开关父容器
+                        alt_toggle = self.page.locator(
+                            THINKING_BUDGET_TOGGLE_PARENT_SELECTOR
                         )
-                        label = root.locator("label.mdc-label")
-                        await expect_async(label).to_be_visible(timeout=2000)
-                        await label.click(timeout=CLICK_TIMEOUT_MS)
+                        if await alt_toggle.count() > 0:
+                            await alt_toggle.click(timeout=CLICK_TIMEOUT_MS)
+                        else:
+                            # 旧版UI回退: data-test-toggle
+                            root = self.page.locator(
+                                THINKING_BUDGET_TOGGLE_OLD_ROOT_SELECTOR
+                            )
+                            label = root.locator("label.mdc-label")
+                            await expect_async(label).to_be_visible(timeout=2000)
+                            await label.click(timeout=CLICK_TIMEOUT_MS)
                     except Exception:
                         raise
                 await self._check_disconnect(

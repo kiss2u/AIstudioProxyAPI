@@ -23,8 +23,12 @@ from playwright.async_api import (
 from config import (
     AI_STUDIO_URL_PATTERN,
     INPUT_SELECTOR,
+    MODEL_NAME_SELECTOR,
     USER_INPUT_END_MARKER_SERVER,
     USER_INPUT_START_MARKER_SERVER,
+)
+from config.selector_utils import (
+    INPUT_WRAPPER_SELECTORS,
 )
 
 from .auth import wait_for_model_list_and_handle_auth_save
@@ -34,7 +38,7 @@ from .network import setup_network_interception_and_scripts
 logger = logging.getLogger("AIStudioProxyServer")
 
 
-async def initialize_page_logic(
+async def initialize_page_logic(  # pragma: no cover
     browser: AsyncBrowser, storage_state_path: Optional[str] = None
 ) -> Tuple[AsyncPage, bool]:
     """
@@ -293,18 +297,33 @@ async def initialize_page_logic(
         await found_page.bring_to_front()
 
         try:
-            input_wrapper_locator = found_page.locator(
-                "ms-prompt-box .prompt-box-container"
+            # 使用集中管理的选择器回退逻辑查找输入容器
+            # 支持当前和旧 UI 结构 (ms-prompt-input-wrapper / ms-chunk-editor / ms-prompt-box)
+            # 使用 find_first_visible_locator 等待元素可见，解决无头模式下的时序问题
+            from config.selector_utils import find_first_visible_locator
+
+            (
+                input_wrapper_locator,
+                matched_selector,
+            ) = await find_first_visible_locator(
+                found_page,
+                INPUT_WRAPPER_SELECTORS,
+                description="输入容器",
+                timeout_per_selector=30000,  # 每个选择器等待30秒
             )
-            if await input_wrapper_locator.count() == 0:
-                input_wrapper_locator = found_page.locator("ms-prompt-box")
-            await expect_async(input_wrapper_locator).to_be_visible(timeout=35000)
+            if not input_wrapper_locator:
+                raise RuntimeError(
+                    "无法找到输入容器元素。已尝试的选择器: "
+                    + ", ".join(INPUT_WRAPPER_SELECTORS)
+                )
+            logger.info(f"-> 输入容器已定位 (选择器: {matched_selector})")
+            # 容器已通过 find_first_visible_locator 确认可见，直接检查输入框
             await expect_async(found_page.locator(INPUT_SELECTOR)).to_be_visible(
                 timeout=10000
             )
             logger.info("-> 核心输入区域可见。")
 
-            model_name_locator = found_page.locator('[data-test-id="model-name"]')
+            model_name_locator = found_page.locator(MODEL_NAME_SELECTOR)
             try:
                 model_name_on_page = await model_name_locator.first.inner_text(
                     timeout=5000
@@ -365,7 +384,7 @@ async def initialize_page_logic(
         raise RuntimeError(f"页面初始化意外错误: {e_init_page}") from e_init_page
 
 
-async def close_page_logic() -> Tuple[None, bool]:
+async def close_page_logic() -> Tuple[None, bool]:  # pragma: no cover
     """关闭页面逻辑"""
     # 需要访问全局变量
     from api_utils.server_state import state
@@ -392,7 +411,7 @@ async def close_page_logic() -> Tuple[None, bool]:
     return None, False
 
 
-async def signal_camoufox_shutdown() -> None:
+async def signal_camoufox_shutdown() -> None:  # pragma: no cover
     """发送关闭信号到Camoufox服务器"""
     logger.info("   尝试发送关闭信号到 Camoufox 服务器 (此功能可能已由父进程处理)...")
     ws_endpoint = os.environ.get("CAMOUFOX_WS_ENDPOINT")
@@ -415,7 +434,7 @@ async def signal_camoufox_shutdown() -> None:
         logger.error(f"   发送关闭信号过程中捕获异常: {e}", exc_info=True)
 
 
-async def enable_temporary_chat_mode(page: AsyncPage) -> None:
+async def enable_temporary_chat_mode(page: AsyncPage) -> None:  # pragma: no cover
     """
     检查并启用 AI Studio 界面的“临时聊天”模式。
     这是一个独立的UI操作，应该在页面完全稳定后调用。

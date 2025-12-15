@@ -7,7 +7,6 @@ This module provides enhanced debugging capabilities with:
 - Human-readable Texas timestamps
 - Complete metadata capture
 
-Created: 2025-11-21
 Purpose: Fix headless mode debugging and client disconnect issues
 """
 

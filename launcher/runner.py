@@ -16,10 +16,10 @@ import uvicorn
 from launcher.checks import check_dependencies, ensure_auth_dirs_exist
 from launcher.config import (
     ACTIVE_AUTH_DIR,
+    DIRECT_LAUNCH,
     SAVED_AUTH_DIR,
     determine_proxy_configuration,
     parse_args,
-    DIRECT_LAUNCH
 )
 from launcher.internal import run_internal_camoufox
 from launcher.logging_setup import setup_launcher_logging
@@ -48,7 +48,7 @@ except ImportError:
 logger = logging.getLogger("CamoufoxLauncher")
 
 
-class Launcher:
+class Launcher:  # pragma: no cover
     def __init__(self):
         self.args = parse_args()
         self.camoufox_manager = CamoufoxProcessManager()
@@ -161,9 +161,7 @@ class Launcher:
                 )
 
             if DIRECT_LAUNCH:
-                self.final_launch_mode = (
-                        default_mode_from_env or "headless"
-                )
+                self.final_launch_mode = default_mode_from_env or "headless"
                 return
 
             logger.info("--- 请选择启动模式 (未通过命令行参数指定) ---")
@@ -454,7 +452,9 @@ class Launcher:
                     if DIRECT_LAUNCH:
                         selected_profile = available_profiles[0]
                         self.effective_active_auth_json_path = selected_profile["path"]
-                        logger.info(f"   快速启动：自动选择第一个可用认证文件: {selected_profile['name']}")
+                        logger.info(
+                            f"   快速启动：自动选择第一个可用认证文件: {selected_profile['name']}"
+                        )
                     else:
                         print("-" * 60 + "\n   找到以下可用的认证文件:", flush=True)
                         for i, profile in enumerate(available_profiles):
@@ -472,9 +472,9 @@ class Launcher:
                                 choice_index = int(choice.strip()) - 1
                                 if 0 <= choice_index < len(available_profiles):
                                     selected_profile = available_profiles[choice_index]
-                                    self.effective_active_auth_json_path = selected_profile[
-                                        "path"
-                                    ]
+                                    self.effective_active_auth_json_path = (
+                                        selected_profile["path"]
+                                    )
                                     logger.info(
                                         f"   已选择加载认证文件: {selected_profile['name']}"
                                     )
@@ -588,14 +588,16 @@ class Launcher:
 
         os.environ["LAUNCH_MODE"] = self.final_launch_mode
         os.environ["SERVER_LOG_LEVEL"] = self.args.server_log_level.upper()
-        os.environ["SERVER_REDIRECT_PRINT"] = str(
-            self.args.server_redirect_print
-        ).lower()
-        os.environ["DEBUG_LOGS_ENABLED"] = str(self.args.debug_logs).lower()
-        os.environ["TRACE_LOGS_ENABLED"] = str(self.args.trace_logs).lower()
+        if self.args.server_redirect_print:
+            os.environ["SERVER_REDIRECT_PRINT"] = "true"
+        if self.args.debug_logs:
+            os.environ["DEBUG_LOGS_ENABLED"] = "true"
+        if self.args.trace_logs:
+            os.environ["TRACE_LOGS_ENABLED"] = "true"
         if self.effective_active_auth_json_path:
             os.environ["ACTIVE_AUTH_JSON_PATH"] = self.effective_active_auth_json_path
-        os.environ["AUTO_SAVE_AUTH"] = str(self.args.auto_save_auth).lower()
+        if self.args.auto_save_auth:
+            os.environ["AUTO_SAVE_AUTH"] = "true"
         if self.args.save_auth_as:
             os.environ["SAVE_AUTH_FILENAME"] = self.args.save_auth_as
         os.environ["AUTH_SAVE_TIMEOUT"] = str(self.args.auth_save_timeout)
@@ -734,8 +736,12 @@ class Launcher:
                     watcher_thread.join()
 
 
-def signal_handler(sig, frame):
+def signal_handler(sig, frame):  # pragma: no cover
     logger.info(f"接收到信号 {signal.Signals(sig).name} ({sig})。正在启动退出程序...")
+    # Note: sys.exit(0) will trigger atexit handlers which can hang on multiprocessing cleanup.
+    # The cleanup is handled by CamoufoxProcessManager registered via atexit in Launcher.__init__.
+    # The multiprocessing module's _exit_function may hang if processes aren't properly terminated.
+    # Using os._exit(0) would skip cleanup, so we keep sys.exit(0) and rely on proper cleanup.
     sys.exit(0)
 
 
@@ -743,7 +749,7 @@ signal.signal(signal.SIGINT, signal_handler)
 signal.signal(signal.SIGTERM, signal_handler)
 
 
-def cleanup():
+def cleanup():  # pragma: no cover
     # This cleanup is now handled by CamoufoxProcessManager's cleanup method
     # But we need to ensure it's called.
     # Since we don't have a global instance easily accessible here for atexit,

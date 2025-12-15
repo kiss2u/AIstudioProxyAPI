@@ -40,8 +40,8 @@ def setup_launcher_logging(log_level: int = logging.INFO) -> None:
 
     file_handler = logging.handlers.RotatingFileHandler(
         LAUNCHER_LOG_FILE_PATH,
-        maxBytes=2 * 1024 * 1024,
-        backupCount=3,
+        maxBytes=10 * 1024 * 1024,  # 10MB
+        backupCount=5,
         encoding="utf-8",
         mode="w",
     )

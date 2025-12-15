@@ -100,7 +100,7 @@ async def test_verify_ui_state_settings(
     else:
         mock_page.evaluate.return_value = evaluate_result
 
-    with patch("browser_utils.model_management.logger"):
+    with patch("browser_utils.models.ui_state.logger"):
         result = await _verify_ui_state_settings(mock_page, "req1")
 
     assert result["exists"] is expected_exists
@@ -121,10 +121,8 @@ async def test_force_ui_state_settings_success(mock_page):
     initial_prefs = {"isAdvancedOpen": False}
 
     with (
-        patch(
-            "browser_utils.model_management._verify_ui_state_settings"
-        ) as mock_verify,
-        patch("browser_utils.model_management.logger"),
+        patch("browser_utils.models.ui_state._verify_ui_state_settings") as mock_verify,
+        patch("browser_utils.models.ui_state.logger"),
     ):
         mock_verify.side_effect = [
             {"needsUpdate": True, "prefs": initial_prefs},  # First call
@@ -148,10 +146,8 @@ async def test_force_ui_state_settings_success(mock_page):
 @pytest.mark.timeout(5)
 async def test_force_ui_state_settings_no_update_needed(mock_page):
     with (
-        patch(
-            "browser_utils.model_management._verify_ui_state_settings"
-        ) as mock_verify,
-        patch("browser_utils.model_management.logger"),
+        patch("browser_utils.models.ui_state._verify_ui_state_settings") as mock_verify,
+        patch("browser_utils.models.ui_state.logger"),
     ):
         mock_verify.return_value = {"needsUpdate": False}
 
@@ -165,10 +161,8 @@ async def test_force_ui_state_settings_no_update_needed(mock_page):
 @pytest.mark.timeout(5)
 async def test_force_ui_state_settings_fail_verify(mock_page):
     with (
-        patch(
-            "browser_utils.model_management._verify_ui_state_settings"
-        ) as mock_verify,
-        patch("browser_utils.model_management.logger"),
+        patch("browser_utils.models.ui_state._verify_ui_state_settings") as mock_verify,
+        patch("browser_utils.models.ui_state.logger"),
     ):
         mock_verify.side_effect = [
             {"needsUpdate": True, "prefs": {}},
@@ -185,8 +179,8 @@ async def test_force_ui_state_settings_fail_verify(mock_page):
 @pytest.mark.timeout(5)
 async def test_force_ui_state_with_retry_success(mock_page):
     with (
-        patch("browser_utils.model_management._force_ui_state_settings") as mock_force,
-        patch("browser_utils.model_management.logger"),
+        patch("browser_utils.models.ui_state._force_ui_state_settings") as mock_force,
+        patch("browser_utils.models.ui_state.logger"),
     ):
         mock_force.side_effect = [False, True]  # Fail first, succeed second
 
@@ -202,8 +196,8 @@ async def test_force_ui_state_with_retry_success(mock_page):
 @pytest.mark.timeout(5)
 async def test_force_ui_state_with_retry_fail(mock_page):
     with (
-        patch("browser_utils.model_management._force_ui_state_settings") as mock_force,
-        patch("browser_utils.model_management.logger"),
+        patch("browser_utils.models.ui_state._force_ui_state_settings") as mock_force,
+        patch("browser_utils.models.ui_state.logger"),
     ):
         mock_force.return_value = False
 
@@ -219,13 +213,9 @@ async def test_force_ui_state_with_retry_fail(mock_page):
 @pytest.mark.timeout(5)
 async def test_verify_and_apply_ui_state_needs_update(mock_page):
     with (
-        patch(
-            "browser_utils.model_management._verify_ui_state_settings"
-        ) as mock_verify,
-        patch(
-            "browser_utils.model_management._force_ui_state_with_retry"
-        ) as mock_retry,
-        patch("browser_utils.model_management.logger"),
+        patch("browser_utils.models.ui_state._verify_ui_state_settings") as mock_verify,
+        patch("browser_utils.models.ui_state._force_ui_state_with_retry") as mock_retry,
+        patch("browser_utils.models.ui_state.logger"),
     ):
         mock_verify.return_value = {
             "exists": True,
@@ -245,13 +235,9 @@ async def test_verify_and_apply_ui_state_needs_update(mock_page):
 @pytest.mark.timeout(5)
 async def test_verify_and_apply_ui_state_ok(mock_page):
     with (
-        patch(
-            "browser_utils.model_management._verify_ui_state_settings"
-        ) as mock_verify,
-        patch(
-            "browser_utils.model_management._force_ui_state_with_retry"
-        ) as mock_retry,
-        patch("browser_utils.model_management.logger"),
+        patch("browser_utils.models.ui_state._verify_ui_state_settings") as mock_verify,
+        patch("browser_utils.models.ui_state._force_ui_state_with_retry") as mock_retry,
+        patch("browser_utils.models.ui_state.logger"),
     ):
         mock_verify.return_value = {
             "exists": True,
@@ -283,7 +269,7 @@ async def test_load_excluded_models(tmp_path):
         patch("api_utils.server_state.state", mock_state),
         patch("os.path.exists") as mock_exists,
         patch("builtins.open", new_callable=MagicMock) as mock_open,
-        patch("browser_utils.model_management.logger"),
+        patch("browser_utils.models.switcher.logger"),
     ):
         mock_exists.return_value = True
         mock_file = MagicMock()
@@ -307,8 +293,8 @@ async def test_switch_ai_studio_model_already_set(mock_page):
     mock_page.url = "https://aistudio.google.com/prompts/new_chat"
 
     with (
-        patch("browser_utils.model_management.logger"),
-        patch("browser_utils.model_management.expect_async") as mock_expect,
+        patch("browser_utils.models.switcher.logger"),
+        patch("browser_utils.models.switcher.expect_async") as mock_expect,
     ):
         mock_expect.return_value.to_be_visible = AsyncMock()
 
@@ -334,11 +320,11 @@ async def test_switch_ai_studio_model_success(mock_page):
     with (
         patch.dict(sys.modules, {"server": mock_server}),
         patch(
-            "browser_utils.model_management._verify_and_apply_ui_state",
+            "browser_utils.models.switcher._verify_and_apply_ui_state",
             return_value=True,
         ),
-        patch("browser_utils.model_management.logger"),
-        patch("browser_utils.model_management.expect_async") as mock_expect,
+        patch("browser_utils.models.switcher.logger"),
+        patch("browser_utils.models.switcher.expect_async") as mock_expect,
     ):
         mock_expect.return_value.to_be_visible = AsyncMock()
 
@@ -406,7 +392,7 @@ async def test_set_model_from_page_display(mock_page):
 
     with (
         patch("api_utils.server_state.state", mock_state),
-        patch("browser_utils.model_management.logger"),
+        patch("browser_utils.models.startup.logger"),
     ):
         await _set_model_from_page_display(mock_page, set_storage=False)
 
@@ -426,14 +412,14 @@ async def test_handle_initial_model_state_needs_reload(mock_page):
     with (
         patch.dict(sys.modules, {"server": mock_server}),
         patch(
-            "browser_utils.model_management._set_model_from_page_display"
+            "browser_utils.models.startup._set_model_from_page_display"
         ) as mock_set_model,
         patch(
-            "browser_utils.model_management._verify_and_apply_ui_state",
+            "browser_utils.models.startup._verify_and_apply_ui_state",
             return_value=True,
         ),
-        patch("browser_utils.model_management.logger"),
-        patch("browser_utils.model_management.expect_async") as mock_expect,
+        patch("browser_utils.models.startup.logger"),
+        patch("browser_utils.models.startup.expect_async") as mock_expect,
     ):
         mock_expect.return_value.to_be_visible = AsyncMock()
 
@@ -465,11 +451,11 @@ async def test_switch_ai_studio_model_revert_logic(mock_page):
     with (
         patch.dict(sys.modules, {"server": mock_server}),
         patch(
-            "browser_utils.model_management._verify_and_apply_ui_state",
+            "browser_utils.models.switcher._verify_and_apply_ui_state",
             return_value=True,
         ),
-        patch("browser_utils.model_management.logger"),
-        patch("browser_utils.model_management.expect_async") as mock_expect,
+        patch("browser_utils.models.switcher.logger"),
+        patch("browser_utils.models.switcher.expect_async") as mock_expect,
     ):
         mock_expect.return_value.to_be_visible = AsyncMock()
 
@@ -531,11 +517,11 @@ async def test_switch_ai_studio_model_incognito_toggle(mock_page):
     with (
         patch.dict(sys.modules, {"server": mock_server}),
         patch(
-            "browser_utils.model_management._verify_and_apply_ui_state",
+            "browser_utils.models.switcher._verify_and_apply_ui_state",
             return_value=True,
         ),
-        patch("browser_utils.model_management.logger"),
-        patch("browser_utils.model_management.expect_async") as mock_expect,
+        patch("browser_utils.models.switcher.logger"),
+        patch("browser_utils.models.switcher.expect_async") as mock_expect,
     ):
         mock_expect.return_value.to_be_visible = AsyncMock()
 
@@ -594,39 +580,25 @@ async def test_exception_handling_coverage(mock_page):
     # 1. _force_ui_state_settings exception
     with (
         patch(
-            "browser_utils.model_management._verify_ui_state_settings",
+            "browser_utils.models.ui_state._verify_ui_state_settings",
             side_effect=Exception("Force Error"),
         ),
-        patch("browser_utils.model_management.logger"),
+        patch("browser_utils.models.ui_state.logger"),
     ):
         assert await _force_ui_state_settings(mock_page) is False
 
     # 2. _verify_and_apply_ui_state exception
     with (
         patch(
-            "browser_utils.model_management._verify_ui_state_settings",
+            "browser_utils.models.ui_state._verify_ui_state_settings",
             side_effect=Exception("Verify Apply Error"),
         ),
-        patch("browser_utils.model_management.logger"),
+        patch("browser_utils.models.ui_state.logger"),
     ):
         assert await _verify_and_apply_ui_state(mock_page) is False
 
-    # 3. switch_ai_studio_model JSON decode error
-    mock_page.evaluate.return_value = "invalid-json"
-    with patch("browser_utils.model_management.logger"):
-        # Should proceed with empty prefs
-        # We need to mock other things to make it reach a return or fail safely
-        # It will try to load current_prefs_for_modification -> {}
-        # Then check if promptModel matches -> None != full_model_path
-        # Then update storage -> json.dumps works on {}
-        # Then goto...
-        # Let's just verify it doesn't crash on the JSON error line
-
-        # To make it fail fast and return, we can let it fail later or mock expected calls
-        # We just want to cover the `except json.JSONDecodeError` block
-        pass
-        # Actually it's hard to isolate just that block without running the whole function.
-        # But we can try to call it and expect it to fail later or succeed.
+    # 3. switch_ai_studio_model JSON decode error is tested in test_handle_initial_model_state_exceptions
+    # The JSONDecodeError handler falls back to empty prefs and continues execution
 
 
 @pytest.mark.asyncio
@@ -641,8 +613,8 @@ async def test_switch_ai_studio_model_nav_only(mock_page):
     mock_page.url = "https://other.url"  # Not new_chat
 
     with (
-        patch("browser_utils.model_management.logger"),
-        patch("browser_utils.model_management.expect_async") as mock_expect,
+        patch("browser_utils.models.switcher.logger"),
+        patch("browser_utils.models.switcher.expect_async") as mock_expect,
     ):
         mock_expect.return_value.to_be_visible = AsyncMock()
 
@@ -664,34 +636,19 @@ async def test_load_excluded_models_edge_cases(tmp_path):
 
     with (
         patch.dict(sys.modules, {"server": mock_server}),
-        patch("browser_utils.model_management.logger") as mock_logger,
+        patch("browser_utils.models.switcher.logger") as mock_logger,
     ):
         load_excluded_models("non_existent.txt")
         assert "未找到" in mock_logger.info.call_args[0][0]
 
-    # 2. File exists but is empty
-    d = tmp_path / "config"
-    d.mkdir()
-    p = d / "empty.txt"
-    p.write_text("", encoding="utf-8")
-
-    with (
-        patch.dict(sys.modules, {"server": mock_server}),
-        patch("browser_utils.model_management.logger") as mock_logger,
-    ):
-        load_excluded_models(
-            str(p)
-        )  # We need to pass relative path logic or mock os.path.join
-        # The function uses os.path.join(os.path.dirname(__file__), '..', filename)
-        # So we better mock os.path.exists and open
-        pass
+    # 2. File exists but is empty - tested in the next block with mocked file I/O
 
     # Let's mock os.path.exists/open for easier testing of logic
     with (
         patch.dict(sys.modules, {"server": mock_server}),
         patch("os.path.exists", return_value=True),
         patch("builtins.open", new_callable=MagicMock) as mock_open,
-        patch("browser_utils.model_management.logger") as mock_logger,
+        patch("browser_utils.models.switcher.logger") as mock_logger,
     ):
         # Empty file
         mock_file = MagicMock()
@@ -705,7 +662,7 @@ async def test_load_excluded_models_edge_cases(tmp_path):
     with (
         patch.dict(sys.modules, {"server": mock_server}),
         patch("os.path.exists", side_effect=Exception("Disk Error")),
-        patch("browser_utils.model_management.logger") as mock_logger,
+        patch("browser_utils.models.switcher.logger") as mock_logger,
     ):
         load_excluded_models("error.txt")
         assert mock_logger.error.called
@@ -723,9 +680,9 @@ async def test_handle_initial_model_state_exceptions(mock_page):
     with (
         patch.dict(sys.modules, {"server": mock_server}),
         patch(
-            "browser_utils.model_management._set_model_from_page_display"
+            "browser_utils.models.startup._set_model_from_page_display"
         ) as mock_set_model,
-        patch("browser_utils.model_management.logger") as mock_logger,
+        patch("browser_utils.models.startup.logger") as mock_logger,
     ):
         # Should trigger reload path due to JSON error
         # We'll mock _set_model_from_page_display to raise Exception to test the outer try/except
@@ -750,11 +707,11 @@ async def test_handle_initial_model_state_reload_retry_logic(mock_page):
     with (
         patch.dict(sys.modules, {"server": mock_server}),
         patch(
-            "browser_utils.model_management._set_model_from_page_display"
+            "browser_utils.models.startup._set_model_from_page_display"
         ) as mock_set_model,
-        patch("browser_utils.model_management.logger"),
+        patch("browser_utils.models.startup.logger"),
         patch("asyncio.sleep", new_callable=AsyncMock),
-        patch("browser_utils.model_management.expect_async") as mock_expect,
+        patch("browser_utils.models.startup.expect_async") as mock_expect,
     ):
         mock_expect.return_value.to_be_visible = AsyncMock()
 
@@ -788,7 +745,7 @@ async def test_set_model_from_page_display_timeout(mock_page):
 
     with (
         patch("api_utils.server_state.state", mock_state),
-        patch("browser_utils.model_management.logger") as mock_logger,
+        patch("browser_utils.models.startup.logger") as mock_logger,
         patch("asyncio.wait_for", side_effect=asyncio.TimeoutError),
     ):
         await _set_model_from_page_display(mock_page, set_storage=False)
@@ -825,10 +782,10 @@ async def test_set_model_from_page_display_storage_logic(mock_page):
     with (
         patch("api_utils.server_state.state", mock_state),
         patch(
-            "browser_utils.model_management._verify_and_apply_ui_state",
+            "browser_utils.models.startup._verify_and_apply_ui_state",
             return_value=True,
         ),
-        patch("browser_utils.model_management.logger"),
+        patch("browser_utils.models.startup.logger"),
     ):
         await _set_model_from_page_display(mock_page, set_storage=True)
 
@@ -854,7 +811,7 @@ async def test_switch_ai_studio_model_catastrophic_error(mock_page):
     mock_page.evaluate.side_effect = Exception("Catastrophic Failure")
 
     with (
-        patch("browser_utils.model_management.logger") as mock_logger,
+        patch("browser_utils.models.switcher.logger") as mock_logger,
         patch(
             "browser_utils.operations.save_error_snapshot", new_callable=AsyncMock
         ) as mock_snapshot,
@@ -957,7 +914,7 @@ async def test_force_ui_state_exception(mock_page):
 async def test_force_ui_state_settings_exception_via_verify(mock_page):
     """Test exception handling in _force_ui_state_settings via verify."""
     with patch(
-        "browser_utils.model_management._verify_ui_state_settings",
+        "browser_utils.models.ui_state._verify_ui_state_settings",
         side_effect=Exception("Test Error"),
     ):
         result = await _force_ui_state_settings(mock_page, "req1")
@@ -983,7 +940,7 @@ async def test_force_ui_state_retry(
     test_id,
 ):
     """Test retry logic for forcing UI state settings (eventually succeeding or failing all attempts)."""
-    with patch("browser_utils.model_management._force_ui_state_settings") as mock_force:
+    with patch("browser_utils.models.ui_state._force_ui_state_settings") as mock_force:
         if mock_force_side_effect:
             mock_force.side_effect = mock_force_side_effect
         else:
@@ -1004,7 +961,7 @@ async def test_force_ui_state_retry(
 async def test_verify_and_apply_ui_state_exception(mock_page):
     """Test exception handling in _verify_and_apply_ui_state."""
     with patch(
-        "browser_utils.model_management._verify_ui_state_settings",
+        "browser_utils.models.ui_state._verify_ui_state_settings",
         side_effect=Exception("Test Error"),
     ):
         result = await _verify_and_apply_ui_state(mock_page, "req1")
@@ -1044,14 +1001,14 @@ async def test_handle_initial_state_missing_storage(mock_page, mock_server):
 
     with (
         patch(
-            "browser_utils.model_management._set_model_from_page_display"
+            "browser_utils.models.startup._set_model_from_page_display"
         ) as mock_set_model,
         patch.dict(sys.modules, {"server": mock_server}),
         patch(
-            "browser_utils.model_management._verify_and_apply_ui_state",
+            "browser_utils.models.startup._verify_and_apply_ui_state",
             return_value=True,
         ),
-        patch("browser_utils.model_management.expect_async") as mock_expect_async,
+        patch("browser_utils.models.startup.expect_async") as mock_expect_async,
     ):
         mock_expect = MagicMock()
         mock_expect.to_be_visible = AsyncMock()
@@ -1070,9 +1027,7 @@ async def test_handle_initial_state_valid_no_reload(mock_page, mock_server):
         {"promptModel": "models/valid-model", "isAdvancedOpen": True}
     )
 
-    with patch(
-        "browser_utils.model_management._verify_ui_state_settings"
-    ) as mock_verify:
+    with patch("browser_utils.models.startup._verify_ui_state_settings") as mock_verify:
         mock_verify.return_value = {"needsUpdate": False}
 
         with patch.dict(sys.modules, {"server": mock_server}):
@@ -1097,7 +1052,7 @@ async def test_handle_initial_model_state_and_storage_success(mock_page, mock_se
 
     with (
         patch(
-            "browser_utils.model_management._verify_ui_state_settings",
+            "browser_utils.models.startup._verify_ui_state_settings",
             return_value={"needsUpdate": False},
         ),
         patch.dict("sys.modules", {"server": mock_server}),
@@ -1115,7 +1070,7 @@ async def test_handle_initial_model_state_exception(mock_page):
     mock_page.evaluate.side_effect = Exception("Init Error")
 
     with patch(
-        "browser_utils.model_management._set_model_from_page_display"
+        "browser_utils.models.startup._set_model_from_page_display"
     ) as mock_fallback:
         await _handle_initial_model_state_and_storage(mock_page)
 
@@ -1130,13 +1085,13 @@ async def test_handle_initial_model_state_json_error(mock_page, mock_server):
 
     with (
         patch.dict(sys.modules, {"server": mock_server}),
-        patch("browser_utils.model_management.logger") as mock_logger,
+        patch("browser_utils.models.startup.logger") as mock_logger,
         patch(
-            "browser_utils.model_management._set_model_from_page_display"
+            "browser_utils.models.startup._set_model_from_page_display"
         ) as mock_set_model,
-        patch("browser_utils.model_management.expect_async") as mock_expect,
+        patch("browser_utils.models.startup.expect_async") as mock_expect,
         patch(
-            "browser_utils.model_management._verify_and_apply_ui_state",
+            "browser_utils.models.startup._verify_and_apply_ui_state",
             return_value=True,
         ),
     ):
@@ -1161,11 +1116,11 @@ async def test_handle_initial_model_state_reload_retry(mock_page, mock_server):
 
     with (
         patch.dict(sys.modules, {"server": mock_server}),
-        patch("browser_utils.model_management.logger") as mock_logger,
-        patch("browser_utils.model_management._set_model_from_page_display"),
-        patch("browser_utils.model_management.expect_async") as mock_expect,
+        patch("browser_utils.models.startup.logger") as mock_logger,
+        patch("browser_utils.models.startup._set_model_from_page_display"),
+        patch("browser_utils.models.startup.expect_async") as mock_expect,
         patch(
-            "browser_utils.model_management._verify_and_apply_ui_state",
+            "browser_utils.models.startup._verify_and_apply_ui_state",
             return_value=True,
         ),
         patch("asyncio.sleep", new_callable=AsyncMock),
@@ -1217,7 +1172,7 @@ async def test_set_model_from_display_with_storage(mock_page, mock_server):
     with (
         patch.dict(sys.modules, {"server": mock_server}),
         patch(
-            "browser_utils.model_management._verify_and_apply_ui_state",
+            "browser_utils.models.startup._verify_and_apply_ui_state",
             return_value=True,
         ),
     ):
@@ -1241,7 +1196,7 @@ async def test_set_model_from_page_display_success(mock_page, mock_server):
     with (
         patch.dict("sys.modules", {"server": mock_server}),
         patch(
-            "browser_utils.model_management._verify_and_apply_ui_state",
+            "browser_utils.models.startup._verify_and_apply_ui_state",
             return_value=True,
         ),
     ):
@@ -1263,7 +1218,7 @@ async def test_set_model_from_page_display_set_storage_defaults(mock_page, mock_
     with (
         patch.dict(sys.modules, {"server": mock_server}),
         patch(
-            "browser_utils.model_management._verify_and_apply_ui_state",
+            "browser_utils.models.startup._verify_and_apply_ui_state",
             return_value=True,
         ),
     ):
@@ -1288,7 +1243,7 @@ async def test_set_model_from_page_display_same_id(mock_page, mock_server):
 
     with (
         patch.dict(sys.modules, {"server": mock_server}),
-        patch("browser_utils.model_management.logger") as mock_logger,
+        patch("browser_utils.models.startup.logger") as mock_logger,
     ):
         await _set_model_from_page_display(mock_page)
 
@@ -1318,7 +1273,7 @@ async def test_switch_model_recovery_logic(mock_page):
             [{"id": "old-model", "display_name": "Old Model"}],
         ),
         patch(
-            "browser_utils.model_management._verify_and_apply_ui_state",
+            "browser_utils.models.switcher._verify_and_apply_ui_state",
             return_value=True,
         ),
     ):
@@ -1345,7 +1300,7 @@ async def test_switch_model_json_error_original(mock_page):
     mock_page.locator.return_value = mock_locator
 
     with patch(
-        "browser_utils.model_management._verify_and_apply_ui_state", return_value=True
+        "browser_utils.models.switcher._verify_and_apply_ui_state", return_value=True
     ):
         result = await switch_ai_studio_model(mock_page, "new-model", "req_id")
 
@@ -1378,10 +1333,10 @@ async def test_switch_model_already_set_nav_needed(mock_page):
 
     with (
         patch(
-            "browser_utils.model_management._verify_and_apply_ui_state",
+            "browser_utils.models.switcher._verify_and_apply_ui_state",
             return_value=True,
         ),
-        patch("browser_utils.model_management.expect_async", return_value=mock_expect),
+        patch("browser_utils.models.switcher.expect_async", return_value=mock_expect),
     ):
         result = await switch_ai_studio_model(mock_page, "target-model", "req_id")
 
@@ -1436,10 +1391,10 @@ async def test_switch_model_success_flow(mock_page, mock_server):
 
     with (
         patch(
-            "browser_utils.model_management._verify_and_apply_ui_state",
+            "browser_utils.models.switcher._verify_and_apply_ui_state",
             return_value=True,
         ),
-        patch("browser_utils.model_management.expect_async", return_value=mock_expect),
+        patch("browser_utils.models.switcher.expect_async", return_value=mock_expect),
         patch.dict(sys.modules, {"server": mock_server}),
     ):
         result = await switch_ai_studio_model(mock_page, model_id, req_id)
@@ -1471,10 +1426,10 @@ async def test_switch_model_json_error_original_prefs(mock_page):
 
     with (
         patch(
-            "browser_utils.model_management._verify_and_apply_ui_state",
+            "browser_utils.models.switcher._verify_and_apply_ui_state",
             return_value=True,
         ),
-        patch("browser_utils.model_management.expect_async") as mock_expect,
+        patch("browser_utils.models.switcher.expect_async") as mock_expect,
     ):
         mock_expect.return_value.to_be_visible = AsyncMock()
 
@@ -1520,10 +1475,10 @@ async def test_switch_model_json_error_final_prefs(mock_page):
 
     with (
         patch(
-            "browser_utils.model_management._verify_and_apply_ui_state",
+            "browser_utils.models.switcher._verify_and_apply_ui_state",
             return_value=True,
         ),
-        patch("browser_utils.model_management.expect_async") as mock_expect,
+        patch("browser_utils.models.switcher.expect_async") as mock_expect,
     ):
         mock_expect.return_value.to_be_visible = AsyncMock()
 
@@ -1561,10 +1516,10 @@ async def test_switch_model_read_model_name_exception(mock_page):
 
     with (
         patch(
-            "browser_utils.model_management._verify_and_apply_ui_state",
+            "browser_utils.models.switcher._verify_and_apply_ui_state",
             return_value=True,
         ),
-        patch("browser_utils.model_management.expect_async") as mock_expect,
+        patch("browser_utils.models.switcher.expect_async") as mock_expect,
     ):
         mock_expect.return_value.to_be_visible = AsyncMock()
 
@@ -1607,10 +1562,10 @@ async def test_switch_model_incognito_retry(mock_page):
 
     with (
         patch(
-            "browser_utils.model_management._verify_and_apply_ui_state",
+            "browser_utils.models.switcher._verify_and_apply_ui_state",
             return_value=True,
         ),
-        patch("browser_utils.model_management.expect_async") as mock_expect,
+        patch("browser_utils.models.switcher.expect_async") as mock_expect,
     ):
         mock_expect.return_value.to_be_visible = AsyncMock()
 
@@ -1656,10 +1611,10 @@ async def test_switch_model_revert_cant_read_display(mock_page):
 
     with (
         patch(
-            "browser_utils.model_management._verify_and_apply_ui_state",
+            "browser_utils.models.switcher._verify_and_apply_ui_state",
             return_value=True,
         ),
-        patch("browser_utils.model_management.expect_async") as mock_expect,
+        patch("browser_utils.models.switcher.expect_async") as mock_expect,
     ):
         mock_expect.return_value.to_be_visible = AsyncMock()
 
@@ -1699,12 +1654,12 @@ async def test_switch_ai_studio_model_json_error_logging(mock_page):
     ]
 
     with (
-        patch("browser_utils.model_management.logger") as mock_logger,
+        patch("browser_utils.models.switcher.logger") as mock_logger,
         patch(
-            "browser_utils.model_management._verify_and_apply_ui_state",
+            "browser_utils.models.switcher._verify_and_apply_ui_state",
             return_value=True,
         ),
-        patch("browser_utils.model_management.expect_async") as mock_expect,
+        patch("browser_utils.models.switcher.expect_async") as mock_expect,
     ):
         mock_expect.return_value.to_be_visible = AsyncMock()
 
@@ -1727,12 +1682,12 @@ async def test_switch_ai_studio_model_ui_state_fail(mock_page):
     mock_page.evaluate.return_value = json.dumps({"promptModel": "models/old-model"})
 
     with (
-        patch("browser_utils.model_management.logger") as mock_logger,
+        patch("browser_utils.models.switcher.logger") as mock_logger,
         patch(
-            "browser_utils.model_management._verify_and_apply_ui_state",
+            "browser_utils.models.switcher._verify_and_apply_ui_state",
             return_value=False,
         ),
-        patch("browser_utils.model_management.expect_async") as mock_expect,
+        patch("browser_utils.models.switcher.expect_async") as mock_expect,
     ):
         mock_expect.return_value.to_be_visible = AsyncMock()
         mock_page.locator.return_value.first.inner_text = AsyncMock(
@@ -1760,12 +1715,12 @@ async def test_switch_ai_studio_model_final_storage_mismatch(mock_page):
     ]
 
     with (
-        patch("browser_utils.model_management.logger") as mock_logger,
+        patch("browser_utils.models.switcher.logger") as mock_logger,
         patch(
-            "browser_utils.model_management._verify_and_apply_ui_state",
+            "browser_utils.models.switcher._verify_and_apply_ui_state",
             return_value=True,
         ),
-        patch("browser_utils.model_management.expect_async") as mock_expect,
+        patch("browser_utils.models.switcher.expect_async") as mock_expect,
     ):
         mock_expect.return_value.to_be_visible = AsyncMock()
         mock_page.locator.return_value.first.inner_text = AsyncMock(
@@ -1818,12 +1773,12 @@ async def test_switch_model_revert_success(mock_page, mock_server):
 
         with (
             patch(
-                "browser_utils.model_management._verify_and_apply_ui_state",
+                "browser_utils.models.switcher._verify_and_apply_ui_state",
                 new_callable=AsyncMock,
                 side_effect=[False, True, True, True],
             ) as mock_verify,
             patch(
-                "browser_utils.model_management.expect_async", return_value=mock_expect
+                "browser_utils.models.switcher.expect_async", return_value=mock_expect
             ),
             patch(
                 "browser_utils.operations.save_error_snapshot", new_callable=AsyncMock
@@ -1876,11 +1831,11 @@ async def test_switch_model_revert_failure_fallback(mock_page, mock_server):
 
     with (
         patch(
-            "browser_utils.model_management._verify_and_apply_ui_state",
+            "browser_utils.models.switcher._verify_and_apply_ui_state",
             new_callable=AsyncMock,
             return_value=False,
         ),
-        patch("browser_utils.model_management.expect_async", return_value=mock_expect),
+        patch("browser_utils.models.switcher.expect_async", return_value=mock_expect),
     ):
         result = await switch_ai_studio_model(mock_page, model_id, req_id)
 
@@ -1928,11 +1883,11 @@ async def test_switch_model_revert_blind_trust(mock_page, mock_server):
 
     with (
         patch(
-            "browser_utils.model_management._verify_and_apply_ui_state",
+            "browser_utils.models.switcher._verify_and_apply_ui_state",
             new_callable=AsyncMock,
             side_effect=[False, True, True, True],
         ),
-        patch("browser_utils.model_management.expect_async", return_value=mock_expect),
+        patch("browser_utils.models.switcher.expect_async", return_value=mock_expect),
         patch("browser_utils.operations.save_error_snapshot", new_callable=AsyncMock),
     ):
         result = await switch_ai_studio_model(mock_page, model_id, req_id)

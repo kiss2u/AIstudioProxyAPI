@@ -71,7 +71,7 @@ def _parse_userscript_models(script_content: str):
         return models
 
     except Exception as e:
-        logger.error(f"解析油猴脚本模型列表失败: {e}")
+        logger.error(f"解析油猴脚本模型列表失败: {e}", exc_info=True)
         return []
 
 

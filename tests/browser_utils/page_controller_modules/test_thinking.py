@@ -314,20 +314,23 @@ async def test_set_thinking_budget_value_max_fallback(mock_controller, mock_page
 async def test_control_thinking_mode_toggle_click_failure_fallback(
     mock_controller, mock_page
 ):
-    # Test fallback to label click if toggle click fails
+    # Test fallback to aria-label based toggle click if main toggle click fails
     toggle = AsyncMock()
     toggle.click.side_effect = Exception("Not clickable")
 
-    label = AsyncMock()
+    alt_toggle = AsyncMock()
+    alt_toggle.count = AsyncMock(return_value=1)
 
     def locator_side_effect(selector):
         if "button" in selector and "switch" in selector:
             return toggle
-        if "mat-slide-toggle" in selector:  # Root for fallback
+        if 'aria-label="Toggle thinking mode"' in selector:
+            return alt_toggle
+        if "mat-slide-toggle" in selector:  # Old fallback
             root = MagicMock()
-            root.locator.return_value = label
+            root.locator.return_value = AsyncMock()
             return root
-        return toggle  # Default for first locator call
+        return toggle
 
     mock_page.locator.side_effect = locator_side_effect
     toggle.get_attribute.return_value = "false"
@@ -344,7 +347,7 @@ async def test_control_thinking_mode_toggle_click_failure_fallback(
             True, MagicMock(return_value=False)
         )
 
-        label.click.assert_called()
+        alt_toggle.click.assert_called()
 
 
 @pytest.mark.asyncio
@@ -623,20 +626,24 @@ async def test_set_thinking_level_errors(mock_controller):
 
 @pytest.mark.asyncio
 async def test_control_thinking_mode_toggle_fallback(mock_controller):
-    # Test fallback to label click
+    # Test fallback to aria-label based toggle click
     toggle = MagicMock()
+    toggle.count = AsyncMock(return_value=1)  # Element exists
     toggle.get_attribute = AsyncMock(return_value="false")
     toggle.click = AsyncMock(side_effect=Exception("Click failed"))
 
-    label = MagicMock()
-    label.click = AsyncMock()
-    root = MagicMock()
-    root.locator.return_value = label
+    alt_toggle = MagicMock()
+    alt_toggle.count = AsyncMock(return_value=1)
+    alt_toggle.click = AsyncMock()
 
     def locator_side_effect(selector):
-        if "button" in selector and 'data-test-toggle="enable-thinking"' in selector:
+        if "button" in selector and "switch" in selector:
             return toggle
+        if 'aria-label="Toggle thinking mode"' in selector:
+            return alt_toggle
         if 'data-test-toggle="enable-thinking"' in selector:
+            root = MagicMock()
+            root.locator.return_value = MagicMock()
             return root
         return toggle
 
@@ -653,25 +660,29 @@ async def test_control_thinking_mode_toggle_fallback(mock_controller):
     ):
         await mock_controller._control_thinking_mode_toggle(True, check_disconnect_mock)
 
-    label.click.assert_called()
+    alt_toggle.click.assert_called()
 
 
 @pytest.mark.asyncio
 async def test_control_thinking_budget_toggle_fallback(mock_controller):
-    # Test fallback to label click
+    # Test fallback to aria-label based toggle click
     toggle = MagicMock()
+    toggle.count = AsyncMock(return_value=1)  # Element exists
     toggle.get_attribute = AsyncMock(return_value="false")
     toggle.click = AsyncMock(side_effect=Exception("Click failed"))
 
-    label = MagicMock()
-    label.click = AsyncMock()
-    root = MagicMock()
-    root.locator.return_value = label
+    alt_toggle = MagicMock()
+    alt_toggle.count = AsyncMock(return_value=1)
+    alt_toggle.click = AsyncMock()
 
     def locator_side_effect(selector):
-        if "button" in selector and 'data-test-toggle="manual-budget"' in selector:
+        if "button" in selector and "switch" in selector:
             return toggle
+        if 'aria-label="Toggle thinking budget between auto and manual"' in selector:
+            return alt_toggle
         if 'data-test-toggle="manual-budget"' in selector:
+            root = MagicMock()
+            root.locator.return_value = MagicMock()
             return root
         return toggle
 
@@ -690,7 +701,7 @@ async def test_control_thinking_budget_toggle_fallback(mock_controller):
             True, check_disconnect_mock
         )
 
-    label.click.assert_called()
+    alt_toggle.click.assert_called()
 
 
 @pytest.mark.asyncio
@@ -1185,26 +1196,28 @@ async def test_control_thinking_mode_toggle_click_cancelled_error(
 async def test_control_thinking_mode_toggle_fallback_success(
     mock_controller, mock_page
 ):
-    """Test successful fallback to label click (lines 459-468)."""
+    """Test successful fallback to aria-label based toggle click."""
     toggle = AsyncMock()
     toggle.get_attribute = AsyncMock(side_effect=["false", "true"])  # Before and after
     toggle.click = AsyncMock(side_effect=Exception("Click failed"))
     toggle.scroll_into_view_if_needed = AsyncMock()
 
-    label = AsyncMock()
-    label.click = AsyncMock()  # Success on fallback
-
-    root = MagicMock()
-    root.locator.return_value = label
+    alt_toggle = AsyncMock()
+    alt_toggle.count = AsyncMock(return_value=1)
+    alt_toggle.click = AsyncMock()  # Success on fallback
 
     locator_call_count = [0]
 
     def locator_side_effect(selector):
         locator_call_count[0] += 1
-        if locator_call_count[0] == 1:  # First call for toggle button
+        if "button" in selector and "switch" in selector:
             return toggle
-        else:  # Second call for mat-slide-toggle root
-            return root
+        if 'aria-label="Toggle thinking mode"' in selector:
+            return alt_toggle
+        # Old fallback path
+        root = MagicMock()
+        root.locator.return_value = MagicMock()
+        return root
 
     mock_page.locator.side_effect = locator_side_effect
 
@@ -1218,13 +1231,13 @@ async def test_control_thinking_mode_toggle_fallback_success(
     ):
         mock_controller._check_disconnect = AsyncMock()
 
-        # Should succeed via fallback (lines 459-468)
+        # Should succeed via fallback
         result = await mock_controller._control_thinking_mode_toggle(
             True, check_disconnect_mock
         )
 
-        # Verify label click was called (fallback)
-        label.click.assert_called()
+        # Verify alt_toggle click was called (fallback)
+        alt_toggle.click.assert_called()
         assert result is True
 
 
@@ -1429,26 +1442,25 @@ async def test_control_thinking_budget_toggle_click_cancelled_error(
 async def test_control_thinking_budget_toggle_fallback_success(
     mock_controller, mock_page
 ):
-    """Test successful fallback to label click (lines 545-554)."""
+    """Test successful fallback to aria-label based toggle click."""
     toggle = AsyncMock()
     toggle.get_attribute = AsyncMock(side_effect=["false", "true"])  # Before and after
     toggle.click = AsyncMock(side_effect=Exception("Click failed"))
     toggle.scroll_into_view_if_needed = AsyncMock()
 
-    label = AsyncMock()
-    label.click = AsyncMock()  # Success on fallback
-
-    root = MagicMock()
-    root.locator.return_value = label
-
-    locator_call_count = [0]
+    alt_toggle = AsyncMock()
+    alt_toggle.count = AsyncMock(return_value=1)
+    alt_toggle.click = AsyncMock()  # Success on fallback
 
     def locator_side_effect(selector):
-        locator_call_count[0] += 1
-        if locator_call_count[0] == 1:  # First call for toggle button
+        if "button" in selector and "switch" in selector:
             return toggle
-        else:  # Second call for mat-slide-toggle root
-            return root
+        if 'aria-label="Toggle thinking budget between auto and manual"' in selector:
+            return alt_toggle
+        # Old fallback path
+        root = MagicMock()
+        root.locator.return_value = MagicMock()
+        return root
 
     mock_page.locator.side_effect = locator_side_effect
 
@@ -1462,13 +1474,13 @@ async def test_control_thinking_budget_toggle_fallback_success(
     ):
         mock_controller._check_disconnect = AsyncMock()
 
-        # Should succeed via fallback (lines 545-554)
+        # Should succeed via fallback
         await mock_controller._control_thinking_budget_toggle(
             True, check_disconnect_mock
         )
 
-        # Verify label click was called (fallback)
-        label.click.assert_called()
+        # Verify alt_toggle click was called (fallback)
+        alt_toggle.click.assert_called()
 
 
 @pytest.mark.asyncio

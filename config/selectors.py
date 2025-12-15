@@ -4,8 +4,17 @@ CSS选择器配置模块
 """
 
 # --- 输入相关选择器 ---
-# 主输入 textarea 同时兼容 aria-label 及普通 textarea，防止结构再调整
+# 主输入 textarea 兼容当前和旧 UI 结构
+# 当前结构: ms-prompt-input-wrapper > ... > ms-autosize-textarea > textarea.textarea
 PROMPT_TEXTAREA_SELECTOR = (
+    # 当前 UI 结构
+    "textarea.textarea, "  # 最直接的选择器
+    "ms-autosize-textarea textarea, "
+    "ms-chunk-input textarea, "
+    "ms-prompt-input-wrapper ms-autosize-textarea textarea, "
+    'ms-prompt-input-wrapper textarea[aria-label*="prompt" i], '
+    "ms-prompt-input-wrapper textarea, "
+    # 过渡期 UI (ms-prompt-box) - 已弃用但保留作为回退
     "ms-prompt-box ms-autosize-textarea textarea, "
     'ms-prompt-box textarea[aria-label="Enter a prompt"], '
     "ms-prompt-box textarea"
@@ -16,10 +25,14 @@ INPUT_SELECTOR2 = PROMPT_TEXTAREA_SELECTOR
 # --- 按钮选择器 ---
 # 发送按钮：优先匹配 prompt 区域内 aria-label="Run" 的提交按钮
 SUBMIT_BUTTON_SELECTOR = (
-    'ms-prompt-box ms-run-button button[aria-label="Run"], '
-    'ms-prompt-box button[aria-label="Run"][type="submit"], '
+    # 当前 UI 结构
+    'ms-prompt-input-wrapper ms-run-button button[aria-label="Run"], '
+    'ms-prompt-input-wrapper button[aria-label="Run"][type="submit"], '
     'button[aria-label="Run"].run-button, '
-    'ms-run-button button[type="submit"].run-button'
+    'ms-run-button button[type="submit"].run-button, '
+    # 过渡期 UI (ms-prompt-box) - 已弃用但保留作为回退
+    'ms-prompt-box ms-run-button button[aria-label="Run"], '
+    'ms-prompt-box button[aria-label="Run"][type="submit"]'
 )
 CLEAR_CHAT_BUTTON_SELECTOR = 'button[data-test-clear="outside"][aria-label="New chat"], button[aria-label="New chat"]'
 CLEAR_CHAT_CONFIRM_BUTTON_SELECTOR = (
@@ -68,17 +81,33 @@ USE_URL_CONTEXT_SELECTOR = 'button[aria-label="Browse the url context"]'
 
 # --- 思考模式相关选择器 ---
 # 主思考开关：控制是否启用思考模式（总开关）
+# Flash模型使用 aria-label="Toggle thinking mode"
+# 回退: 旧版 data-test-toggle 属性
 ENABLE_THINKING_MODE_TOGGLE_SELECTOR = (
+    'button[role="switch"][aria-label="Toggle thinking mode"], '
     'mat-slide-toggle[data-test-toggle="enable-thinking"] button[role="switch"].mdc-switch, '
     '[data-test-toggle="enable-thinking"] button[role="switch"].mdc-switch'
 )
 # 手动预算开关：控制是否手动限制思考预算
+# Flash模型使用 aria-label="Toggle thinking budget between auto and manual"
+# 回退: 旧版 data-test-toggle 属性
 SET_THINKING_BUDGET_TOGGLE_SELECTOR = (
+    'button[role="switch"][aria-label="Toggle thinking budget between auto and manual"], '
     'mat-slide-toggle[data-test-toggle="manual-budget"] button[role="switch"].mdc-switch, '
     '[data-test-toggle="manual-budget"] button[role="switch"].mdc-switch'
 )
 # 思考预算输入框
-THINKING_BUDGET_INPUT_SELECTOR = '[data-test-slider] input[type="number"]'
+# 思考预算滑块具有独特的 min="512" 属性（温度是 max="2"，TopP 是 max="1"）
+# 优先使用最精确的选择器，保留多层回退以应对 UI 变化
+THINKING_BUDGET_INPUT_SELECTOR = (
+    # 最精确: 使用 data-test-id 容器 + spinbutton
+    '[data-test-id="user-setting-budget-animation-wrapper"] input[type="number"], '
+    # 回退1: 使用独特的 min="512" 属性定位（仅思考预算滑块有此属性）
+    'input.slider-number-input[min="512"], '
+    'ms-slider input[type="number"][min="512"], '
+    # 回退2: 旧版 data-test-slider 属性
+    '[data-test-slider] input[type="number"]'
+)
 
 # 思考等级下拉
 THINKING_LEVEL_SELECT_SELECTOR = '[role="combobox"][aria-label="Thinking Level"], mat-select[aria-label="Thinking Level"], [role="combobox"][aria-label="Thinking level"], mat-select[aria-label="Thinking level"]'
@@ -88,4 +117,29 @@ THINKING_LEVEL_OPTION_HIGH_SELECTOR = '[role="listbox"][aria-label="Thinking Lev
 # --- Google Search Grounding ---
 GROUNDING_WITH_GOOGLE_SEARCH_TOGGLE_SELECTOR = (
     'div[data-test-id="searchAsAToolTooltip"] mat-slide-toggle button'
+)
+
+# --- 页面元素选择器 ---
+# 模型名称显示元素
+MODEL_NAME_SELECTOR = '[data-test-id="model-name"]'
+# CDK Overlay 容器（用于菜单、对话框等）
+CDK_OVERLAY_CONTAINER_SELECTOR = "div.cdk-overlay-container"
+# 聊天轮次容器
+CHAT_TURN_SELECTOR = "ms-chat-turn"
+
+# --- 思考模式回退选择器 ---
+# 这些选择器用于 thinking.py 中的回退逻辑
+# 主思考开关父容器（新版UI）
+THINKING_MODE_TOGGLE_PARENT_SELECTOR = (
+    'mat-slide-toggle:has(button[aria-label="Toggle thinking mode"])'
+)
+# 主思考开关旧版根元素
+THINKING_MODE_TOGGLE_OLD_ROOT_SELECTOR = (
+    'mat-slide-toggle[data-test-toggle="enable-thinking"]'
+)
+# 思考预算开关父容器（新版UI）
+THINKING_BUDGET_TOGGLE_PARENT_SELECTOR = 'mat-slide-toggle:has(button[aria-label="Toggle thinking budget between auto and manual"])'
+# 思考预算开关旧版根元素
+THINKING_BUDGET_TOGGLE_OLD_ROOT_SELECTOR = (
+    'mat-slide-toggle[data-test-toggle="manual-budget"]'
 )

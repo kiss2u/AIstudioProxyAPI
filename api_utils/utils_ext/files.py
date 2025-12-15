@@ -1,9 +1,13 @@
 import base64
 import binascii
 import hashlib
+import logging
 import os
 import re
-from typing import Optional
+from typing import Any, Dict, List, Optional, cast
+from urllib.parse import unquote, urlparse
+
+from logging_utils import set_request_id
 
 
 def _extension_for_mime(mime_type: str) -> str:
@@ -41,7 +45,8 @@ def extract_data_url_to_local(
     data_url: str, req_id: Optional[str] = None
 ) -> Optional[str]:
     from config import UPLOAD_FILES_DIR
-    from server import logger
+
+    logger = logging.getLogger("AIStudioProxyServer")
 
     output_dir = (
         UPLOAD_FILES_DIR if req_id is None else os.path.join(UPLOAD_FILES_DIR, req_id)
@@ -88,7 +93,8 @@ def save_blob_to_local(
     req_id: Optional[str] = None,
 ) -> Optional[str]:
     from config import UPLOAD_FILES_DIR
-    from server import logger
+
+    logger = logging.getLogger("AIStudioProxyServer")
 
     output_dir = (
         UPLOAD_FILES_DIR if req_id is None else os.path.join(UPLOAD_FILES_DIR, req_id)
@@ -115,3 +121,80 @@ def save_blob_to_local(
     except IOError as e:
         logger.error(f"错误: 保存二进制失败 - {e}")
         return None
+
+
+def collect_and_validate_attachments(
+    request: Any, req_id: str, initial_image_list: List[str]
+) -> List[str]:
+    """
+    收集并验证请求中的附件（包括顶层和消息级），合并到 image_list 中。
+    """
+    logger = logging.getLogger("AIStudioProxyServer")
+
+    # 1. Validate initial list
+    valid_images: List[str] = []
+    for p in initial_image_list:
+        if p and os.path.isabs(p) and os.path.exists(p):
+            valid_images.append(p)
+
+    set_request_id(req_id)
+    if len(valid_images) != len(initial_image_list):
+        logger.warning(
+            f"过滤掉不存在的附件路径: {set(initial_image_list) - set(valid_images)}"
+        )
+
+    image_list: List[str] = valid_images
+
+    # 2. Collect from request
+    def _process_attachments_list(items_list: List[Any], container_desc: str):
+        for it in items_list:
+            url_value: Optional[str] = None
+            if isinstance(it, str):
+                url_value = it
+            elif isinstance(it, dict):
+                typed_it: Dict[str, Any] = cast(Dict[str, Any], it)
+                url_raw: Any = typed_it.get("url") or typed_it.get("path")
+                if isinstance(url_raw, str):
+                    url_value = url_raw
+            if not url_value:
+                continue
+            url_value = url_value.strip()
+            if not url_value:
+                continue
+
+            if url_value.startswith("data:"):
+                fp = extract_data_url_to_local(url_value, req_id=req_id)
+                if fp:
+                    image_list.append(fp)
+            elif url_value.startswith("file:"):
+                parsed = urlparse(url_value)
+                lp = unquote(parsed.path)
+                if os.path.exists(lp):
+                    image_list.append(lp)
+                else:
+                    logger.warning(f"{container_desc} 附件 file URL 不存在: {lp}")
+            elif os.path.isabs(url_value) and os.path.exists(url_value):
+                image_list.append(url_value)
+
+    try:
+        # 顶层 attachments
+        # Check other fields for top-level request too if needed? Test only uses attachments for request.
+        # But for robustness we can mimic message logic or just stick to attachments as per previous code if known.
+        # Assuming request mainly uses attachments.
+        top_level_atts = getattr(request, "attachments", None)
+        if isinstance(top_level_atts, list) and len(top_level_atts) > 0:
+            _process_attachments_list(top_level_atts, "request.attachments")
+
+        # 消息级 attachments/images/files/media
+        messages = getattr(request, "messages", None)
+        if isinstance(messages, list):
+            for i, msg in enumerate(messages):
+                for field in ["attachments", "images", "files", "media"]:
+                    items = getattr(msg, field, None)
+                    if isinstance(items, list) and len(items) > 0:
+                        _process_attachments_list(items, f"message[{i}].{field}")
+
+    except Exception as e:
+        logger.error(f"收集附件时出错: {e}")
+
+    return image_list
