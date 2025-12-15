@@ -283,7 +283,6 @@ async def test_wait_for_response_completion_success(mock_page: MagicMock):
         edit_btn,
         "req_id",
         check_disconnect,
-        "chat_id",
         timeout_ms=1000,
         initial_wait_ms=0,
     )
@@ -1314,7 +1313,6 @@ async def test_wait_for_response_completion_client_disconnect_early():
         edit_btn,
         "req_id",
         check_disconnect,
-        "chat_id",
         timeout_ms=1000,
         initial_wait_ms=0,
     )
@@ -1346,7 +1344,6 @@ async def test_wait_for_response_completion_timeout():
             edit_btn,
             "req_id",
             check_disconnect,
-            "chat_id",
             timeout_ms=100,
             initial_wait_ms=0,
         )
@@ -1384,7 +1381,6 @@ async def test_wait_for_response_completion_client_disconnect_after_timeout_chec
         edit_btn,
         "req_id",
         check_disconnect,
-        "chat_id",
         timeout_ms=5000,
         initial_wait_ms=0,
     )
@@ -1423,7 +1419,6 @@ async def test_wait_for_response_completion_submit_button_timeout():
         edit_btn,
         "req_id",
         check_disconnect,
-        "chat_id",
         timeout_ms=5000,
         initial_wait_ms=0,
     )
@@ -1460,7 +1455,6 @@ async def test_wait_for_response_completion_client_disconnect_after_button_check
         edit_btn,
         "req_id",
         check_disconnect,
-        "chat_id",
         timeout_ms=5000,
         initial_wait_ms=0,
     )
@@ -1495,7 +1489,6 @@ async def test_wait_for_response_completion_debug_logging():
             edit_btn,
             "req_id",
             check_disconnect,
-            "chat_id",
             timeout_ms=5000,
             initial_wait_ms=0,
         )
@@ -1535,7 +1528,6 @@ async def test_wait_for_response_completion_edit_button_timeout():
             edit_btn,
             "req_id",
             check_disconnect,
-            "chat_id",
             timeout_ms=5000,
             initial_wait_ms=0,
         )
@@ -1573,7 +1565,6 @@ async def test_wait_for_response_completion_client_disconnect_after_edit_check()
         edit_btn,
         "req_id",
         check_disconnect,
-        "chat_id",
         timeout_ms=5000,
         initial_wait_ms=0,
     )
@@ -1601,7 +1592,6 @@ async def test_wait_for_response_completion_heuristic_completion():
         edit_btn,
         "req_id",
         check_disconnect,
-        "chat_id",
         timeout_ms=5000,
         initial_wait_ms=0,
     )
@@ -1638,7 +1628,6 @@ async def test_wait_for_response_completion_conditions_not_met_with_debug():
             edit_btn,
             "req_id",
             check_disconnect,
-            "chat_id",
             timeout_ms=5000,
             initial_wait_ms=0,
         )

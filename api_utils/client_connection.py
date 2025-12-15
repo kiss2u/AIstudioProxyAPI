@@ -1,20 +1,12 @@
 import asyncio
 from asyncio import Event, Task
 from logging import Logger
-from typing import Any, Callable, Coroutine, Dict, Protocol, Tuple
+from typing import Any, Callable, Coroutine, Dict, Tuple
 
 from fastapi import HTTPException, Request
 
 from logging_utils import set_request_id
 from models import ClientDisconnectedError
-
-
-class SupportsReceive(Protocol):
-    """Protocol for request objects that support _receive method."""
-
-    def _receive(self) -> Coroutine[Any, Any, Dict[str, Any]]:
-        """Internal method to receive messages from ASGI."""
-        ...
 
 
 async def check_client_connection(req_id: str, http_request: Request) -> bool:

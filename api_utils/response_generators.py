@@ -50,13 +50,8 @@ async def gen_sse_from_aux_stream(
     full_body_content = ""
     data_receiving = False
 
-    loop_count = 0
-
     try:
         async for raw_data in use_stream_response(req_id):
-            loop_count += 1
-            # logger.debug(f"[{req_id}] gen_sse_from_aux_stream loop iteration #{loop_count}")
-
             data_receiving = True
 
             try:

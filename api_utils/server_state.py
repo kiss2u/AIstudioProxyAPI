@@ -99,18 +99,6 @@ class ServerState:
         self.console_logs = []
         self.network_log = {"requests": [], "responses": []}
 
-    def get_server_status(self) -> Dict[str, Any]:
-        """Get current server status as a dictionary."""
-        return {
-            "is_initializing": self.is_initializing,
-            "is_playwright_ready": self.is_playwright_ready,
-            "is_browser_connected": self.is_browser_connected,
-            "is_page_ready": self.is_page_ready,
-            "current_model": self.current_ai_studio_model_id,
-            "queue_size": self.request_queue.qsize() if self.request_queue else 0,
-            "worker_running": bool(self.worker_task and not self.worker_task.done()),
-        }
-
 
 # Global singleton instance
 state = ServerState()

@@ -34,7 +34,6 @@ from .operations import (
     save_error_snapshot,
 )
 from .page_controller import PageController
-from .script_manager import ScriptManager, script_manager
 
 __all__ = [
     # 初始化相关
@@ -60,9 +59,6 @@ __all__ = [
     "_force_ui_state_settings",
     "_force_ui_state_with_retry",
     "_verify_and_apply_ui_state",
-    # 脚本管理相关
-    "ScriptManager",
-    "script_manager",
     # Page Controller
     "PageController",
     # Debug utilities (comprehensive error snapshots)
