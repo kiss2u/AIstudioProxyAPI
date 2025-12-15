@@ -7,7 +7,7 @@ CSS选择器配置模块
 # 主输入 textarea 兼容当前和旧 UI 结构
 # 当前结构: ms-prompt-input-wrapper > ... > ms-autosize-textarea > textarea.textarea
 PROMPT_TEXTAREA_SELECTOR = (
-    # 当前 UI 结构 (2024年12月后)
+    # 当前 UI 结构
     "textarea.textarea, "  # 最直接的选择器
     "ms-autosize-textarea textarea, "
     "ms-chunk-input textarea, "
@@ -81,17 +81,33 @@ USE_URL_CONTEXT_SELECTOR = 'button[aria-label="Browse the url context"]'
 
 # --- 思考模式相关选择器 ---
 # 主思考开关：控制是否启用思考模式（总开关）
+# Flash模型使用 aria-label="Toggle thinking mode"
+# 回退: 旧版 data-test-toggle 属性
 ENABLE_THINKING_MODE_TOGGLE_SELECTOR = (
+    'button[role="switch"][aria-label="Toggle thinking mode"], '
     'mat-slide-toggle[data-test-toggle="enable-thinking"] button[role="switch"].mdc-switch, '
     '[data-test-toggle="enable-thinking"] button[role="switch"].mdc-switch'
 )
 # 手动预算开关：控制是否手动限制思考预算
+# Flash模型使用 aria-label="Toggle thinking budget between auto and manual"
+# 回退: 旧版 data-test-toggle 属性
 SET_THINKING_BUDGET_TOGGLE_SELECTOR = (
+    'button[role="switch"][aria-label="Toggle thinking budget between auto and manual"], '
     'mat-slide-toggle[data-test-toggle="manual-budget"] button[role="switch"].mdc-switch, '
     '[data-test-toggle="manual-budget"] button[role="switch"].mdc-switch'
 )
 # 思考预算输入框
-THINKING_BUDGET_INPUT_SELECTOR = '[data-test-slider] input[type="number"]'
+# 思考预算滑块具有独特的 min="512" 属性（温度是 max="2"，TopP 是 max="1"）
+# 优先使用最精确的选择器，保留多层回退以应对 UI 变化
+THINKING_BUDGET_INPUT_SELECTOR = (
+    # 最精确: 使用 data-test-id 容器 + spinbutton
+    '[data-test-id="user-setting-budget-animation-wrapper"] input[type="number"], '
+    # 回退1: 使用独特的 min="512" 属性定位（仅思考预算滑块有此属性）
+    'input.slider-number-input[min="512"], '
+    'ms-slider input[type="number"][min="512"], '
+    # 回退2: 旧版 data-test-slider 属性
+    '[data-test-slider] input[type="number"]'
+)
 
 # 思考等级下拉
 THINKING_LEVEL_SELECT_SELECTOR = '[role="combobox"][aria-label="Thinking Level"], mat-select[aria-label="Thinking Level"], [role="combobox"][aria-label="Thinking level"], mat-select[aria-label="Thinking level"]'

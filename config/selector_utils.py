@@ -17,7 +17,7 @@ logger = logging.getLogger("AIStudioProxyServer")
 # Google AI Studio 会不定期更改 UI 结构，此列表包含所有已知的容器选择器
 # 优先尝试当前 UI，回退到旧 UI
 INPUT_WRAPPER_SELECTORS: List[str] = [
-    # 当前 UI 结构 (ms-prompt-input-wrapper / ms-chunk-editor) - 2024年12月后
+    # 当前 UI 结构 (ms-prompt-input-wrapper / ms-chunk-editor)
     "ms-prompt-input-wrapper .prompt-input-wrapper",
     "ms-prompt-input-wrapper",
     "ms-chunk-editor",
