@@ -16,6 +16,7 @@ from playwright.async_api import (
 
 from browser_utils.operations_modules.errors import save_error_snapshot
 from config import (
+    CHAT_TURN_SELECTOR,
     CLICK_TIMEOUT_MS,
     DEBUG_LOGS_ENABLED,
     INITIAL_WAIT_MS_BEFORE_POLLING,
@@ -79,7 +80,7 @@ async def get_response_via_edit_button(
 ) -> Optional[str]:
     """通过编辑按钮获取响应"""
     logger.info(" (Helper) 尝试通过编辑按钮获取响应...")
-    last_message_container = page.locator("ms-chat-turn").last
+    last_message_container = page.locator(CHAT_TURN_SELECTOR).last
     edit_button = last_message_container.get_by_label("Edit")
     finish_edit_button = last_message_container.get_by_label("Stop editing")
     autosize_textarea_locator = last_message_container.locator("ms-autosize-textarea")
@@ -239,7 +240,7 @@ async def get_response_via_copy_button(
 ) -> Optional[str]:
     """通过复制按钮获取响应"""
     logger.info(" (Helper) 尝试通过复制按钮获取响应...")
-    last_message_container = page.locator("ms-chat-turn").last
+    last_message_container = page.locator(CHAT_TURN_SELECTOR).last
     more_options_button = last_message_container.get_by_label("Open options")
     copy_markdown_button = page.get_by_role("menuitem", name="Copy markdown")
 

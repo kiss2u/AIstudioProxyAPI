@@ -15,9 +15,13 @@ from config import (
     ENABLE_THINKING_MODE_TOGGLE_SELECTOR,
     SET_THINKING_BUDGET_TOGGLE_SELECTOR,
     THINKING_BUDGET_INPUT_SELECTOR,
+    THINKING_BUDGET_TOGGLE_OLD_ROOT_SELECTOR,
+    THINKING_BUDGET_TOGGLE_PARENT_SELECTOR,
     THINKING_LEVEL_OPTION_HIGH_SELECTOR,
     THINKING_LEVEL_OPTION_LOW_SELECTOR,
     THINKING_LEVEL_SELECT_SELECTOR,
+    THINKING_MODE_TOGGLE_OLD_ROOT_SELECTOR,
+    THINKING_MODE_TOGGLE_PARENT_SELECTOR,
 )
 from models import ClientDisconnectedError
 
@@ -469,14 +473,14 @@ class ThinkingController(BaseController):
                     try:
                         # 新版UI: 尝试直接点击带 aria-label 的开关父容器
                         alt_toggle = self.page.locator(
-                            'mat-slide-toggle:has(button[aria-label="Toggle thinking mode"])'
+                            THINKING_MODE_TOGGLE_PARENT_SELECTOR
                         )
                         if await alt_toggle.count() > 0:
                             await alt_toggle.click(timeout=CLICK_TIMEOUT_MS)
                         else:
                             # 旧版UI回退: data-test-toggle
                             root = self.page.locator(
-                                'mat-slide-toggle[data-test-toggle="enable-thinking"]'
+                                THINKING_MODE_TOGGLE_OLD_ROOT_SELECTOR
                             )
                             label = root.locator("label.mdc-label")
                             await expect_async(label).to_be_visible(timeout=2000)
@@ -563,14 +567,14 @@ class ThinkingController(BaseController):
                     try:
                         # 新版UI: 尝试直接点击带 aria-label 的开关父容器
                         alt_toggle = self.page.locator(
-                            'mat-slide-toggle:has(button[aria-label="Toggle thinking budget between auto and manual"])'
+                            THINKING_BUDGET_TOGGLE_PARENT_SELECTOR
                         )
                         if await alt_toggle.count() > 0:
                             await alt_toggle.click(timeout=CLICK_TIMEOUT_MS)
                         else:
                             # 旧版UI回退: data-test-toggle
                             root = self.page.locator(
-                                'mat-slide-toggle[data-test-toggle="manual-budget"]'
+                                THINKING_BUDGET_TOGGLE_OLD_ROOT_SELECTOR
                             )
                             label = root.locator("label.mdc-label")
                             await expect_async(label).to_be_visible(timeout=2000)

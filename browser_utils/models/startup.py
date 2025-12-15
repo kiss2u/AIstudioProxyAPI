@@ -9,7 +9,7 @@ import logging
 from playwright.async_api import Page as AsyncPage
 from playwright.async_api import expect as expect_async
 
-from config import INPUT_SELECTOR
+from config import INPUT_SELECTOR, MODEL_NAME_SELECTOR
 
 from .ui_state import _verify_and_apply_ui_state, _verify_ui_state_settings
 
@@ -166,7 +166,7 @@ async def _set_model_from_page_display(page: AsyncPage, set_storage: bool = Fals
 
     try:
         logger.info("   尝试从页面显示元素读取当前模型名称...")
-        model_name_locator = page.locator('[data-test-id="model-name"]')
+        model_name_locator = page.locator(MODEL_NAME_SELECTOR)
         displayed_model_name_from_page_raw = await model_name_locator.first.inner_text(
             timeout=7000
         )

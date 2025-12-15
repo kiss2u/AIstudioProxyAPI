@@ -8,6 +8,7 @@ from playwright.async_api import expect as expect_async
 
 from browser_utils.operations import save_error_snapshot
 from config import (
+    CDK_OVERLAY_CONTAINER_SELECTOR,
     PROMPT_TEXTAREA_SELECTOR,
     RESPONSE_CONTAINER_SELECTOR,
     SUBMIT_BUTTON_SELECTOR,
@@ -188,7 +189,7 @@ class InputController(BaseController):
             trigger = self.page.locator(UPLOAD_BUTTON_SELECTOR).first
             await expect_async(trigger).to_be_visible(timeout=3000)
             await trigger.click()
-            menu_container = self.page.locator("div.cdk-overlay-container")
+            menu_container = self.page.locator(CDK_OVERLAY_CONTAINER_SELECTOR)
             # 等待菜单显示
             try:
                 await expect_async(
@@ -261,7 +262,7 @@ class InputController(BaseController):
     async def _handle_post_upload_dialog(self):
         """处理上传后可能出现的授权/版权确认对话框，优先点击同意类按钮，不主动关闭重要对话框。"""
         try:
-            overlay_container = self.page.locator("div.cdk-overlay-container")
+            overlay_container = self.page.locator(CDK_OVERLAY_CONTAINER_SELECTOR)
             if await overlay_container.count() == 0:
                 return
 

@@ -83,6 +83,15 @@ __all__ = [
     "NO_PROXY_ENV",
     "ENABLE_SCRIPT_INJECTION",
     "USERSCRIPT_PATH",
+    # 新增页面元素选择器
+    "MODEL_NAME_SELECTOR",
+    "CDK_OVERLAY_CONTAINER_SELECTOR",
+    "CHAT_TURN_SELECTOR",
+    # 思考模式回退选择器
+    "THINKING_MODE_TOGGLE_PARENT_SELECTOR",
+    "THINKING_MODE_TOGGLE_OLD_ROOT_SELECTOR",
+    "THINKING_BUDGET_TOGGLE_PARENT_SELECTOR",
+    "THINKING_BUDGET_TOGGLE_OLD_ROOT_SELECTOR",
     # 工具函数
     "get_environment_variable",
     "get_boolean_env",

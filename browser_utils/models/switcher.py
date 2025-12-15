@@ -11,7 +11,7 @@ from typing import Optional
 from playwright.async_api import Page as AsyncPage
 from playwright.async_api import expect as expect_async
 
-from config import AI_STUDIO_URL_PATTERN, INPUT_SELECTOR
+from config import AI_STUDIO_URL_PATTERN, INPUT_SELECTOR, MODEL_NAME_SELECTOR
 
 from .ui_state import _verify_and_apply_ui_state
 
@@ -129,7 +129,7 @@ async def switch_ai_studio_model(page: AsyncPage, model_id: str, req_id: str) ->
                         break
 
             try:
-                model_name_locator = page.locator('[data-test-id="model-name"]')
+                model_name_locator = page.locator(MODEL_NAME_SELECTOR)
                 actual_displayed_model_id_on_page_raw = (
                     await model_name_locator.first.inner_text(timeout=5000)
                 )
@@ -209,7 +209,7 @@ async def switch_ai_studio_model(page: AsyncPage, model_id: str, req_id: str) ->
         current_displayed_name_for_revert_stripped = "无法读取"
 
         try:
-            model_name_locator_revert = page.locator('[data-test-id="model-name"]')
+            model_name_locator_revert = page.locator(MODEL_NAME_SELECTOR)
             current_displayed_name_for_revert_raw = (
                 await model_name_locator_revert.first.inner_text(timeout=5000)
             )

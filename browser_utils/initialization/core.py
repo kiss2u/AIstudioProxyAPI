@@ -23,6 +23,7 @@ from playwright.async_api import (
 from config import (
     AI_STUDIO_URL_PATTERN,
     INPUT_SELECTOR,
+    MODEL_NAME_SELECTOR,
     USER_INPUT_END_MARKER_SERVER,
     USER_INPUT_START_MARKER_SERVER,
 )
@@ -322,7 +323,7 @@ async def initialize_page_logic(  # pragma: no cover
             )
             logger.info("-> 核心输入区域可见。")
 
-            model_name_locator = found_page.locator('[data-test-id="model-name"]')
+            model_name_locator = found_page.locator(MODEL_NAME_SELECTOR)
             try:
                 model_name_on_page = await model_name_locator.first.inner_text(
                     timeout=5000

@@ -118,3 +118,28 @@ THINKING_LEVEL_OPTION_HIGH_SELECTOR = '[role="listbox"][aria-label="Thinking Lev
 GROUNDING_WITH_GOOGLE_SEARCH_TOGGLE_SELECTOR = (
     'div[data-test-id="searchAsAToolTooltip"] mat-slide-toggle button'
 )
+
+# --- 页面元素选择器 ---
+# 模型名称显示元素
+MODEL_NAME_SELECTOR = '[data-test-id="model-name"]'
+# CDK Overlay 容器（用于菜单、对话框等）
+CDK_OVERLAY_CONTAINER_SELECTOR = "div.cdk-overlay-container"
+# 聊天轮次容器
+CHAT_TURN_SELECTOR = "ms-chat-turn"
+
+# --- 思考模式回退选择器 ---
+# 这些选择器用于 thinking.py 中的回退逻辑
+# 主思考开关父容器（新版UI）
+THINKING_MODE_TOGGLE_PARENT_SELECTOR = (
+    'mat-slide-toggle:has(button[aria-label="Toggle thinking mode"])'
+)
+# 主思考开关旧版根元素
+THINKING_MODE_TOGGLE_OLD_ROOT_SELECTOR = (
+    'mat-slide-toggle[data-test-toggle="enable-thinking"]'
+)
+# 思考预算开关父容器（新版UI）
+THINKING_BUDGET_TOGGLE_PARENT_SELECTOR = 'mat-slide-toggle:has(button[aria-label="Toggle thinking budget between auto and manual"])'
+# 思考预算开关旧版根元素
+THINKING_BUDGET_TOGGLE_OLD_ROOT_SELECTOR = (
+    'mat-slide-toggle[data-test-toggle="manual-budget"]'
+)
