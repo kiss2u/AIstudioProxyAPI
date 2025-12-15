@@ -70,6 +70,7 @@ STREAM_PORT=3120
 ```
 
 ### 启动配置
+
 ```env
 # 快速启动
 DIRECT_LAUNCH=false
@@ -111,9 +112,6 @@ AUTO_SAVE_AUTH=false
 
 # 认证保存超时时间 (秒)
 AUTH_SAVE_TIMEOUT=30
-
-# 自动确认登录
-AUTO_CONFIRM_LOGIN=true
 
 # 仅收集当前用户消息中的附件（true/false）
 ONLY_COLLECT_CURRENT_USER_ATTACHMENTS=false
