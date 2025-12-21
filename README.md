@@ -63,7 +63,7 @@ curl http://127.0.0.1:2048/v1/models
 # 测试聊天
 curl -X POST http://127.0.0.1:2048/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -d '{"model":"gemini-2.5-pro-preview","messages":[{"role":"user","content":"Hello"}]}'
+  -d '{"model":"gemini-3-pro-preview","messages":[{"role":"user","content":"Hello"}]}'
 ```
 
 访问 `http://127.0.0.1:2048/` 使用内置 Web UI。
