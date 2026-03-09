@@ -45,10 +45,10 @@ The launcher now follows a strict startup contract:
 
 1. It mounts the shared [`auth_profiles/`](../../auth_profiles/) tree into the container.
 2. It sets `ACTIVE_AUTH_JSON_PATH=/app/auth_profiles/saved/<profile>.json` for that specific container.
-3. It copies the selected host profile into [` .multi-instance-runtime/active/`](../../.multi-instance-runtime/) and bind-mounts that copy as `/app/auth_profiles/active/<profile>.json` inside the container.
+3. It copies the selected host profile into [`.multi-instance-runtime/active/`](../../.multi-instance-runtime/) and bind-mounts that copy as `/app/auth_profiles/active/<profile>.json` inside the container.
 4. It disables `AUTO_AUTH_ROTATION_ON_STARTUP` and `AUTO_ROTATE_AUTH_PROFILE` by default.
 
-This dual-path startup is intentional. Although [`launcher/runner.py::_resolve_auth_file_path()`](../../launcher/runner.py:270) and [`browser_utils/initialization/core.py::initialize_page_logic()`](../../browser_utils/initialization/core.py:48) can consume [`ACTIVE_AUTH_JSON_PATH`](../../launcher/runner.py:413), real Docker headless startup may still traverse logic that expects at least one file under [`auth_profiles/active/`](../../auth_profiles/active/). The runtime copy avoids polluting the shared host [`auth_profiles/active/`](../../auth_profiles/active/) pool while still satisfying that container-local requirement.
+This dual-path startup is intentional. Although [`launcher/runner.py::_resolve_auth_file_path()`](../../launcher/runner.py#L270) and [`browser_utils/initialization/core.py::initialize_page_logic()`](../../browser_utils/initialization/core.py#L48) can consume [`ACTIVE_AUTH_JSON_PATH`](../../launcher/runner.py#L413), real Docker headless startup may still traverse logic that expects at least one file under [`auth_profiles/active/`](../../auth_profiles/active/). The runtime copy avoids polluting the shared host [`auth_profiles/active/`](../../auth_profiles/active/) pool while still satisfying that container-local requirement.
 
 If you really want cross-profile rotation inside each container, use [`--enable-auth-rotation`](run-multi-instance.sh).
 
