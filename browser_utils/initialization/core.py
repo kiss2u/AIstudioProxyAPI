@@ -563,30 +563,50 @@ async def signal_camoufox_shutdown() -> None:  # pragma: no cover
 async def enable_temporary_chat_mode(page: AsyncPage) -> None:  # pragma: no cover
     """
     Check and enable "Temporary chat" mode in the AI Studio interface.
-    This is an independent UI operation and should be called after the page is fully stable.
+    Supports both direct UI visibility and collapsed menu visibility.
     """
+    incognito_selector = 'button[aria-label="Temporary chat toggle"], button[aria-label="Toggle temporary chat"]'
+    menu_trigger_selector = 'button[aria-label="View more actions"]'
+    
+    incognito_locator = page.locator(incognito_selector)
+    menu_trigger = page.locator(menu_trigger_selector)
+
     try:
-        incognito_button_locator = page.locator(
-            'button[aria-label="Temporary chat toggle"], button[aria-label="Toggle temporary chat"]'
-        )
+        # Fast path
+        logger.debug("[UI] Searching for temporary chat button (Fast path)")
+        try:
+            await incognito_locator.wait_for(state="visible", timeout=3000)
+        except Exception:
+            # Fallback
+            logger.debug("[UI] Button not visible, attempting to open menu")
+            if await menu_trigger.is_visible():
+                await menu_trigger.click()
+                # Wait for the menu item to appear
+                await incognito_locator.wait_for(state="visible", timeout=5000)
+            else:
+                logger.warning("[UI] Neither button nor menu trigger found")
+                return
 
-        await incognito_button_locator.wait_for(state="visible", timeout=10000)
+        # Status Check
+        button_classes = await incognito_locator.get_attribute("class") or ""
 
-        button_classes = await incognito_button_locator.get_attribute("class")
-
-        if button_classes and "ms-button-active" in button_classes:
+        if "ms-button-active" in button_classes:
             logger.debug("[UI] Temporary chat mode already active")
         else:
-            await incognito_button_locator.click(timeout=5000, force=True)
+            logger.debug("[UI] Enabling temporary chat mode")
+            await incognito_locator.click(timeout=5000, force=True)
             await asyncio.sleep(1)
 
-            updated_classes = await incognito_button_locator.get_attribute("class")
-            if updated_classes and "ms-button-active" in updated_classes:
-                logger.debug("[UI] Temporary chat mode enabled")
-            else:
-                logger.warning("[UI] Failed to enable temporary chat mode")
+        # Recovery: Close menu if still expanded
+        # Checking aria-expanded is more precise than a boolean flag
+        if await menu_trigger.get_attribute("aria-expanded") == "true":
+            logger.debug("[UI] Closing menu to restore UI state")
+            await page.keyboard.press("Escape")
 
     except asyncio.CancelledError:
         raise
     except Exception as e:
         logger.warning(f"[UI] Error in temporary chat mode: {e}")
+        # Final safety attempt to clear any stuck UI
+        if await menu_trigger.get_attribute("aria-expanded") == "true":
+            await page.keyboard.press("Escape")
