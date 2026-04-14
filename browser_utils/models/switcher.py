@@ -161,7 +161,7 @@ async def switch_ai_studio_model(page: AsyncPage, model_id: str, req_id: str) ->
                 try:
                     logger.debug("[Model] Re-enabling temporary chat mode...")
                     incognito_button_locator = page.locator(
-                        'button[aria-label="Temporary chat toggle"]', 'button[aria-label="Toggle temporary chat"]'
+                        'button[aria-label="Temporary chat toggle"], button[aria-label="Toggle temporary chat"]'
                     )
 
                     await incognito_button_locator.wait_for(
