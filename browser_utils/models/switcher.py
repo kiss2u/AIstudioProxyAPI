@@ -160,41 +160,47 @@ async def switch_ai_studio_model(page: AsyncPage, model_id: str, req_id: str) ->
             if page_display_match:
                 try:
                     logger.debug("[Model] Re-enabling temporary chat mode...")
-                    incognito_button_locator = page.locator(
-                        'button[aria-label="Temporary chat toggle"], button[aria-label="Toggle temporary chat"]'
-                    )
+                    incognito_selector = 'button[aria-label="Temporary chat toggle"], button[aria-label="Toggle temporary chat"]'
+                    menu_trigger_selector = 'button[aria-label="View more actions"]'
+                    
+                    incognito_locator = page.locator(incognito_selector)
+                    menu_trigger = page.locator(menu_trigger_selector)
 
-                    await incognito_button_locator.wait_for(
-                        state="visible", timeout=5000
-                    )
+                    # Fast path: try to find the button directly
+                    try:
+                        await incognito_locator.wait_for(state="visible", timeout=3000)
+                    except Exception:
+                        # Fallback: check if it's inside the menu
+                        if await menu_trigger.is_visible():
+                            logger.debug("[Model] Button not visible, opening menu...")
+                            await menu_trigger.click()
+                            await incognito_locator.wait_for(state="visible", timeout=5000)
 
-                    button_classes = await incognito_button_locator.get_attribute(
-                        "class"
-                    )
+                    button_classes = await incognito_locator.get_attribute("class") or ""
 
-                    if button_classes and "ms-button-active" in button_classes:
+                    if "ms-button-active" in button_classes:
                         logger.debug("[Model] Temporary chat mode already active")
                     else:
                         logger.debug("[Model] Clicking to open temporary chat mode...")
-                        await incognito_button_locator.click(timeout=3000)
+                        await incognito_locator.click(timeout=3000, force=True)
                         await asyncio.sleep(0.5)
 
-                        updated_classes = await incognito_button_locator.get_attribute(
-                            "class"
-                        )
-                        if updated_classes and "ms-button-active" in updated_classes:
+                        updated_classes = await incognito_locator.get_attribute("class") or ""
+                        if "ms-button-active" in updated_classes:
                             logger.debug("[Model] Temporary chat mode enabled")
                         else:
-                            logger.warning(
-                                "Temporary chat mode state verification failed after click, may not have opened successfully."
-                            )
+                            logger.warning("[Model] Temporary chat mode state verification failed")
+
+                    # Recovery: Close menu if it remains open
+                    if await menu_trigger.get_attribute("aria-expanded") == "true":
+                        await page.keyboard.press("Escape")
 
                 except asyncio.CancelledError:
                     raise
                 except Exception as e:
-                    logger.warning(
-                        f"Failed to re-enable temporary chat mode after model switching: {e}"
-                    )
+                    logger.warning(f"Failed to re-enable temporary chat mode after model switching: {e}")
+                    if await menu_trigger.get_attribute("aria-expanded") == "true":
+                        await page.keyboard.press("Escape")
 
                 # Invalidate function calling cache on model switch
                 try:
