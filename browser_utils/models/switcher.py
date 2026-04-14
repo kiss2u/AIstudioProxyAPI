@@ -162,7 +162,7 @@ async def switch_ai_studio_model(page: AsyncPage, model_id: str, req_id: str) ->
                     logger.debug("[Model] Re-enabling temporary chat mode...")
                     incognito_selector = 'button[aria-label="Temporary chat toggle"], button[aria-label="Toggle temporary chat"]'
                     menu_trigger_selector = 'button[aria-label="View more actions"]'
-                    
+
                     incognito_locator = page.locator(incognito_selector)
                     menu_trigger = page.locator(menu_trigger_selector)
 
