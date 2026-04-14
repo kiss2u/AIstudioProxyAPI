@@ -567,7 +567,7 @@ async def enable_temporary_chat_mode(page: AsyncPage) -> None:  # pragma: no cov
     """
     incognito_selector = 'button[aria-label="Temporary chat toggle"], button[aria-label="Toggle temporary chat"]'
     menu_trigger_selector = 'button[aria-label="View more actions"]'
-    
+
     incognito_locator = page.locator(incognito_selector)
     menu_trigger = page.locator(menu_trigger_selector)
 
