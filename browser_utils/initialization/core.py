@@ -567,7 +567,8 @@ async def enable_temporary_chat_mode(page: AsyncPage) -> None:  # pragma: no cov
     """
     try:
         incognito_button_locator = page.locator(
-            'button[aria-label="Temporary chat toggle"]'
+            'button[aria-label="Temporary chat toggle"]',
+            'button[aria-label="Toggle temporary chat"]'
         )
 
         await incognito_button_locator.wait_for(state="visible", timeout=10000)
