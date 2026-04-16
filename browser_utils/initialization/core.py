@@ -593,16 +593,15 @@ async def _is_temporary_chat_active(page: AsyncPage) -> bool:
             'button[aria-label="Toggle temporary chat"]'
         )
         if await toggle_locator.count() > 0:
-            toggle_button = toggle_locator.first
-
             # New UI: active state is represented by a checkmark inside the menu item.
             try:
-                checkmark_locator = toggle_button.locator(
-                    "[data-test-incognito-checkmark]"
+                checkmark_locator = page.locator(
+                    "button[data-test-incognito-toggle] [data-test-incognito-checkmark], "
+                    'button[aria-label="Temporary chat toggle"] [data-test-incognito-checkmark], '
+                    'button[aria-label="Toggle temporary chat"] [data-test-incognito-checkmark]'
                 )
                 if (
                     await checkmark_locator.count() > 0
-                    and await checkmark_locator.first.is_visible(timeout=500)
                 ):
                     return True
             except Exception:
@@ -611,14 +610,14 @@ async def _is_temporary_chat_active(page: AsyncPage) -> bool:
             # Legacy/alternative signals.
             for attr_name in ("aria-pressed", "aria-checked"):
                 try:
-                    attr_value = await toggle_button.get_attribute(attr_name)
+                    attr_value = await toggle_locator.get_attribute(attr_name)
                     if attr_value and attr_value.lower() == "true":
                         return True
                 except Exception:
                     pass
 
             try:
-                button_classes = await toggle_button.get_attribute("class") or ""
+                button_classes = await toggle_locator.get_attribute("class") or ""
                 if "ms-button-active" in button_classes:
                     return True
             except Exception:
@@ -643,6 +642,18 @@ async def enable_temporary_chat_mode(page: AsyncPage) -> bool:  # pragma: no cov
 
     incognito_locator = page.locator(incognito_selector)
     menu_trigger = page.locator(menu_trigger_selector)
+
+    async def _close_menu_if_needed() -> None:
+        """Best-effort menu cleanup that tolerates UI variants without a menu trigger."""
+        try:
+            if await menu_trigger.count() == 0:
+                return
+            if await menu_trigger.is_visible():
+                if await menu_trigger.get_attribute("aria-expanded") == "true":
+                    logger.debug("[UI] Closing menu to restore UI state")
+                    await page.keyboard.press("Escape")
+        except Exception:
+            pass
 
     try:
         # Fast path
@@ -670,10 +681,7 @@ async def enable_temporary_chat_mode(page: AsyncPage) -> bool:  # pragma: no cov
         enabled = await _is_temporary_chat_active(page)
 
         # Recovery: Close menu if still expanded
-        # Checking aria-expanded is more precise than a boolean flag
-        if await menu_trigger.get_attribute("aria-expanded") == "true":
-            logger.debug("[UI] Closing menu to restore UI state")
-            await page.keyboard.press("Escape")
+        await _close_menu_if_needed()
         return enabled
 
     except asyncio.CancelledError:
@@ -681,6 +689,5 @@ async def enable_temporary_chat_mode(page: AsyncPage) -> bool:  # pragma: no cov
     except Exception as e:
         logger.warning(f"[UI] Error in temporary chat mode: {e}")
         # Final safety attempt to clear any stuck UI
-        if await menu_trigger.get_attribute("aria-expanded") == "true":
-            await page.keyboard.press("Escape")
+        await _close_menu_if_needed()
         return await _is_temporary_chat_active(page)
