@@ -586,6 +586,14 @@ async def _is_temporary_chat_active(page: AsyncPage) -> bool:
             except Exception:
                 continue
 
+        # New menu UI: active state is represented by a checkmark inside the menu item.
+        try:
+            checkmark_locator = page.locator("[data-test-incognito-checkmark]")
+            if await checkmark_locator.count() > 0:
+                return True
+        except Exception:
+            pass
+
         # Menu button variants (legacy and gray-release UI).
         toggle_locator = page.locator(
             "button[data-test-incognito-toggle], "
@@ -593,20 +601,6 @@ async def _is_temporary_chat_active(page: AsyncPage) -> bool:
             'button[aria-label="Toggle temporary chat"]'
         )
         if await toggle_locator.count() > 0:
-            # New UI: active state is represented by a checkmark inside the menu item.
-            try:
-                checkmark_locator = page.locator(
-                    "button[data-test-incognito-toggle] [data-test-incognito-checkmark], "
-                    'button[aria-label="Temporary chat toggle"] [data-test-incognito-checkmark], '
-                    'button[aria-label="Toggle temporary chat"] [data-test-incognito-checkmark]'
-                )
-                if (
-                    await checkmark_locator.count() > 0
-                ):
-                    return True
-            except Exception:
-                pass
-
             # Legacy/alternative signals.
             for attr_name in ("aria-pressed", "aria-checked"):
                 try:
@@ -656,6 +650,11 @@ async def enable_temporary_chat_mode(page: AsyncPage) -> bool:  # pragma: no cov
             pass
 
     try:
+        if await _is_temporary_chat_active(page):
+            logger.debug("[UI] Temporary chat mode already active")
+            await _close_menu_if_needed()
+            return True
+
         # Fast path
         logger.debug("[UI] Searching for temporary chat button (Fast path)")
         try:
